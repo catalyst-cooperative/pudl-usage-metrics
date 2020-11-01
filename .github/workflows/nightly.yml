@@ -22,6 +22,9 @@ jobs:
         env:
           HARVEST_ACCOUNT_ID: ${{ secrets.HARVEST_ACCOUNT_ID }}
           HARVEST_TOKEN: ${{ secrets.HARVEST_TOKEN }}
+          AUTH: ${{ secrets.CATALYST_BIZOPS_CREDENTIALS }}
           CATALYST_BIZOPS_CREDENTIALS: /tmp/catalyst-bizops-credentials.json
         run: |
+          echo "$AUTH" | base64 --decode > /tmp/catalyst-bizops-credentials.json
           harvest_to_gspread.py time_entries
+          rm -rf /tmp/catalyst-bizops-credentials.json
