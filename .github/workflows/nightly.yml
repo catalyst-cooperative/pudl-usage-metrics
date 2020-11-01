@@ -1,0 +1,27 @@
+name: nightly
+on:
+  - push
+  - pull_request
+  - schedule:
+      - cron: "0 9 * * *"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+      - name: Install BizOps
+        run: |
+          echo ${{ secrets.CATALYST_BIZOPS_CREDENTIALS }} | base64 -d > /tmp/catalyst-bizops-credentials.json
+          pip install ./
+
+      - name: Update Harvest Data
+        env:
+          HARVEST_ACCOUNT_ID: ${{ secrets.HARVEST_ACCOUNT_ID }}
+          HARVEST_TOKEN: ${{ secrets.HARVEST_TOKEN }}
+          CATALYST_BIZOPS_CREDENTIALS: /tmp/catalyst-bizops-credentials.json
+        run: |
+          python scripts/harvest_to_gspread.py time_entries
