@@ -9,7 +9,7 @@ setup(
     version="0.1.0",
     author="Zane Selvans",
     author_email="zane.selvans@gmail.com",
-    packages=find_packages("src/bizops"),
+    packages=find_packages("src"),
     package_dir={"": "src"},
     install_requires=install_requires,
     scripts=["scripts/harvest_to_gspread.py"],
