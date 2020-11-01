@@ -24,4 +24,4 @@ jobs:
           HARVEST_TOKEN: ${{ secrets.HARVEST_TOKEN }}
           CATALYST_BIZOPS_CREDENTIALS: /tmp/catalyst-bizops-credentials.json
         run: |
-          python scripts/harvest_to_gspread.py time_entries
+          harvest_to_gspread.py time_entries
