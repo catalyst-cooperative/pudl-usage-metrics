@@ -21,10 +21,10 @@ def parse_main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         dest="endpoints",
-        choices=bizops.VALID_HARVEST_ENDPOINTS,
-        nargs="+",
+        nargs="*",
+        default=bizops.VALID_HARVEST_ENDPOINTS,
         help=f"""List of API endpoints to pull. Must be one or more of:
-        {bizops.VALID_HARVEST_ENDPOINTS}.
+        {bizops.VALID_HARVEST_ENDPOINTS}. Defaults to pulling all of them.
         """
     )
     parser.add_argument(
@@ -49,6 +49,12 @@ def main():
         df = bizops.get_harvest_df(endpoint)
 
         logger.info(f"Uploading {len(df)} {endpoint} records to Google Sheets.")
+        harvest_spread = gspread_pandas.Spread(
+            spread=WORKBOOK_ID,
+            sheet=None,
+            config=gspread_config
+        )
+        harvest_spread.open_sheet(endpoint, create=True)
         sheet = gspread_pandas.Spread(
             spread=WORKBOOK_ID,
             sheet=endpoint,

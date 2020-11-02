@@ -9,6 +9,8 @@ HARVEST_BASE_URL = "https://api.harvestapp.com/api/v2/"
 
 VALID_HARVEST_ENDPOINTS = [
     "time_entries",
+    "projects",
+    "clients",
 ]
 
 

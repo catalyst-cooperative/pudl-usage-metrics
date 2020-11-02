@@ -30,4 +30,4 @@ jobs:
           CATALYST_BIZOPS_CREDENTIALS: ${{ steps.write_file.outputs.filePath }}
         run: |
           pip install ./
-          harvest_to_gspread.py time_entries
+          harvest_to_gspread.py
