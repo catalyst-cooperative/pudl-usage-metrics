@@ -1,9 +1,10 @@
 name: nightly
 on:
-  - push
-  - pull_request
-#  - schedule:
-#      - cron: "0 9 * * *"
+  push:
+  pull_request:
+  schedule:
+    # 9AM UTC is ~2am Mountain Time
+    - cron: "0 9 * * *"
 
 jobs:
   build:
@@ -21,10 +22,6 @@ jobs:
           fileName: 'catalyst-bizops-credentials.json'
           encodedString: ${{ secrets.CATALYST_BIZOPS_CREDENTIALS }}
 
-      - name: Install BizOps
-        run: |
-          pip install ./
-
       - name: Update Harvest Data
         env:
           HARVEST_ACCOUNT_ID: ${{ secrets.HARVEST_ACCOUNT_ID }}
@@ -32,4 +29,5 @@ jobs:
           AUTH: ${{ secrets.CATALYST_BIZOPS_CREDENTIALS }}
           CATALYST_BIZOPS_CREDENTIALS: ${{ steps.write_file.outputs.filePath }}
         run: |
+          pip install ./
           harvest_to_gspread.py time_entries
