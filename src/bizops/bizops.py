@@ -1,3 +1,5 @@
+"""Tools for extracting and organizing data about Catalyst's business operations."""
+
 import requests
 import os
 import pandas as pd
@@ -15,6 +17,7 @@ VALID_HARVEST_ENDPOINTS = [
 
 
 def get_harvest_df(endpoint):
+    """Pull historical data from a Harvest API endpoint and return as a DataFrame."""
     url = f"{HARVEST_BASE_URL}/{endpoint}"
     headers = {
         "Harvest-Account-ID": f"{HARVEST_ACCOUNT_ID}",
