@@ -1,0 +1,23 @@
+name: save-github-metrics
+on:
+  schedule:
+    # First and third Mondays at 8AM Ak
+    - cron: "00 16 1-7,15-21 * 1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Save Github Metrics
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          
+        run: |
+          pip install ./
+          save_github_metrics.py

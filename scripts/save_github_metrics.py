@@ -14,8 +14,8 @@ class Metric:
     name: str
     folder: str
 
-
-TOKEN = os.getenv("GITHUB_TRAFFIC_TOKEN", "...")
+ 
+TOKEN = os.getenv("API_TOKEN_GITHUB", "...")
 OWNER = "catalyst-cooperative"
 REPO = "pudl"
 BUCKET_NAME = "github-metrics"
@@ -73,7 +73,7 @@ def upload_to_bucket(data, metric):
     """Upload a gcp object."""
     storage_client = storage.Client()
     bucket = storage_client.bucket(BUCKET_NAME)
-    blob_name = f"{metric.folder}/{date.today().strftime('%m_%d_%y')}.json"
+    blob_name = f"{metric.folder}/{date.today().strftime('%Y-%m-%d')}.json"
     
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)
