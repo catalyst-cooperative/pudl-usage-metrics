@@ -1,8 +1,10 @@
+#!/usr/bin/env python
 """This script pull github traffic metrics and saves them to a GC Bucket."""
 
 import json
 import os
 from datetime import date
+import sys
 
 import requests
 from google.cloud import storage
@@ -14,7 +16,7 @@ class Metric:
     name: str
     folder: str
 
- 
+
 TOKEN = os.getenv("API_TOKEN_GITHUB", "...")
 OWNER = "catalyst-cooperative"
 REPO = "pudl"
@@ -91,4 +93,4 @@ def save_metrics():
         upload_to_bucket(metric_data, metric)
 
 if __name__ == "__main__":
-    save_metrics()
+    sys.exit(save_metrics())
