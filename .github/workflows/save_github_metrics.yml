@@ -1,5 +1,6 @@
 name: save-github-metrics
 on:
+  push:
   schedule:
     # First and third Mondays at 8AM Ak
     - cron: "00 16 1-7,15-21 * 1"
