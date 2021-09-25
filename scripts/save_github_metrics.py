@@ -3,13 +3,16 @@
 
 import json
 import os
-from datetime import date
+import requests
 import sys
 
-import requests
-from google.cloud import storage
 
 from dataclasses import dataclass
+from datetime import date
+from google.cloud import storage
+from requests.exceptions import HTTPError
+from requests.models import Response
+
 
 @dataclass
 class Metric:
@@ -40,8 +43,9 @@ def get_biweekly_metrics(metric: str) -> str:
         "Authorization": f"token {TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     }
-    r = requests.get(query_url, headers=headers)
-    return json.dumps(r.json())
+    
+    response = make_github_request(query_url, headers)
+    return json.dumps(response.json())
 
 
 def get_persistent_metrics(metric) -> str:
@@ -63,13 +67,35 @@ def get_persistent_metrics(metric) -> str:
     page = 1
     while True:
         params = {"page": page}
-        metrics_json = requests.get(query_url, headers=headers, params=params).json()
+        metrics_json = make_github_request(query_url, headers, params).json()
+
         if len(metrics_json) <= 0:
             break
         metrics += metrics_json
         page += 1
     return json.dumps(metrics)
 
+def make_github_request(query: str, headers: str, params: str=None):
+    """
+    Makes a request to the github api.
+
+    Args:
+        query (str): A github api request url.
+        headers (str): Header to include in the request.
+        params (str): Params of request.
+
+    Returns:
+        response (requests.models.Response): the request response. 
+    """
+    try:
+        response = requests.get(query, headers=headers, params=params)
+
+        response.raise_for_status()
+    except HTTPError as http_err:
+        raise HTTPError(f'HTTP error occurred: {http_err}\n\tResponse test: {response.text}')
+    except Exception as err:
+        raise Exception(f'Other error occurred: {err}') 
+    return response
 
 def upload_to_bucket(data, metric):
     """Upload a gcp object."""
