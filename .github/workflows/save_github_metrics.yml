@@ -14,10 +14,17 @@ jobs:
         with:
           python-version: 3.8
 
+      - name: Decode GCP Credentials
+        id: write_file
+        uses: timheuer/base64-to-file@v1
+        with:
+          fileName: 'catalyst-usage-metrics-credentials.json'
+          encodedString: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
       - name: Save Github Metrics
         env:
           API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
-          GOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.write_file.outputs.filePath }}
           
         run: |
           pip install ./
