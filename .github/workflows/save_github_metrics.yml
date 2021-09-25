@@ -2,6 +2,7 @@ name: save-github-metrics
 on:
   schedule:
     # Every other week on saturday morning
+    # https://crontab.guru/#00_2_*/2_*_6
     - cron: "00 2 */2 * 6"
 
 jobs:
