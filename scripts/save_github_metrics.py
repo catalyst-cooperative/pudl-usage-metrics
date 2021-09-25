@@ -2,6 +2,7 @@
 """This script pull github traffic metrics and saves them to a GC Bucket."""
 
 import json
+import logging
 import os
 import requests
 import sys
@@ -27,7 +28,6 @@ BUCKET_NAME = "github-metrics"
 
 BIWEEKLY_METRICS = [Metric("clones", "clones"), Metric("popular/paths", "popular_paths"), Metric("popular/referrers", "popular_referrers"), Metric("views", "views")]
 PERSISTENT_METRICS = [Metric("stargazers", "stargazers"), Metric("forks", "forks")]
-
 
 def get_biweekly_metrics(metric: str) -> str:
     """
@@ -106,10 +106,13 @@ def upload_to_bucket(data, metric):
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)
 
-    print(f"Uploaded {metric.name} data to {blob_name}.")
+    logging.info(f"Uploaded {metric.name} data to {blob_name}.")
 
 def save_metrics():
     """Save github traffic metrics to google cloud bucket."""
+    logger = logging.getLogger()
+    logging.basicConfig(level="INFO")
+
     for metric in BIWEEKLY_METRICS:
         metric_data = get_biweekly_metrics(metric.name)
         upload_to_bucket(metric_data, metric)
