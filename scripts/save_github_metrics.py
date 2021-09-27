@@ -110,7 +110,6 @@ def upload_to_bucket(data, metric):
 
 def save_metrics():
     """Save github traffic metrics to google cloud bucket."""
-    assert False
     logger = logging.getLogger()
     logging.basicConfig(level="INFO")
 

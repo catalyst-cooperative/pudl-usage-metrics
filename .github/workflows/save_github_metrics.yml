@@ -1,10 +1,9 @@
 name: save-github-metrics
 on:
-  push:
   schedule:
-    # Every other week on saturday morning
-    # https://crontab.guru/#00_2_*/2_*_6
-    - cron: "00 2 */2 * 6"
+    # Run every monday at 9 PM UTC (1 PM AK)
+    # https://crontab.guru/#0_21_*_*_1
+    - cron: "0 21 * * 1"
 
 jobs:
   build:
