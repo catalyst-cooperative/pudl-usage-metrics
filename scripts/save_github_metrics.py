@@ -60,7 +60,7 @@ def get_persistent_metrics(metric) -> str:
     query_url = f"https://api.github.com/repos/{OWNER}/{REPO}/{metric}"
     headers = {
         "Authorization": f"token {TOKEN}",
-        "Accept": "application/vnd.github.v3+json",
+        "Accept": "application/vnd.github.v3.star+json",
     }
 
     metrics = []
