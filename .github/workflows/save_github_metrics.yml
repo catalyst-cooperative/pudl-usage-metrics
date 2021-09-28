@@ -1,0 +1,51 @@
+name: save-github-metrics
+on:
+  schedule:
+    # Run every Tuesday at 1:30 AM UTC (Monday 5:30 PM AK)
+    # https://crontab.guru/#0_21_*_*_1
+    - cron: "30 1 * * 2"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - name: Decode GCP Credentials
+        id: write_file
+        uses: timheuer/base64-to-file@v1
+        with:
+          fileName: 'catalyst-usage-metrics-credentials.json'
+          encodedString: ${{ secrets.GOOGLE_APPLICATION_CREDENTIALS }}
+
+      - name: Save Github Metrics
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.write_file.outputs.filePath }}
+          
+        run: |
+          pip install ./
+          save_github_metrics.py
+      
+      - name: Inform the Codemonkeys
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: workflow,job,commit,repo,ref,author,took
+          custom_payload: |
+            {
+              username: 'action-slack',
+              icon_emoji: ':octocat:',
+              attachments: [{
+                color: '${{ job.status }}' === 'success' ? 'good' : '${{ job.status }}' === 'failure' ? 'danger' : 'warning',
+                text: `${process.env.AS_WORKFLOW}\n${process.env.AS_JOB} (${process.env.AS_COMMIT}) of ${process.env.AS_REPO}@${process.env.AS_REF} by ${process.env.AS_AUTHOR} ${{ job.status }} in ${process.env.AS_TOOK}`,
+              }]
+            }
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # required
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # required
+          MATRIX_CONTEXT: ${{ toJson(matrix) }} # required
+        if: always() # Pick up events even if the job fails or is canceled.

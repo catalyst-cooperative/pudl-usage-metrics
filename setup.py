@@ -12,5 +12,5 @@ setup(
     packages=find_packages("src"),
     package_dir={"": "src"},
     install_requires=install_requires,
-    scripts=["scripts/harvest_to_gspread.py"],
+    scripts=["scripts/harvest_to_gspread.py", "scripts/save_github_metrics.py"],
 )
