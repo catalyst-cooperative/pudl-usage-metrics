@@ -2,3 +2,5 @@ pandas
 requests
 gspread_pandas
 google-cloud-storage
+matplotlib
+jupyter
