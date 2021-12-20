@@ -23,7 +23,7 @@ jobs:
 
       - name: Save Github Metrics
         env:
-          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+          API_TOKEN_GITHUB: ${{ secrets.GITHUB_TOKEN }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.write_file.outputs.filePath }}
           
         run: |
