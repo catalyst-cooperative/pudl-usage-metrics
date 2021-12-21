@@ -1,5 +1,6 @@
 name: save-github-metrics
 on:
+  workflow_dispatch:
   schedule:
     # Run every Tuesday at 8:00 PM UTC (Tuesday 12:00 PM AK)
     # https://crontab.guru/#0_20_*_*_2
