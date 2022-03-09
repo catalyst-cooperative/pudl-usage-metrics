@@ -1,0 +1,30 @@
+version: '3.9'
+services:
+  app:
+    build: .
+    depends_on:
+      - postgres
+    volumes:
+      - ./usage_metrics:/app/usage_metrics:ro
+      - ./workspace.yaml:/app/workspace.yaml:ro
+    ports:
+      - ${DAGIT_PORT}:${DAGIT_PORT}
+    command: dagit -h 0.0.0.0 -p ${DAGIT_PORT}
+  jupyter:
+    build: .
+    depends_on:
+      - postgres
+    volumes:
+      - ./usage_metrics:/app/usage_metrics:ro
+      - ./notebooks:/app/notebooks:rw
+      - ./workspace.yaml:/app/workspace.yaml:ro
+    ports:
+      - ${JUPYTER_PORT}:${JUPYTER_PORT}
+    command: jupyter lab --port ${JUPYTER_PORT} --ip 0.0.0.0 --no-browser
+  postgres:
+    image: postgres:14.2
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - ${POSTGRES_PORT}:5432
