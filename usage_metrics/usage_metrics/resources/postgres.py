@@ -15,7 +15,7 @@ class DataframePostgresIOManager(IOManager):
 
     def handle_output(self, context, obj):
         # name is the name given to the Out that we're storing for
-        table_name = context.metadata["table"]
+        table_name = context.asset_key.path[-1]
         engine = get_engine()
 
         with engine.connect() as con:
@@ -24,7 +24,7 @@ class DataframePostgresIOManager(IOManager):
 
     def load_input(self, context):
         # upstream_output.name is the name given to the Out that we're loading for
-        table_name = context.upstream_output.metadata["table"]
+        table_name = context.upstream_output.asset_key.path[-1]
         engine = get_engine()
         with engine.connect() as con:
             return pd.read_sql_table(table_name, con)

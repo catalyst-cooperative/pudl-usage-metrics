@@ -1,6 +1,6 @@
-from dagster import repository
+from dagster import repository, AssetGroup
 
-from usage_metrics.jobs.datasette import process_datasette_logs
+from usage_metrics.assets.datasette import datasette_asset_group
 
 
 @repository
@@ -11,6 +11,4 @@ def usage_metrics():
     For hints on building your Dagster repository, see our documentation overview on Repositories:
     https://docs.dagster.io/overview/repositories-workspaces/repositories
     """
-    jobs = [process_datasette_logs]
-    
-    return jobs
+    return [datasette_asset_group]
