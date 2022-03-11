@@ -4,8 +4,10 @@ services:
     build: .
     depends_on:
       - postgres
+    env_file: usage_metrics_vars.env
     volumes:
       - ./usage_metrics:/app/usage_metrics:ro
+      - ./bigquery-service-account-key.json:/app/bigquery-service-account-key.json:ro
       - ./workspace.yaml:/app/workspace.yaml:ro
     ports:
       - ${DAGIT_PORT}:${DAGIT_PORT}
@@ -16,6 +18,7 @@ services:
       - postgres
     volumes:
       - ./usage_metrics:/app/usage_metrics:ro
+      - ./bigquery-service-account-key.json:/app/bigquery-service-account-key.json:ro
       - ./notebooks:/app/notebooks:rw
       - ./workspace.yaml:/app/workspace.yaml:ro
     ports:
@@ -23,6 +26,7 @@ services:
     command: jupyter lab --port ${JUPYTER_PORT} --ip 0.0.0.0 --no-browser
   postgres:
     image: postgres:14.2
+    env_file: usage_metrics_vars.env
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres

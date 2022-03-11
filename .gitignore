@@ -1,3 +1,7 @@
 **/__pycache__/*
 **/*.egg-info
 venv
+
+usage_metrics/bigquery-service-account-key.json
+
+**/.DS_Store
