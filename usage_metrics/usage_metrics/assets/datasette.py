@@ -10,8 +10,10 @@ import pydata_google_auth
 from google.oauth2 import service_account
 
 from usage_metrics.resources.postgres import DataframePostgresIOManager
+from usage_metrics.helpers import parse_request_url
 
 JSON_FIELDS = ["resource", "http_request", "labels"]
+DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json"]
 
 @asset
 def raw_logs():
@@ -63,8 +65,50 @@ def unpack_httprequests(raw_logs):
 
     return unpacked_logs
 
+@asset
+def clean_datasette_logs(unpack_httprequests):
+    """
+    Clean the raw logs.
+    
+    Transformations:
+    - unpack the request url into component parts
+    - geocode the ip addresses
+    """
+    # Parse the request url
+    unpack_httprequests = unpack_httprequests.set_index("insert_id")
+    parsed_requests = unpack_httprequests.request_url.apply(lambda x: parse_request_url(x)).to_frame()
+    parsed_requests = pd.DataFrame.from_dict(parsed_requests.request_url.to_dict(), orient='index')
+    parsed_requests.columns = ["request_url_" + col for col in parsed_requests.columns]
+    
+    # Clean up the component url fields
+    for field in parsed_requests.columns:
+        parsed_requests[field] = parsed_requests[field].replace("", pd.NA)
+
+    # Add the component fields back to the logs
+    parsed_logs = pd.concat([unpack_httprequests, parsed_requests], axis=1)
+    assert len(unpack_httprequests) == len(parsed_logs)
+
+    return parsed_logs
+
+@asset
+def data_request_logs(clean_datasette_logs):
+    """
+    Filter the useful data request logs.
+
+    Most requests are for js and css assets, we are more interested in 
+    which paths folks are requesting. This asset contains requests for
+    ferc1 and pudl data.
+
+    This asset also removes columns not needed for analysis.
+    """
+    data_request_logs = clean_datasette_logs[clean_datasette_logs.request_url_path.str.contains("|".join(DATA_PATHS))]
+    return data_request_logs
+
+
+
+
 @io_manager
 def df_to_postgres_io_manager(_):
     return DataframePostgresIOManager()
 
-datasette_asset_group = AssetGroup([unpack_httprequests, raw_logs], resource_defs={"io_manager": df_to_postgres_io_manager})
+datasette_asset_group = AssetGroup([unpack_httprequests, raw_logs, clean_datasette_logs, data_request_logs], resource_defs={"io_manager": df_to_postgres_io_manager})
