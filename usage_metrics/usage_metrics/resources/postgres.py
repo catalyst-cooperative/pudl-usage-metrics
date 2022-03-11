@@ -2,7 +2,7 @@ import os
 import sqlalchemy as sa
 import pandas as pd
 
-from dagster import IOManager, io_manager
+from dagster import IOManager, MetadataEntry, io_manager
 
 def get_engine() -> sa.engine.Engine:
     """Create a sql alchemy engine from environment vars."""
@@ -21,6 +21,8 @@ class DataframePostgresIOManager(IOManager):
         with engine.connect() as con:
             obj.to_sql(name=table_name, con=con, if_exists="replace",
                       index=False)
+        
+        yield MetadataEntry.int(len(obj), label="number of rows")
 
     def load_input(self, context):
         # upstream_output.name is the name given to the Out that we're loading for
