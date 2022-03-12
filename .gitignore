@@ -5,3 +5,6 @@ venv
 usage_metrics/bigquery-service-account-key.json
 
 **/.DS_Store
+/usage_metrics/cache/*
+
+/usage_metrics/local.env

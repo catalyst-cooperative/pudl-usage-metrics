@@ -1,16 +1,19 @@
 import json
 import os
-from urllib.parse import urlparse
-
 import pandas as pd
-from dagster import AssetGroup, io_manager, op, Out, asset
-
-import pandas_gbq
 import pydata_google_auth
+import pandas_gbq
+import ipinfo
+import logging
+
+from urllib.parse import urlparse
+from dagster import AssetGroup, io_manager, op, Out, asset
 from google.oauth2 import service_account
+from pathlib import Path
 
 from usage_metrics.resources.postgres import DataframePostgresIOManager
-from usage_metrics.helpers import parse_request_url
+from usage_metrics.helpers import parse_request_url, geocode_ip
+
 
 JSON_FIELDS = ["resource", "http_request", "labels"]
 DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json"]
@@ -66,7 +69,7 @@ def unpack_httprequests(raw_logs):
     return unpacked_logs
 
 @asset
-def clean_datasette_logs(unpack_httprequests):
+def clean_datasette_logs(unpack_httprequests: pd.DataFrame):
     """
     Clean the raw logs.
     
@@ -88,7 +91,20 @@ def clean_datasette_logs(unpack_httprequests):
     parsed_logs = pd.concat([unpack_httprequests, parsed_requests], axis=1)
     assert len(unpack_httprequests) == len(parsed_logs)
 
-    return parsed_logs
+    ### Geocode the remote ip addresses
+    logging.info("Geocoding ip addresses.")
+    # Instead of geocoding every log, geocode the distinct ips
+    unique_ips = pd.Series(parsed_logs.remote_ip.unique())
+    geocoded_ips = unique_ips.apply(lambda ip: geocode_ip(ip))
+    geocoded_ips = pd.DataFrame.from_dict(geocoded_ips.to_dict(), orient='index')
+    geocoded_ip_column_map = {col: "remote_ip_" + col for col in geocoded_ips.columns if col != "ip"}
+    geocoded_ip_column_map["ip"] = "remote_ip"
+    geocoded_ips = geocoded_ips.rename(columns=geocoded_ip_column_map)
+
+    # Add the component fields back to the logs
+    clean_logs = parsed_logs.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
+
+    return clean_logs
 
 @asset
 def data_request_logs(clean_datasette_logs):
