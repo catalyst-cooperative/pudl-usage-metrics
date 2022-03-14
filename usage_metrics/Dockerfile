@@ -14,5 +14,9 @@ RUN rm requirements.txt
 # # Add the python packages to PATH
 ENV PATH="/app/.local/bin:${PATH}"
 
-# # Add dbcp to PYTHONPATH
-# ENV PYTHONPATH="/app:${PYTHONPATH}"
+# Add usage_metrics to PYTHONPATH
+ENV PYTHONPATH="/app:${PYTHONPATH}"
+
+# Setup dagster env
+RUN mkdir -p /app/dagster_home
+ENV DAGSTER_HOME=/app/dagster_home
