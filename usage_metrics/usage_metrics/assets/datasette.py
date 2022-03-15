@@ -89,6 +89,8 @@ def clean_datasette_logs(unpack_httprequests: pd.DataFrame):
 
     # Add the component fields back to the logs
     parsed_logs = pd.concat([unpack_httprequests, parsed_requests], axis=1)
+    parsed_logs.index.name = "insert_id"
+    parsed_logs = parsed_logs.reset_index()
     assert len(unpack_httprequests) == len(parsed_logs)
 
     ### Geocode the remote ip addresses
@@ -100,6 +102,10 @@ def clean_datasette_logs(unpack_httprequests: pd.DataFrame):
     geocoded_ip_column_map = {col: "remote_ip_" + col for col in geocoded_ips.columns if col != "ip"}
     geocoded_ip_column_map["ip"] = "remote_ip"
     geocoded_ips = geocoded_ips.rename(columns=geocoded_ip_column_map)
+
+    # Split the org and org ASN into different columns
+    geocoded_ips["remote_ip_asn"] = geocoded_ips.remote_ip_org.str.split(" ").str[0]
+    geocoded_ips["remote_ip_org"] = geocoded_ips.remote_ip_org.str.split(" ").str[1:].str.join(sep=" ")
 
     # Add the component fields back to the logs
     clean_logs = parsed_logs.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
@@ -119,9 +125,6 @@ def data_request_logs(clean_datasette_logs):
     """
     data_request_logs = clean_datasette_logs[clean_datasette_logs.request_url_path.str.contains("|".join(DATA_PATHS))]
     return data_request_logs
-
-
-
 
 @io_manager
 def df_to_postgres_io_manager(_):
