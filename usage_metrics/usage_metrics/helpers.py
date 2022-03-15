@@ -20,4 +20,4 @@ def geocode_ip(ip_address):
 def parse_request_url(url):
     """Create dictionary of request components."""
     pr = urlparse(url)
-    return {"scheme": pr.scheme, "netloc": pr.netloc, "path": pr.path, "params": pr.params, "query": pr.query}
+    return {"scheme": pr.scheme, "netloc": pr.netloc, "path": pr.path, "query": pr.query}

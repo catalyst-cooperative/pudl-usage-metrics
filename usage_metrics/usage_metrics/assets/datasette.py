@@ -1,5 +1,6 @@
 import json
 import os
+import dagster
 import pandas as pd
 import pydata_google_auth
 import pandas_gbq
@@ -10,15 +11,20 @@ from urllib.parse import urlparse
 from dagster import AssetGroup, io_manager, op, Out, asset
 from google.oauth2 import service_account
 from pathlib import Path
+from dagster_pandera import pandera_schema_to_dagster_type
+
 
 from usage_metrics.resources.postgres import DataframePostgresIOManager
 from usage_metrics.helpers import parse_request_url, geocode_ip
+import usage_metrics.schemas.datasette as datasette_schemas
+from usage_metrics.schemas.datasette import EMPTY_COLUMNS
+
 
 
 JSON_FIELDS = ["resource", "http_request", "labels"]
 DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json"]
 
-@asset
+@asset(dagster_type=pandera_schema_to_dagster_type(datasette_schemas.raw_logs))
 def raw_logs():
     """Extract Datasette logs from BigQuery instance."""
     credentials = service_account.Credentials.from_service_account_file("/app/bigquery-service-account-key.json")
@@ -39,12 +45,14 @@ def raw_logs():
         raw_logs[field] = raw_logs[field].apply(json.dumps)
     return raw_logs
 
-@asset
+@asset(dagster_type=pandera_schema_to_dagster_type(datasette_schemas.unpack_httprequests))
 def unpack_httprequests(raw_logs):
     """Unpack http_request dict keys into separate fields."""
     # Convert the JSON fields into str because sqlalchemy can't write dicts to json
     for field in JSON_FIELDS:
         raw_logs[field] = raw_logs[field].apply(json.loads)
+
+    raw_logs["trace_sampled"] = raw_logs["trace_sampled"].astype(pd.BooleanDtype())
 
     # There are a couple of duplicates due to overlap between
     # properly saved logs starting 3/1/22 and the old logs from
@@ -68,7 +76,7 @@ def unpack_httprequests(raw_logs):
 
     return unpacked_logs
 
-@asset
+@asset(dagster_type=pandera_schema_to_dagster_type(datasette_schemas.clean_datasette_logs))
 def clean_datasette_logs(unpack_httprequests: pd.DataFrame):
     """
     Clean the raw logs.
@@ -77,6 +85,9 @@ def clean_datasette_logs(unpack_httprequests: pd.DataFrame):
     - unpack the request url into component parts
     - geocode the ip addresses
     """
+    # Remove columns that don't contain any data
+    unpack_httprequests = unpack_httprequests.drop(columns=EMPTY_COLUMNS)
+
     # Parse the request url
     unpack_httprequests = unpack_httprequests.set_index("insert_id")
     parsed_requests = unpack_httprequests.request_url.apply(lambda x: parse_request_url(x)).to_frame()
@@ -112,7 +123,7 @@ def clean_datasette_logs(unpack_httprequests: pd.DataFrame):
 
     return clean_logs
 
-@asset
+@asset(dagster_type=pandera_schema_to_dagster_type(datasette_schemas.data_request_logs))
 def data_request_logs(clean_datasette_logs):
     """
     Filter the useful data request logs.
