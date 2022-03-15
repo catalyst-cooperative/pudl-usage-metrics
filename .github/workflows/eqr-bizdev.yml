@@ -1,7 +1,5 @@
 name: eqr-bizdev
 on:
-  push:
-  pull_request:
   workflow_dispatch:
   schedule:
     # 9AM UTC is ~2am Mountain Time
