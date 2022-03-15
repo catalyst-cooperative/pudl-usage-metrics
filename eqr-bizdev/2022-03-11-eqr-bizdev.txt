@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Mar_08_2022_09_42_10.255_dcontrastano@cftc.gov.zip
 Mar_08_2022_09_44_06.137_dcontrastano@cftc.gov.zip
 Mar_08_2022_10_58_02.598_adougherty@rockcreekenergygroup.com.zip
@@ -63,6 +64,8 @@ Mar_11_2022_13_01_39.621_eric.hinojosa@factset.com.zip
 Mar_11_2022_13_09_24.948_eric.hinojosa@factset.com.zip
 Mar_11_2022_13_44_17.644_eric.hinojosa@factset.com.zip
 Mar_11_2022_13_46_22.205_eric.hinojosa@factset.com.zip
+=======
+>>>>>>> main
 Mar_09_2022_05_50_26.036_mike.moyer@naes.com.zip
 Mar_09_2022_06_43_40.251_donald.callow@ferc.gov.zip
 Mar_09_2022_13_57_17.737_dmabry@mwn.com.zip
@@ -88,14 +91,3 @@ Mar_10_2022_16_48_29.594_eric.hinojosa@factset.com.zip
 Mar_10_2022_22_09_41.124_adougherty@rockcreekenergygroup.com.zip
 Mar_11_2022_02_16_22.211_sujeetsrathod@gmail.com.zip
 Mar_11_2022_02_21_47.644_sujeetsrathod@gmail.com.zip
-Mar_11_2022_08_22_32.859_morris.greenberg@spglobal.com.zip
-Mar_11_2022_08_37_11.821_jpmcmahon71@gmail.com.zip
-Mar_11_2022_12_00_34.346_eric.hinojosa@factset.com.zip
-Mar_11_2022_12_01_02.481_eric.hinojosa@factset.com.zip
-Mar_11_2022_12_03_42.143_eric.hinojosa@factset.com.zip
-Mar_11_2022_12_09_00.016_eric.hinojosa@factset.com.zip
-Mar_11_2022_12_30_31.698_eric.hinojosa@factset.com.zip
-Mar_11_2022_13_01_39.621_eric.hinojosa@factset.com.zip
-Mar_11_2022_13_09_24.948_eric.hinojosa@factset.com.zip
-Mar_11_2022_13_44_17.644_eric.hinojosa@factset.com.zip
-Mar_11_2022_13_46_22.205_eric.hinojosa@factset.com.zip

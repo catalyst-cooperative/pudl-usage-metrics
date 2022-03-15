@@ -2,6 +2,7 @@ name: save-harvest-data
 on:
   push:
   pull_request:
+  workflow_dispatch:
   schedule:
     # 9AM UTC is ~2am Mountain Time
     - cron: "0 9 * * *"
