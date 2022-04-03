@@ -14,12 +14,13 @@ from pathlib import Path
 from dagster_pandera import pandera_schema_to_dagster_type
 
 
-from usage_metrics.resources.postgres import DataframePostgresIOManager
 from usage_metrics.helpers import parse_request_url, geocode_ip
 import usage_metrics.schemas.datasette as datasette_schemas
 from usage_metrics.schemas.datasette import EMPTY_COLUMNS
+from usage_metrics.resources.sqlite import DataframeSQLiteIOManager
 
 
+GCP_PROJECT_ID = 'catalyst-cooperative-pudl'
 
 JSON_FIELDS = ["resource", "http_request", "labels"]
 DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json"]
@@ -29,11 +30,9 @@ def raw_logs():
     """Extract Datasette logs from BigQuery instance."""
     credentials = service_account.Credentials.from_service_account_file("/app/bigquery-service-account-key.json")
 
-    project_id = 'catalyst-cooperative-pudl'
-
     raw_logs = pandas_gbq.read_gbq(
         "SELECT * FROM `datasette_logs.run_googleapis_com_requests`",
-        project_id=project_id,
+        project_id=GCP_PROJECT_ID,
         credentials=credentials,
     )
 
@@ -138,7 +137,7 @@ def data_request_logs(clean_datasette_logs):
     return data_request_logs
 
 @io_manager
-def df_to_postgres_io_manager(_):
-    return DataframePostgresIOManager()
+def df_to_sqlite_io_manager(_):
+    return DataframeSQLiteIOManager()
 
-datasette_asset_group = AssetGroup([unpack_httprequests, raw_logs, clean_datasette_logs, data_request_logs], resource_defs={"io_manager": df_to_postgres_io_manager})
+datasette_asset_group = AssetGroup([unpack_httprequests, raw_logs, clean_datasette_logs, data_request_logs], resource_defs={"io_manager": df_to_sqlite_io_manager})

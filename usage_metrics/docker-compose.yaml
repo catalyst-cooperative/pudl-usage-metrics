@@ -2,12 +2,11 @@ version: '3.9'
 services:
   app:
     build: .
-    depends_on:
-      - postgres
     env_file: local.env
     volumes:
       - ./usage_metrics:/app/usage_metrics:ro
       - ./cache:/app/cache:rw
+      - ./data:/app/data:rw
       - ./bigquery-service-account-key.json:/app/bigquery-service-account-key.json:ro
       - ./workspace.yaml:/app/workspace.yaml:ro
       - ./dagster.yaml:/app/dagster_home/dagster.yaml:ro
@@ -16,23 +15,14 @@ services:
     command: dagit -h 0.0.0.0 -p ${DAGIT_PORT}
   jupyter:
     build: .
-    depends_on:
-      - postgres
     env_file: local.env
     volumes:
       - ./usage_metrics:/app/usage_metrics:ro
       - ./bigquery-service-account-key.json:/app/bigquery-service-account-key.json:ro
       - ./notebooks:/app/notebooks:rw
       - ./cache:/app/cache:rw
+      - ./data:/app/data:rw
       - ./workspace.yaml:/app/workspace.yaml:ro
     ports:
       - ${JUPYTER_PORT}:${JUPYTER_PORT}
     command: jupyter lab --port ${JUPYTER_PORT} --ip 0.0.0.0 --no-browser
-  postgres:
-    image: postgres:14.2
-    env_file: local.env
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-    ports:
-      - ${POSTGRES_PORT}:5432
