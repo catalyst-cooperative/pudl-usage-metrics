@@ -8,3 +8,5 @@ usage_metrics/bigquery-service-account-key.json
 /usage_metrics/cache/*
 
 /usage_metrics/local.env
+
+/usage_metrics/notebooks/.ipynb_checkpoints
