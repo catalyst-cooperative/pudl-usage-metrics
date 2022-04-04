@@ -18,7 +18,7 @@ raw_logs = DataFrameSchema(
         "http_request": Column(str, description="String of JSON containing the http request."),
         "labels": Column(str, description="String of JSON containing Google label information."),
         "operation": Column(str, nullable=True),
-        "trace": Column(str, description="The trace ID."),
+        "trace": Column(str, description="The trace ID.", nullable=True),
         "span_id": Column(str, nullable=True),
         "trace_sampled": Column(pd.BooleanDtype, nullable=True),
         "source_location": Column(str, nullable=True),
