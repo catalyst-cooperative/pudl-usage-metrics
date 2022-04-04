@@ -65,12 +65,11 @@ repos:
       - flake8-use-fstring
 
 
-# # Check for known security vulnerabilities:
-# - repo: https://github.com/PyCQA/bandit
-#   rev: 1.7.0
-#   hooks:
-#   - id: bandit
-#     args: [--configfile, .bandit.yml]
+# Check for known security vulnerabilities:
+- repo: https://github.com/PyCQA/bandit
+  rev: 1.7.0
+  hooks:
+  - id: bandit
 
 # # Unit tests
 # - repo: local
