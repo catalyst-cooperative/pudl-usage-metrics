@@ -70,15 +70,3 @@ repos:
   rev: 1.7.0
   hooks:
   - id: bandit
-
-# # Unit tests
-# - repo: local
-#   hooks:
-#     - id: unit-tests
-#       name: unit-tests
-#       stages: [commit]
-#       language: system
-#       verbose: false
-#       pass_filenames: false
-#       always_run: true
-#       entry: docker compose run --rm app pytest --doctest-modules dbcp test/unit --ignore input/
