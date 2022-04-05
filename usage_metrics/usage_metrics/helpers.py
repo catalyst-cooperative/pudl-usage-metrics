@@ -1,12 +1,14 @@
+"""General utility functions for cleaning usage metrics data."""
 import os
-import ipinfo
-
 from pathlib import Path
 from urllib.parse import urlparse
+
+import ipinfo
 from joblib import Memory
 
 cache_dir = Path("/app/cache")
 ip_address_cache = Memory(cache_dir, verbose=0)
+
 
 @ip_address_cache.cache
 def geocode_ip(ip_address):
@@ -17,9 +19,13 @@ def geocode_ip(ip_address):
     details = handler.getDetails(ip_address)
     return details.all
 
+
 def parse_request_url(url):
     """Create dictionary of request components."""
     pr = urlparse(url)
-    return {"scheme": pr.scheme, "netloc": pr.netloc, "path": pr.path, "query": pr.query}
-
-    
+    return {
+        "scheme": pr.scheme,
+        "netloc": pr.netloc,
+        "path": pr.path,
+        "query": pr.query,
+    }

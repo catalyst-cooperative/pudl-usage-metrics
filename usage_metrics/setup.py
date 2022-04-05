@@ -1,3 +1,4 @@
+"""Setup script to make usage_metrics directly installable with pip."""
 import setuptools
 
 setuptools.setup(

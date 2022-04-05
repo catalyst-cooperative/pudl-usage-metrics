@@ -1,12 +1,7 @@
+"""Test module."""
 from usage_metrics.ops.hello import hello
 
 
 def test_hello():
-    """
-    This is an example test for a Dagster op.
-
-    For hints on how to test your Dagster ops, see our documentation tutorial on Testing:
-    https://docs.dagster.io/concepts/testing
-    """
-
+    """This is an example test for a Dagster op."""
     assert hello() == "Hello, Dagster!"

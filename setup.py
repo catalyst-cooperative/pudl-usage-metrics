@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Setup script to make bizops directly installable with pip."""
 from setuptools import find_packages, setup
 

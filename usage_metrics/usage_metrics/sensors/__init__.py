@@ -1,1 +1,1 @@
-
+"""Module for Dagster sensors."""

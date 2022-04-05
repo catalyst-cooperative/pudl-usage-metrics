@@ -1,1 +1,1 @@
-
+"""Usage metric tests."""
