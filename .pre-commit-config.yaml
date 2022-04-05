@@ -22,17 +22,6 @@ repos:
   - id: trailing-whitespace     # Remove trailing whitespace.
   - id: name-tests-test         # Follow PyTest naming convention.
 
-# Attempt to enforce standardized PEP8 style formatting:
-- repo: https://github.com/pre-commit/mirrors-autopep8
-  rev: v1.5.7
-  hooks:
-  - id: autopep8
-    exclude: ^docs/conf.py$
-    args:
-      - --global-config=tox.ini
-      - --in-place
-      - --max-line-length=88
-
 # Make sure import statements are sorted uniformly.
 - repo: https://github.com/pre-commit/mirrors-isort
   rev: v5.9.3
@@ -44,7 +33,7 @@ repos:
   rev: 22.3.0
   hooks:
   - id: black
-    language_version: python3.9
+    language_version: python3.10
 
 # Check for PEP8 non-compliance, code complexity, style, errors, etc:
 - repo: https://github.com/PyCQA/flake8
