@@ -1,8 +1,9 @@
 """Tools for extracting and organizing data about Catalyst's business operations."""
 
-import requests
 import os
+
 import pandas as pd
+import requests
 
 # Authentication required to access Harvest's API
 HARVEST_ACCOUNT_ID = os.environ["HARVEST_ACCOUNT_ID"]
