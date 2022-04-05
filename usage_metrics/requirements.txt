@@ -6,6 +6,7 @@ pydata-google-auth~=1.3.0
 pandas~=1.3.5
 jupyterlab~=3.2.8
 psycopg2~=2.9.3
-ipinfo
+ipinfo~=4.2.1
 joblib~=1.1.0
 matplotlib~=3.5.1
+pytest~=7.1.1

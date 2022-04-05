@@ -7,6 +7,7 @@ services:
     env_file: local.env
     volumes:
       - ./usage_metrics:/app/usage_metrics:ro
+      - ./usage_metrics_tests:/app/usage_metrics_tests:ro
       - ./cache:/app/cache:rw
       - ./bigquery-service-account-key.json:/app/bigquery-service-account-key.json:ro
       - ./workspace.yaml:/app/workspace.yaml:ro

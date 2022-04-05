@@ -1,5 +1,5 @@
 # set base image (host OS)
-FROM python:3.9
+FROM python:3.10
 
 RUN useradd -d /app/ metrics
 USER metrics
@@ -8,7 +8,7 @@ WORKDIR /app
 
 COPY requirements.txt /app/requirements.txt
 
-RUN python -m pip install -r /app/requirements.txt
+RUN python -m pip install --no-warn-script-location -r /app/requirements.txt
 RUN rm requirements.txt
 
 # # Add the python packages to PATH
