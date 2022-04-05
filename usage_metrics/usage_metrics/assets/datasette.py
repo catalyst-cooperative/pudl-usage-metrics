@@ -10,6 +10,7 @@ import logging
 from urllib.parse import urlparse
 from dagster import AssetGroup, io_manager, op, Out, asset
 from google.oauth2 import service_account
+from google.oauth2.service_account import Credentials
 from pathlib import Path
 from dagster_pandera import pandera_schema_to_dagster_type
 
@@ -24,16 +25,24 @@ from usage_metrics.schemas.datasette import EMPTY_COLUMNS
 JSON_FIELDS = ["resource", "http_request", "labels"]
 DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json"]
 
+GCP_PROJECT_ID = 'catalyst-cooperative-pudl'
+
+def get_bq_credentials() -> Credentials:
+    """Get credentials object for datasette-logs-viewer service account."""
+    try:
+        return service_account.Credentials.from_service_account_file("/app/bigquery-service-account-key.json")
+    except FileNotFoundError:
+        FileNotFoundError("Can't find the service account key json file.")
+
+
 @asset(dagster_type=pandera_schema_to_dagster_type(datasette_schemas.raw_logs))
 def raw_logs():
     """Extract Datasette logs from BigQuery instance."""
-    credentials = service_account.Credentials.from_service_account_file("/app/bigquery-service-account-key.json")
-
-    project_id = 'catalyst-cooperative-pudl'
+    credentials = get_bq_credentials()
 
     raw_logs = pandas_gbq.read_gbq(
         "SELECT * FROM `datasette_logs.run_googleapis_com_requests`",
-        project_id=project_id,
+        project_id=GCP_PROJECT_ID,
         credentials=credentials,
     )
 

@@ -21,3 +21,5 @@ def parse_request_url(url):
     """Create dictionary of request components."""
     pr = urlparse(url)
     return {"scheme": pr.scheme, "netloc": pr.netloc, "path": pr.path, "query": pr.query}
+
+    
