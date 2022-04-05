@@ -26,11 +26,11 @@ jobs:
         env:
           API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
           GOOGLE_APPLICATION_CREDENTIALS: ${{ steps.write_file.outputs.filePath }}
-          
+
         run: |
           pip install ./
           save_github_metrics.py
-      
+
       - name: Inform the Codemonkeys
         uses: 8398a7/action-slack@v3
         with:

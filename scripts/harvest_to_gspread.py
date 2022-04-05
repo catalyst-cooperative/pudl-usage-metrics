@@ -18,6 +18,7 @@ AUTH_JSON = os.environ["CATALYST_BIZOPS_CREDENTIALS"]
 
 
 def parse_main(argv):
+    """Add arguments to main script."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         dest="endpoints",
@@ -25,7 +26,7 @@ def parse_main(argv):
         default=bizops.VALID_HARVEST_ENDPOINTS,
         help=f"""List of API endpoints to pull. Must be one or more of:
         {bizops.VALID_HARVEST_ENDPOINTS}. Defaults to pulling all of them.
-        """
+        """,
     )
     parser.add_argument(
         "--loglevel",
@@ -39,6 +40,7 @@ def parse_main(argv):
 
 
 def main():
+    """Pull data from Harvest and load to Google Sheets."""
     args = parse_main(sys.argv)
     logger = logging.getLogger()
     logging.basicConfig(level=args.loglevel)
@@ -50,9 +52,7 @@ def main():
 
         logger.info(f"Uploading {len(df)} {endpoint} records to Google Sheets.")
         harvest_spread = gspread_pandas.Spread(
-            spread=WORKBOOK_ID,
-            sheet=None,
-            config=gspread_config
+            spread=WORKBOOK_ID, sheet=None, config=gspread_config
         )
         harvest_spread.open_sheet(endpoint, create=True)
         sheet = gspread_pandas.Spread(

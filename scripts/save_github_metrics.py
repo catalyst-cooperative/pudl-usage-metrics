@@ -4,19 +4,19 @@
 import json
 import logging
 import os
-import requests
 import sys
-
-
 from dataclasses import dataclass
 from datetime import date
+
+import requests
 from google.cloud import storage
 from requests.exceptions import HTTPError
-from requests.models import Response
 
 
 @dataclass
 class Metric:
+    """Dataclass to hold metric name and Github API endpoint."""
+
     name: str
     folder: str
 
@@ -26,8 +26,14 @@ OWNER = "catalyst-cooperative"
 REPO = "pudl"
 BUCKET_NAME = "github-metrics"
 
-BIWEEKLY_METRICS = [Metric("clones", "clones"), Metric("popular/paths", "popular_paths"), Metric("popular/referrers", "popular_referrers"), Metric("views", "views")]
+BIWEEKLY_METRICS = [
+    Metric("clones", "clones"),
+    Metric("popular/paths", "popular_paths"),
+    Metric("popular/referrers", "popular_referrers"),
+    Metric("views", "views"),
+]
 PERSISTENT_METRICS = [Metric("stargazers", "stargazers"), Metric("forks", "forks")]
+
 
 def get_biweekly_metrics(metric: str) -> str:
     """
@@ -43,7 +49,7 @@ def get_biweekly_metrics(metric: str) -> str:
         "Authorization": f"token {TOKEN}",
         "Accept": "application/vnd.github.v3+json",
     }
-    
+
     response = make_github_request(query_url, headers)
     return json.dumps(response.json())
 
@@ -75,9 +81,10 @@ def get_persistent_metrics(metric) -> str:
         page += 1
     return json.dumps(metrics)
 
-def make_github_request(query: str, headers: str, params: str=None):
+
+def make_github_request(query: str, headers: str, params: str = None):
     """
-    Makes a request to the github api.
+    Make a request to the github api.
 
     Args:
         query (str): A github api request url.
@@ -85,33 +92,37 @@ def make_github_request(query: str, headers: str, params: str=None):
         params (str): Params of request.
 
     Returns:
-        response (requests.models.Response): the request response. 
+        response (requests.models.Response): the request response.
     """
     try:
         response = requests.get(query, headers=headers, params=params)
 
         response.raise_for_status()
     except HTTPError as http_err:
-        raise HTTPError(f'HTTP error occurred: {http_err}\n\tResponse test: {response.text}')
+        raise HTTPError(
+            f"HTTP error occurred: {http_err}\n\tResponse test: {response.text}"
+        )
     except Exception as err:
-        raise Exception(f'Other error occurred: {err}') 
+        raise Exception(f"Other error occurred: {err}")
     return response
+
 
 def upload_to_bucket(data, metric):
     """Upload a gcp object."""
     storage_client = storage.Client()
     bucket = storage_client.bucket(BUCKET_NAME)
     blob_name = f"{metric.folder}/{date.today().strftime('%Y-%m-%d')}.json"
-    
+
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)
 
     logging.info(f"Uploaded {metric.name} data to {blob_name}.")
 
+
 def save_metrics():
     """Save github traffic metrics to google cloud bucket."""
     logger = logging.getLogger()
-    logging.basicConfig(level="INFO")
+    logger.basicConfig(level="INFO")
 
     for metric in BIWEEKLY_METRICS:
         metric_data = get_biweekly_metrics(metric.name)
@@ -120,6 +131,7 @@ def save_metrics():
     for metric in PERSISTENT_METRICS:
         metric_data = get_persistent_metrics(metric.name)
         upload_to_bucket(metric_data, metric)
+
 
 if __name__ == "__main__":
     sys.exit(save_metrics())

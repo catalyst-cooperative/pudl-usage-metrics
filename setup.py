@@ -1,7 +1,8 @@
 #!/usr/bin/env python
+"""Setup script to make bizops directly installable with pip."""
 from setuptools import find_packages, setup
 
-with open('requirements.txt') as f:
+with open("requirements.txt") as f:
     install_requires = f.read().splitlines()
 
 setup(
