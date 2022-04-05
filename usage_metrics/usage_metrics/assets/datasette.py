@@ -4,12 +4,11 @@ import logging
 
 import pandas as pd
 import pandas_gbq
+import usage_metrics.schemas.datasette as datasette_schemas
 from dagster import AssetGroup, asset, io_manager
 from dagster_pandera import pandera_schema_to_dagster_type
 from google.oauth2 import service_account
 from google.oauth2.service_account import Credentials
-
-import usage_metrics.schemas.datasette as datasette_schemas
 from usage_metrics.helpers import geocode_ip, parse_request_url
 from usage_metrics.resources.postgres import DataframePostgresIOManager
 from usage_metrics.schemas.datasette import EMPTY_COLUMNS
@@ -31,7 +30,7 @@ def get_bq_credentials() -> Credentials:
 
 
 @asset(dagster_type=pandera_schema_to_dagster_type(datasette_schemas.raw_logs))
-def raw_logs():
+def raw_logs() -> pd.DataFrame:
     """Extract Datasette logs from BigQuery instance."""
     credentials = get_bq_credentials()
 
@@ -53,9 +52,9 @@ def raw_logs():
 @asset(
     dagster_type=pandera_schema_to_dagster_type(datasette_schemas.unpack_httprequests)
 )
-def unpack_httprequests(raw_logs):
+def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
     """Unpack http_request dict keys into separate fields."""
-    # Convert the JSON fields into str because sqlalchemy can't write dicts to json
+    # Convert the JSON strings back to dicts
     for field in JSON_FIELDS:
         raw_logs[field] = raw_logs[field].apply(json.loads)
 
@@ -68,6 +67,7 @@ def unpack_httprequests(raw_logs):
     logs = logs.set_index("insert_id")
     assert logs.index.is_unique
 
+    # Unpack http_request json keys to columns
     http_request_df = pd.DataFrame.from_dict(
         logs.http_request.to_dict(), orient="index"
     )
@@ -78,10 +78,12 @@ def unpack_httprequests(raw_logs):
     unpacked_logs.index.name = "insert_id"
     unpacked_logs = unpacked_logs.reset_index()
 
+    # Convert the new columns to snake_case
     unpacked_logs.columns = unpacked_logs.columns.str.replace(
         r"(?<!^)(?=[A-Z])", "_"
     ).str.lower()
 
+    # Convert the JSON fields into str because sqlalchemy can't write dicts to json
     for field in JSON_FIELDS:
         unpacked_logs[field] = unpacked_logs[field].apply(json.dumps)
 
@@ -91,7 +93,7 @@ def unpack_httprequests(raw_logs):
 @asset(
     dagster_type=pandera_schema_to_dagster_type(datasette_schemas.clean_datasette_logs)
 )
-def clean_datasette_logs(unpack_httprequests: pd.DataFrame):
+def clean_datasette_logs(unpack_httprequests: pd.DataFrame) -> pd.DataFrame:
     """
     Clean the raw logs.
 
@@ -149,7 +151,7 @@ def clean_datasette_logs(unpack_httprequests: pd.DataFrame):
 
 
 @asset(dagster_type=pandera_schema_to_dagster_type(datasette_schemas.data_request_logs))
-def data_request_logs(clean_datasette_logs):
+def data_request_logs(clean_datasette_logs: pd.DataFrame) -> pd.DataFrame:
     """
     Filter the useful data request logs.
 

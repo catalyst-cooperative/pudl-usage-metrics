@@ -120,7 +120,7 @@ clean_datasette_logs = clean_datasette_logs.add_columns(
                 "Network location part. This is data.catalyst.coop for all " "records."
             ),
         ),
-        "remote_ip_city": Column(str, description="The user's city."),
+        "remote_ip_city": Column(str, description="The user's city.", nullable=True),
         "remote_ip_loc": Column(
             str,
             description=(
@@ -134,22 +134,34 @@ clean_datasette_logs = clean_datasette_logs.add_columns(
                 "The network organization name. Most internet providres but some "
                 "institutions have their own network."
             ),
+            nullable=True,
         ),
         "remote_ip_hostname": Column(str, nullable=True),
         "remote_ip_country_name": Column(
-            str, description="The user's full country name."
+            str, description="The user's full country name.", nullable=True
         ),
-        "remote_ip_asn": Column(str, description="The network's ASN number."),
-        "remote_ip_country": Column(str, description="The user's country abreviation."),
-        "remote_ip_timezone": Column(str, description="The user's timezone."),
-        "remote_ip_latitude": Column(str, description="The user's latitude."),
-        "remote_ip_longitude": Column(str, description="The user's longitude."),
+        "remote_ip_asn": Column(
+            str, description="The network's ASN number.", nullable=True
+        ),
+        "remote_ip_country": Column(
+            str, description="The user's country abreviation.", nullable=True
+        ),
+        "remote_ip_timezone": Column(
+            str, description="The user's timezone.", nullable=True
+        ),
+        "remote_ip_latitude": Column(
+            str, description="The user's latitude.", nullable=True
+        ),
+        "remote_ip_longitude": Column(
+            str, description="The user's longitude.", nullable=True
+        ),
         "remote_ip_postal": Column(
             str, nullable=True, description="The user's postal code."
         ),
         "remote_ip_region": Column(
             str,
             description="The user's region. These are typically states or provinces.",
+            nullable=True,
         ),
     }
 )

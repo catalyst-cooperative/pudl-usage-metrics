@@ -32,8 +32,5 @@ services:
   postgres:
     image: postgres:14.2
     env_file: local.env
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
     ports:
       - ${POSTGRES_PORT}:5432
