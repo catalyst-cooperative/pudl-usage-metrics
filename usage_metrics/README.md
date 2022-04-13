@@ -21,7 +21,7 @@ Then activate the environment:
 ```
 conda activate business-dev
 ```
-This conda environment has python, pip and pre-commit installed in it. This env is just for running pre-commits, the actual ETL development happens in docker.
+This conda environment has python, pip and pre-commit installed in it. This env is just for running pre-commits, the actual ELT development happens in docker.
 
 ## Docker
 [Install docker](https://docs.docker.com/get-docker/). Once you have docker installed, make sure it is running.
@@ -39,20 +39,12 @@ Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docke
 during this step it means docker is not running.
 
 ## Environment Variables
-Once the image is created we need to set some environment variables. First, make a new file in the repo root directory called `.env` and enter these two lines to configure local ports:
-```
-DAGIT_PORT=3001
-POSTGRES_PORT=8085
-JUPYTER_PORT=8890
-```
-These ports can be changed if you have other services running on these ports.
-
-Second, make a copy of `default.env` and call it `local.env`. Follow the instructions inside to set up API key access. `local.env` contains environment variables that can be accessed within the docker container. You can read more about docker environment variables [here](https://docs.docker.com/compose/environment-variables/).
+The docker containers need access to environment variables like API keys and port numbers. Make a copy of `default.env` and call it `local.env`. Follow the instructions inside to set up API key access. `local.env` contains environment variables that can be accessed within the docker container. You can read more about docker environment variables [here](https://docs.docker.com/compose/environment-variables/).
 
 ## Service Account Key
 The docker container needs access to BigQuery, so you'll need to acquire the `datasette-log-viewer` service account key and place it in the `/business/usage_metrics/bigquery-service-account-key.json` file. **This file is a password for the service account so make sure it is stored securely!**
 
-## Run the ETL
+## Run the ELT
 Now that we’ve built the images and set the environment variables run:
 ```
 make run_elt
