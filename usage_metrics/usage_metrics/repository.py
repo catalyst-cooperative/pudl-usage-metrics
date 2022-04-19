@@ -1,6 +1,5 @@
 """Usage metrics dagster repository."""
 from dagster import repository
-
 from usage_metrics.jobs.datasette import datasette_logs_job
 
 
