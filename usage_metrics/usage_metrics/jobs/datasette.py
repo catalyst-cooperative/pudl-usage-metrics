@@ -1,15 +1,28 @@
 """Datasette ELT dagster job."""
 from datetime import datetime
 
-from dagster import in_process_executor, job, weekly_partitioned_config
+import pandas as pd
+from dagster import graph, in_process_executor, job, weekly_partitioned_config
 
-from usage_metrics.ops.datasette import (
-    clean_datasette_logs,
-    data_request_logs,
-    raw_logs,
-    unpack_httprequests,
-)
+import usage_metrics.ops.datasette as da
 from usage_metrics.resources.sqlite import sqlite_manager
+
+
+@graph
+def transform(raw_logs: pd.DataFrame) -> pd.DataFrame:
+    """
+    Datasette log transformation graph.
+
+    Args:
+        raw_logs: The raw logs extracted from BQ.
+
+    Return:
+        df: The cleaned logs.
+    """
+    df = da.unpack_httprequests(raw_logs)
+    df = da.parse_urls(df)
+    df = da.geocode_ips(df)
+    return df
 
 
 @weekly_partitioned_config(start_date=datetime(2022, 1, 31))
@@ -34,7 +47,6 @@ def datasette_weekly_partition(start: datetime, end: datetime):
 )
 def process_datasette_logs():
     """Process datasette logs."""
-    df = raw_logs()
-    df = unpack_httprequests(df)
-    df = clean_datasette_logs(df)
-    data_request_logs(df)
+    df = da.extract()
+    df = transform(df)
+    df = da.load(df)

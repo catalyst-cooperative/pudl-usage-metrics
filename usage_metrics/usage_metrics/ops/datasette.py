@@ -1,6 +1,5 @@
 """Dagster software defined assets for datasette logs."""
 import json
-import logging
 from pathlib import Path
 
 import pandas as pd
@@ -33,7 +32,7 @@ def get_bq_credentials() -> Credentials:
 
 
 @op()
-def raw_logs(context) -> pd.DataFrame:
+def extract(context) -> pd.DataFrame:
     """Extract Datasette logs from BigQuery instance."""
     credentials = get_bq_credentials()
 
@@ -105,22 +104,14 @@ def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
 
 
 @op()
-def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataFrame:
-    """
-    Clean the raw logs.
-
-    Transformations:
-    - unpack the request url into component parts
-    - geocode the ip addresses
-    """
+def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
+    """Parse the request url into component parts."""
     # Remove columns that don't contain any data
-    unpack_httprequests = unpack_httprequests.drop(columns=EMPTY_COLUMNS)
+    df = df.drop(columns=EMPTY_COLUMNS)
 
     # Parse the request url
-    unpack_httprequests = unpack_httprequests.set_index("insert_id")
-    parsed_requests = unpack_httprequests.request_url.apply(
-        lambda x: parse_request_url(x)
-    ).to_frame()
+    df = df.set_index("insert_id")
+    parsed_requests = df.request_url.apply(lambda x: parse_request_url(x)).to_frame()
     parsed_requests = pd.DataFrame.from_dict(
         parsed_requests.request_url.to_dict(), orient="index"
     )
@@ -131,15 +122,20 @@ def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataF
         parsed_requests[field] = parsed_requests[field].replace("", pd.NA)
 
     # Add the component fields back to the logs
-    parsed_logs = pd.concat([unpack_httprequests, parsed_requests], axis=1)
+    parsed_logs = pd.concat([df, parsed_requests], axis=1)
     parsed_logs.index.name = "insert_id"
     parsed_logs = parsed_logs.reset_index()
-    assert len(unpack_httprequests) == len(parsed_logs)
+    assert len(df) == len(parsed_logs)
+    return parsed_logs
 
+
+@op()
+def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
+    """Geocode the ip addresses."""
     # Geocode the remote ip addresses
-    logging.info("Geocoding ip addresses.")
+    context.log.info("Geocoding ip addresses.")
     # Instead of geocoding every log, geocode the distinct ips
-    unique_ips = pd.Series(parsed_logs.remote_ip.unique())
+    unique_ips = pd.Series(df.remote_ip.unique())
     geocoded_ips = unique_ips.apply(lambda ip: geocode_ip(ip))
     geocoded_ips = pd.DataFrame.from_dict(geocoded_ips.to_dict(), orient="index")
     geocoded_ip_column_map = {
@@ -155,15 +151,12 @@ def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataF
     )
 
     # Add the component fields back to the logs
-    clean_logs = parsed_logs.merge(
-        geocoded_ips, on="remote_ip", how="left", validate="m:1"
-    )
-
+    clean_logs = df.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
     return clean_logs
 
 
 @op(required_resource_keys={"database_manager"})
-def data_request_logs(context, clean_datasette_logs: pd.DataFrame):
+def load(context, clean_datasette_logs: pd.DataFrame):
     """
     Filter the useful data request logs.
 

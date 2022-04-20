@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import sqlalchemy as sa
-from dagster import resource
+from dagster import Field, resource
 
 from usage_metrics.models import usage_metrics_metadata
 
@@ -43,7 +43,15 @@ class SQLiteManager:
             df.to_sql(name=table_name, con=conn, if_exists="append", index=False)
 
 
-@resource(config_schema={"clobber": bool})
+@resource(
+    config_schema={
+        "clobber": Field(
+            bool,
+            description="Clobber and recreate the database if True",
+            default_value=False,
+        )
+    }
+)
 def sqlite_manager(init_context):
     """Create a SQLiteManager dagster resource."""
     clobber = init_context.resource_config["clobber"]
