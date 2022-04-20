@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import pandas_gbq
-from dagster import AssetGroup, WeeklyPartitionsDefinition, asset, io_manager
+from dagster import AssetGroup, asset, io_manager
 from dagster_pandera import pandera_schema_to_dagster_type
 from google.oauth2 import service_account
 from google.oauth2.service_account import Credentials
@@ -35,29 +35,18 @@ def get_bq_credentials() -> Credentials:
         FileNotFoundError("Can't find the service account key json file.")
 
 
-weekly_partitions_def = WeeklyPartitionsDefinition(start_date="2022-01-31")
-
-
 @asset(
     dagster_type=pandera_schema_to_dagster_type(datasette_schemas.raw_logs),
-    partitions_def=weekly_partitions_def,
 )
 def raw_logs(context) -> pd.DataFrame:
     """Extract Datasette logs from BigQuery instance."""
-    partition_time_window = context.output_asset_partitions_time_window()
-    start_date = str(partition_time_window.start.date())  # noqa: F841
-    end_date = str(partition_time_window.end.date())  # noqa: F841
-
     credentials = get_bq_credentials()
 
     raw_logs = pandas_gbq.read_gbq(
-        "SELECT * FROM `datasette_logs.run_googleapis_com_requests`"
-        f" WHERE DATE(timestamp) >= '{start_date}' AND DATE(timestamp) < '{end_date}'",
+        "SELECT * FROM `datasette_logs.run_googleapis_com_requests`",
         project_id=GCP_PROJECT_ID,
         credentials=credentials,
     )
-    context.log.info(len(raw_logs))
-    context.log.info(raw_logs.timestamp.describe())
 
     # Convert CamelCase to snake_case
     raw_logs.columns = raw_logs.columns.str.replace(r"(?<!^)(?=[A-Z])", "_").str.lower()
@@ -68,9 +57,7 @@ def raw_logs(context) -> pd.DataFrame:
 
     # Remove the UTC timezone from datetime columns
     for field in raw_logs.select_dtypes(include=["datetimetz"]):
-        context.log.info(raw_logs.dtypes)
         raw_logs[field] = raw_logs[field].dt.tz_localize(None)
-        context.log.info(raw_logs.dtypes)
 
     return raw_logs
 
@@ -144,8 +131,6 @@ def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataF
     for field in parsed_requests.columns:
         parsed_requests[field] = parsed_requests[field].replace("", pd.NA)
 
-    context.log.info(unpack_httprequests.index.is_unique)
-    context.log.info(parsed_requests.index.is_unique)
     # Add the component fields back to the logs
     parsed_logs = pd.concat([unpack_httprequests, parsed_requests], axis=1)
     parsed_logs.index.name = "insert_id"

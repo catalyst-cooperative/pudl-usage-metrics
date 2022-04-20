@@ -26,7 +26,7 @@ class DataframeSQLiteIOManager(IOManager):
             obj.to_sql(
                 name=table_name,
                 con=con,
-                if_exists="append",
+                if_exists="replace",
                 index=False,
                 chunksize=5000,
             )

@@ -7,3 +7,6 @@ dependencies:
   - pip>=21,<23
   - python>=3.8,<3.11
   - setuptools<62
+  - pre-commit~=2.9
+  - pip:
+      - --editable ./usage_metrics/[doc,test,dev]
