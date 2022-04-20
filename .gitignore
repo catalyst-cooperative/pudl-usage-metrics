@@ -5,8 +5,7 @@ venv
 usage_metrics/bigquery-service-account-key.json
 
 *.DS_Store
-/usage_metrics/cache/*
-
-/usage_metrics/local.env
+/usage_metrics/usage_metrics/cache/**
+/usage_metrics/usage_metrics/data/**
 
 /usage_metrics/notebooks/.ipynb_checkpoints
