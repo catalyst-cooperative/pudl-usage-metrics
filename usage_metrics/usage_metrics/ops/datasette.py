@@ -5,14 +5,11 @@ from pathlib import Path
 
 import pandas as pd
 import pandas_gbq
-from dagster import AssetGroup, asset, io_manager
-from dagster_pandera import pandera_schema_to_dagster_type
+from dagster import op
 from google.oauth2 import service_account
 from google.oauth2.service_account import Credentials
 
-import usage_metrics.schemas.datasette as datasette_schemas
 from usage_metrics.helpers import geocode_ip, parse_request_url
-from usage_metrics.resources.sqlite import DataframeSQLiteIOManager
 from usage_metrics.schemas.datasette import EMPTY_COLUMNS
 
 JSON_FIELDS = ["resource", "http_request", "labels"]
@@ -35,18 +32,24 @@ def get_bq_credentials() -> Credentials:
         FileNotFoundError("Can't find the service account key json file.")
 
 
-@asset(
-    dagster_type=pandera_schema_to_dagster_type(datasette_schemas.raw_logs),
-)
+@op()
 def raw_logs(context) -> pd.DataFrame:
     """Extract Datasette logs from BigQuery instance."""
     credentials = get_bq_credentials()
 
+    context.log.info(dir(context))
+    context.log.info(context.op_config)
+    start_date = context.op_config["start_date"]
+    end_date = context.op_config["end_date"]
+
     raw_logs = pandas_gbq.read_gbq(
-        "SELECT * FROM `datasette_logs.run_googleapis_com_requests`",
+        "SELECT * FROM `datasette_logs.run_googleapis_com_requests`"
+        f" WHERE DATE(timestamp) >= '{start_date}' AND DATE(timestamp) < '{end_date}'",
         project_id=GCP_PROJECT_ID,
         credentials=credentials,
     )
+    context.log.info(raw_logs.timestamp.describe())
+    context.log.info(raw_logs.shape)
 
     # Convert CamelCase to snake_case
     raw_logs.columns = raw_logs.columns.str.replace(r"(?<!^)(?=[A-Z])", "_").str.lower()
@@ -62,9 +65,7 @@ def raw_logs(context) -> pd.DataFrame:
     return raw_logs
 
 
-@asset(
-    dagster_type=pandera_schema_to_dagster_type(datasette_schemas.unpack_httprequests)
-)
+@op()
 def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
     """Unpack http_request dict keys into separate fields."""
     # Convert the JSON strings back to dicts
@@ -103,9 +104,7 @@ def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
     return unpacked_logs
 
 
-@asset(
-    dagster_type=pandera_schema_to_dagster_type(datasette_schemas.clean_datasette_logs)
-)
+@op()
 def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataFrame:
     """
     Clean the raw logs.
@@ -163,7 +162,7 @@ def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataF
     return clean_logs
 
 
-@asset(dagster_type=pandera_schema_to_dagster_type(datasette_schemas.data_request_logs))
+@op()
 def data_request_logs(clean_datasette_logs: pd.DataFrame) -> pd.DataFrame:
     """
     Filter the useful data request logs.
@@ -178,15 +177,3 @@ def data_request_logs(clean_datasette_logs: pd.DataFrame) -> pd.DataFrame:
         clean_datasette_logs.request_url_path.str.contains("|".join(DATA_PATHS))
     ]
     return data_request_logs
-
-
-@io_manager
-def df_to_sqlite_io_manager(_):
-    """Create SQLite IOManager."""
-    return DataframeSQLiteIOManager()
-
-
-datasette_asset_group = AssetGroup(
-    [unpack_httprequests, raw_logs, clean_datasette_logs, data_request_logs],
-    resource_defs={"io_manager": df_to_sqlite_io_manager},
-)

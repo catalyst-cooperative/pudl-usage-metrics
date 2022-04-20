@@ -1,7 +1,35 @@
 """Datasette ELT dagster job."""
-from dagster import in_process_executor
-from usage_metrics.assets.datasette import datasette_asset_group
+from datetime import datetime
 
-datasette_logs_job = datasette_asset_group.build_job(
-    name="datasette_logs", executor_def=in_process_executor
+from dagster import job, weekly_partitioned_config
+
+from usage_metrics.ops.datasette import (
+    clean_datasette_logs,
+    data_request_logs,
+    raw_logs,
+    unpack_httprequests,
 )
+
+
+@weekly_partitioned_config(start_date=datetime(2022, 1, 31))
+def datasette_weekly_partition(start: datetime, end: datetime):
+    """Dagster weekly partition config for datasette logs."""
+    return {
+        "ops": {
+            "raw_logs": {
+                "config": {
+                    "start_date": start.strftime("%Y-%m-%d"),
+                    "end_date": end.strftime("%Y-%m-%d"),
+                }
+            }
+        }
+    }
+
+
+@job(config=datasette_weekly_partition)
+def process_datasette_logs():
+    """Process datasette logs."""
+    df = raw_logs()
+    df = unpack_httprequests(df)
+    df = clean_datasette_logs(df)
+    df = data_request_logs(df)
