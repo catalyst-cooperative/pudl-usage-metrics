@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import pandas_gbq
-from dagster import op
+from dagster import AssetMaterialization, op
 from google.oauth2 import service_account
 from google.oauth2.service_account import Credentials
 
@@ -171,4 +171,16 @@ def load(context, clean_datasette_logs: pd.DataFrame):
     ]
     context.resources.database_manager.append_df_to_table(
         data_request_logs, "data_request_logs"
+    )
+    context.log_event(
+        AssetMaterialization(
+            asset_key="data_request_logs",
+            description="Clean data request logs from datasette.",
+            partition=context.get_mapping_key(),
+            metadata={
+                "Number of Rows:": len(data_request_logs),
+                "Min Date": str(data_request_logs.timestamp.min()),
+                "Max Date": str(data_request_logs.timestamp.max()),
+            },
+        )
     )

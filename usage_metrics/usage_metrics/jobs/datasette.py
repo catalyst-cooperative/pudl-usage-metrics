@@ -30,7 +30,7 @@ def datasette_weekly_partition(start: datetime, end: datetime):
     """Dagster weekly partition config for datasette logs."""
     return {
         "ops": {
-            "raw_logs": {
+            "extract": {
                 "config": {
                     "start_date": start.strftime("%Y-%m-%d"),
                     "end_date": end.strftime("%Y-%m-%d"),
