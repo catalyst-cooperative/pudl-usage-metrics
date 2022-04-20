@@ -1,7 +1,7 @@
 """Datasette ELT dagster job."""
 from datetime import datetime
 
-from dagster import job, weekly_partitioned_config
+from dagster import in_process_executor, job, weekly_partitioned_config
 
 from usage_metrics.ops.datasette import (
     clean_datasette_logs,
@@ -28,7 +28,9 @@ def datasette_weekly_partition(start: datetime, end: datetime):
 
 
 @job(
-    config=datasette_weekly_partition, resource_defs={"sqlite_manager": sqlite_manager}
+    config=datasette_weekly_partition,
+    resource_defs={"database_manager": sqlite_manager},
+    executor_def=in_process_executor,
 )
 def process_datasette_logs():
     """Process datasette logs."""

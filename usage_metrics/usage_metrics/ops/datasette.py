@@ -162,7 +162,7 @@ def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataF
     return clean_logs
 
 
-@op(required_resource_keys={"sqlite_manager"})
+@op(required_resource_keys={"database_manager"})
 def data_request_logs(context, clean_datasette_logs: pd.DataFrame):
     """
     Filter the useful data request logs.
@@ -176,6 +176,6 @@ def data_request_logs(context, clean_datasette_logs: pd.DataFrame):
     data_request_logs = clean_datasette_logs[
         clean_datasette_logs.request_url_path.str.contains("|".join(DATA_PATHS))
     ]
-    context.resources.sqlite_manager.append_df_to_table(
+    context.resources.database_manager.append_df_to_table(
         data_request_logs, "data_request_logs"
     )
