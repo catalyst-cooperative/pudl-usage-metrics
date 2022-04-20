@@ -9,3 +9,7 @@ usage_metrics/bigquery-service-account-key.json
 /usage_metrics/data/
 
 /usage_metrics/notebooks/.ipynb_checkpoints
+
+
+/usage_metrics/dagster_home/*
+!/usage_metrics/dagster_home/dagster.yaml
