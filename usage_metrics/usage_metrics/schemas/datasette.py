@@ -2,6 +2,7 @@
 import copy
 
 import pandas as pd
+import pandera as pa
 from pandera import Column, DataFrameSchema
 
 raw_logs = DataFrameSchema(
@@ -20,11 +21,9 @@ raw_logs = DataFrameSchema(
             nullable=True,
             description="Messages from Google logs. Typically error messages.",
         ),
-        "timestamp": Column(
-            pd.DatetimeTZDtype(tz="UTC"), description="Time request was sent."
-        ),
+        "timestamp": Column(pa.DateTime, description="Time request was sent."),
         "receive_timestamp": Column(
-            pd.DatetimeTZDtype(tz="UTC"), description="Time request was recieved."
+            pa.DateTime, description="Time request was recieved."
         ),
         "severity": Column(str, description="Log level."),
         "insert_id": Column(str, description="A unique ID for each log."),

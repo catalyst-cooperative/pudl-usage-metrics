@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 import ipinfo
 from joblib import Memory
 
-cache_dir = Path("/app/cache")
+cache_dir = Path(__file__).parent / "cache"
 ip_address_cache = Memory(cache_dir, verbose=0)
 
 
