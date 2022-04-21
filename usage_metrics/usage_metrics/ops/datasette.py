@@ -151,6 +151,8 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
     )
 
     # Add the component fields back to the logs
+    # TODO: Could create a separate db table for ip information.
+    # I'm not sure if IP addresses always geocode to the same information.
     clean_logs = df.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
     return clean_logs
 
@@ -170,7 +172,7 @@ def load(context, clean_datasette_logs: pd.DataFrame):
         clean_datasette_logs.request_url_path.str.contains("|".join(DATA_PATHS))
     ]
     context.resources.database_manager.append_df_to_table(
-        data_request_logs, "data_request_logs"
+        data_request_logs, "datasette_request_logs"
     )
     context.log_event(
         AssetMaterialization(

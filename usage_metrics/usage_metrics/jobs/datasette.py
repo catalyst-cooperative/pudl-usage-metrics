@@ -25,7 +25,7 @@ def transform(raw_logs: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-@weekly_partitioned_config(start_date=datetime(2022, 1, 31))
+@weekly_partitioned_config(start_date=datetime(2022, 1, 24))
 def datasette_weekly_partition(start: datetime, end: datetime):
     """Dagster weekly partition config for datasette logs."""
     return {
