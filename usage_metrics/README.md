@@ -24,7 +24,7 @@ conda activate business-dev
 ## Environment Variables
 The ETL uses [ipinfo](https://ipinfo.io/) to geocode ip addresses. You need to obtain an ipinfo API token and store it in the `IPINFO_TOKEN` environment variable.
 
-Dagster stores run logs and caches in a directory stored in the `DAGSTER_HOME`. The `usage_metrics/dagster_home/dagster.yaml` file contains configuration for the dagster instance. **Note:** The `usage_metrics/dagster_home/storage` directory could grow to become a couple GBs because all op outputs for every run are store there.  You can read more about the dagster_home directory in the [dagster docs](https://docs.dagster.io/deployment/dagster-instance#default-local-behavior).
+Dagster stores run logs and caches in a directory stored in the `DAGSTER_HOME` environment variable. The `usage_metrics/dagster_home/dagster.yaml` file contains configuration for the dagster instance. **Note:** The `usage_metrics/dagster_home/storage` directory could grow to become a couple GBs because all op outputs for every run is store there.  You can read more about the dagster_home directory in the [dagster docs](https://docs.dagster.io/deployment/dagster-instance#default-local-behavior).
 
 To set these environment variables, run these commands **from the `business` directory:**
 ```
@@ -71,7 +71,7 @@ cd usage_metrics
 dagit
 ```
 
-This will launch dagit at `http://localhost:3000/`. If you have another service running on port 3000 you can change the port by running:
+This will launch dagit at [`http://localhost:3000/`](http://localhost:3000/). If you have another service running on port 3000 you can change the port by running:
 
 ```
 dagit -p {another_cool_port}
