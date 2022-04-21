@@ -8,7 +8,7 @@ import ipinfo
 from joblib import Memory
 
 cache_dir = Path(__file__).parents[1] / "cache"
-cache_dir.touch()
+cache_dir.mkdir(exist_ok=True)
 ip_address_cache = Memory(cache_dir, verbose=0)
 
 

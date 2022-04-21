@@ -26,6 +26,7 @@ class SQLiteManager:
         sqlite_path = Path(__file__).parents[2] / "data/usage_metrics.db"
         engine = sa.create_engine("sqlite:///" + str(sqlite_path))
         if not sqlite_path.exists() or clobber:
+            sqlite_path.parent.mkdir(exist_ok=True)
             sqlite_path.touch()
             usage_metrics_metadata.drop_all(engine)
             usage_metrics_metadata.create_all(engine)
