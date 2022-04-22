@@ -17,7 +17,7 @@ DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json"]
 GCP_PROJECT_ID = "catalyst-cooperative-pudl"
 
 SERVICE_ACCOUNT_KEY_PATH = (
-    Path(__file__).parents[2] / "bigquery-service-account-key.json"
+    Path(__file__).parents[3] / "bigquery-service-account-key.json"
 )
 
 

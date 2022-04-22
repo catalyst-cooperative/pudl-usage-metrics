@@ -94,9 +94,9 @@ setup(
         "Programming Language :: Python :: 3.10",
     ],
     # Directory to search recursively for __init__.py files defining Python packages
-    packages=find_packages("./usage_metrics"),
+    packages=find_packages("src"),
     # Location of the "root" package:
-    package_dir={"": "usage_metrics"},
+    package_dir={"": "src"},
     # package_data is data that is deployed within the python package on the
     # user's system. setuptools will get whatever is listed in MANIFEST.in
     include_package_data=True,

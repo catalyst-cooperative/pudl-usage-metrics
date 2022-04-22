@@ -30,7 +30,7 @@ class SQLiteManager:
         Returns:
             engine: SQLAlchemy engine for the sqlite db.
         """
-        sqlite_path = Path(__file__).parents[2] / "data/usage_metrics.db"
+        sqlite_path = Path(__file__).parents[3] / "data/usage_metrics.db"
         engine = sa.create_engine("sqlite:///" + str(sqlite_path))
         if not sqlite_path.exists() or clobber:
             sqlite_path.parent.mkdir(exist_ok=True)
