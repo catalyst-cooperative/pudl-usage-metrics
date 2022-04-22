@@ -21,8 +21,15 @@ class SQLiteManager:
         self.engine = self.setup_db(clobber)
 
     @staticmethod
-    def setup_db(clobber):
-        """Create a sqlite db if it doesn't exist and create table schemas."""
+    def setup_db(clobber: bool = False) -> sa.engine.Engine:
+        """
+        Create a sqlite db if it doesn't exist and create table schemas.
+
+        Args:
+            clobber: Clobber and recreate the database if True.
+        Returns:
+            engine: SQLAlchemy engine for the sqlite db.
+        """
         sqlite_path = Path(__file__).parents[2] / "data/usage_metrics.db"
         engine = sa.create_engine("sqlite:///" + str(sqlite_path))
         if not sqlite_path.exists() or clobber:
@@ -60,7 +67,7 @@ class SQLiteManager:
         )
     }
 )
-def sqlite_manager(init_context):
+def sqlite_manager(init_context) -> SQLiteManager:
     """Create a SQLiteManager dagster resource."""
     clobber = init_context.resource_config["clobber"]
     return SQLiteManager(clobber)

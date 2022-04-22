@@ -22,7 +22,12 @@ SERVICE_ACCOUNT_KEY_PATH = (
 
 
 def get_bq_credentials() -> Credentials:
-    """Get credentials object for datasette-logs-viewer service account."""
+    """
+    Get credentials object for datasette-logs-viewer service account.
+
+    Returns:
+        credentials: Google Auth credentials for service account.
+    """
     try:
         return service_account.Credentials.from_service_account_file(
             SERVICE_ACCOUNT_KEY_PATH
@@ -33,7 +38,12 @@ def get_bq_credentials() -> Credentials:
 
 @op()
 def extract(context) -> pd.DataFrame:
-    """Extract Datasette logs from BigQuery instance."""
+    """
+    Extract Datasette logs from BigQuery instance.
+
+    Returns:
+        raw_logs: Uncleaned extracted datasette logs.
+    """
     credentials = get_bq_credentials()
 
     context.log.info(dir(context))
@@ -66,7 +76,19 @@ def extract(context) -> pd.DataFrame:
 
 @op()
 def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
-    """Unpack http_request dict keys into separate fields."""
+    """
+    Unpack http_request dict keys into separate fields and remove duplicate logs.
+
+    The http_request column contains a dictionary with useful data like
+    remote_ip. This op unpacks the dictionary keys into separate columns.
+
+    This op also removes a couple of duplicate logs.
+
+    Args:
+        raw_logs: Uncleaned extracted datasette logs.
+    Return:
+        unpacked_logs: Logs with http_request data unpacked into columns.
+    """
     # Convert the JSON strings back to dicts
     for field in JSON_FIELDS:
         raw_logs[field] = raw_logs[field].apply(json.loads)
@@ -105,7 +127,19 @@ def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
 
 @op()
 def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
-    """Parse the request url into component parts."""
+    """
+    Parse the request url into component parts.
+
+    Datasette request_urls contain information like data source
+    (pudl, ferc) and which tables people are accessing. This op
+    parses the urls in the http request and creates columns for each
+    url component.
+
+    Args:
+        df: datasette logs with unpacked http_request fields.
+    Returns:
+        parsed_logs: logs with new fields for each url component.
+    """
     # Remove columns that don't contain any data
     df = df.drop(columns=EMPTY_COLUMNS)
 
@@ -131,7 +165,17 @@ def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
 
 @op()
 def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
-    """Geocode the ip addresses."""
+    """
+    Geocode the ip addresses using ipinfo API.
+
+    This op geocodes the users ip address to get useful
+    information like ip location and organization.
+
+    Args:
+        df: datasette logs with unpacked http_request fields.
+    Returns:
+        geocoded_logs: logs with ip location info columns.
+    """
     # Geocode the remote ip addresses
     context.log.info("Geocoding ip addresses.")
     # Instead of geocoding every log, geocode the distinct ips
@@ -153,8 +197,8 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
     # Add the component fields back to the logs
     # TODO: Could create a separate db table for ip information.
     # I'm not sure if IP addresses always geocode to the same information.
-    clean_logs = df.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
-    return clean_logs
+    geocoded_logs = df.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
+    return geocoded_logs
 
 
 @op(required_resource_keys={"database_manager"})

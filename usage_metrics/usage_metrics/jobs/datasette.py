@@ -15,7 +15,6 @@ def transform(raw_logs: pd.DataFrame) -> pd.DataFrame:
 
     Args:
         raw_logs: The raw logs extracted from BQ.
-
     Return:
         df: The cleaned logs.
     """
