@@ -24,7 +24,7 @@ conda activate business-dev
 ## Environment Variables
 The ETL uses [ipinfo](https://ipinfo.io/) to geocode ip addresses. You need to obtain an ipinfo API token and store it in the `IPINFO_TOKEN` environment variable.
 
-Dagster stores run logs and caches in a directory stored in the `DAGSTER_HOME`. The `usage_metrics/dagster_home/dagster.yaml` file contains configuration for the dagster instance. **Note:** The `usage_metrics/dagster_home/storage` directory could grow to become a couple GBs because all op outputs for every run are store there.  You can read more about the dagster_home directory in the [dagster docs](https://docs.dagster.io/deployment/dagster-instance#default-local-behavior).
+Dagster stores run logs and caches in a directory stored in the `DAGSTER_HOME` environment variable. The `usage_metrics/dagster_home/dagster.yaml` file contains configuration for the dagster instance. **Note:** The `usage_metrics/dagster_home/storage` directory could grow to become a couple GBs because all op outputs for every run is store there.  You can read more about the dagster_home directory in the [dagster docs](https://docs.dagster.io/deployment/dagster-instance#default-local-behavior).
 
 To set these environment variables, run these commands **from the `business` directory:**
 ```
@@ -71,10 +71,29 @@ cd usage_metrics
 dagit
 ```
 
-This will launch dagit at `http://localhost:3000/`. If you have another service running on port 3000 you can change the port by running:
+This will launch dagit at [`http://localhost:3000/`](http://localhost:3000/). If you have another service running on port 3000 you can change the port by running:
 
 ```
 dagit -p {another_cool_port}
 ```
 
 Dagit allows you to kick off [`backfills`](https://docs.dagster.io/concepts/partitions-schedules-sensors/backfills) and run partitions with specific configuration.
+
+## Run the ETL
+You can run the ETL by via the dagit UI the [dagster CLI](https://docs.dagster.io/_apidocs/cli). Running backfills will populate the `usage_metrics/data/usage_metrics.db` sqlite database with clean data from our datasette logs.
+
+### CLI
+To run a complete backfill run:
+
+```
+dagster job backfill --all process_datasette_logs
+```
+
+from `business/usage_metrics` with the `business-dev` conda env activated. 
+
+### Dagit UI
+To run a a complete backfill from the Dagit UI go to the [partitions tab](http://localhost:3000/workspace/usage_metrics@usage_metrics/jobs/process_datasette_logs/partitions). Then click on the "Launch Backfill" button in the upper left corner of the window. This should bring up a new window with a list of partitions.  Select "Select All" and then click the "Submit" button. This will submit a run for each partition. You follow the runs at the ["Runs" tab](http://localhost:3000/instance/runs).
+
+### Database
+The ETL creates a sqlite database called `usage_metrics.db` in the `usage_metrics/data/` directory. It currently contains one table called `datasette_request_logs`. Each partitioned ETL run will append the new cleaned datasette logs to `datasette_request_logs`. A primary key constraint error will be thrown if you rerun the ETL for a partition. If you want to recreate the entire database just delete the sqlite database and rerun the ETL.
+
