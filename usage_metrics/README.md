@@ -89,11 +89,10 @@ To run a complete backfill run:
 dagster job backfill --all process_datasette_logs
 ```
 
-from `business/usage_metrics` with the `business-dev` conda env activated. 
+from `business/usage_metrics` with the `business-dev` conda env activated.
 
 ### Dagit UI
 To run a a complete backfill from the Dagit UI go to the [partitions tab](http://localhost:3000/workspace/usage_metrics@usage_metrics/jobs/process_datasette_logs/partitions). Then click on the "Launch Backfill" button in the upper left corner of the window. This should bring up a new window with a list of partitions.  Select "Select All" and then click the "Submit" button. This will submit a run for each partition. You follow the runs at the ["Runs" tab](http://localhost:3000/instance/runs).
 
 ### Database
 The ETL creates a sqlite database called `usage_metrics.db` in the `usage_metrics/data/` directory. It currently contains one table called `datasette_request_logs`. Each partitioned ETL run will append the new cleaned datasette logs to `datasette_request_logs`. A primary key constraint error will be thrown if you rerun the ETL for a partition. If you want to recreate the entire database just delete the sqlite database and rerun the ETL.
-
