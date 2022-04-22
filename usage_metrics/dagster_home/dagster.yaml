@@ -6,4 +6,6 @@ run_coordinator:
   module: dagster.core.run_coordinator
   class: QueuedRunCoordinator
   config:
+    # TODO: Can I increase the concurrent runs with SQLite?
+    # Does the context manager and sqlalchemy engine prevent issues?
     max_concurrent_runs: 1

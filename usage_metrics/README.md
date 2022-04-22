@@ -99,3 +99,6 @@ The ETL creates a sqlite database called `usage_metrics.db` in the `usage_metric
 
 ### IP Geocoding with ipinfo
 I've been using [ipinfo](https://ipinfo.io/) for geocoding the user ip addresses. We get 50k free API requests a month. The `usage_metrics.helpers.geocode_ip()` function using [joblib](https://joblib.readthedocs.io/en/latest/#main-features) to cache API calls so we don't call the API multiple times for a single ip address. The first time you run the ETL no API calls will be cached so the `geocode_ips()` op will take a while to complete.
+
+## Add new data sources
+To add a new data source to the dagster repo, add new modules to the `usage_metrics/jobs/` and `usage_metrics/ops/` directories. Then add the new job to the usage_metrics.repository.usage_metrics() repo.
