@@ -1,32 +1,42 @@
 """Dagster software defined assets for datasette logs."""
 import json
-import logging
 from pathlib import Path
 
 import pandas as pd
 import pandas_gbq
-from dagster import AssetGroup, asset, io_manager
-from dagster_pandera import pandera_schema_to_dagster_type
+from dagster import AssetMaterialization, op
 from google.oauth2 import service_account
 from google.oauth2.service_account import Credentials
 
-import usage_metrics.schemas.datasette as datasette_schemas
 from usage_metrics.helpers import geocode_ip, parse_request_url
-from usage_metrics.resources.sqlite import DataframeSQLiteIOManager
-from usage_metrics.schemas.datasette import EMPTY_COLUMNS
 
 JSON_FIELDS = ["resource", "http_request", "labels"]
-DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json"]
+EMPTY_COLUMNS = [
+    "cache_lookup",
+    "cache_hit",
+    "cache_validated_with_origin_server",
+    "cache_fill_bytes",
+    "operation",
+    "span_id",
+    "trace_sampled",
+    "source_location",
+]
+DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json", ".csv"]
 
 GCP_PROJECT_ID = "catalyst-cooperative-pudl"
 
 SERVICE_ACCOUNT_KEY_PATH = (
-    Path(__file__).parent.parent / "bigquery-service-account-key.json"
+    Path(__file__).parents[3] / "bigquery-service-account-key.json"
 )
 
 
 def get_bq_credentials() -> Credentials:
-    """Get credentials object for datasette-logs-viewer service account."""
+    """
+    Get credentials object for datasette-logs-viewer service account.
+
+    Returns:
+        credentials: Google Auth credentials for service account.
+    """
     try:
         return service_account.Credentials.from_service_account_file(
             SERVICE_ACCOUNT_KEY_PATH
@@ -35,18 +45,28 @@ def get_bq_credentials() -> Credentials:
         FileNotFoundError("Can't find the service account key json file.")
 
 
-@asset(
-    dagster_type=pandera_schema_to_dagster_type(datasette_schemas.raw_logs),
-)
-def raw_logs(context) -> pd.DataFrame:
-    """Extract Datasette logs from BigQuery instance."""
+@op()
+def extract(context) -> pd.DataFrame:
+    """
+    Extract Datasette logs from BigQuery instance.
+
+    Returns:
+        raw_logs: Uncleaned extracted datasette logs.
+    """
     credentials = get_bq_credentials()
 
+    context.log.info(context.op_config)
+    start_date = context.op_config["start_date"]
+    end_date = context.op_config["end_date"]
+
     raw_logs = pandas_gbq.read_gbq(
-        "SELECT * FROM `datasette_logs.run_googleapis_com_requests`",
+        "SELECT * FROM `datasette_logs.run_googleapis_com_requests`"
+        f" WHERE DATE(timestamp) >= '{start_date}' AND DATE(timestamp) < '{end_date}'",
         project_id=GCP_PROJECT_ID,
         credentials=credentials,
     )
+    context.log.info(raw_logs.timestamp.describe())
+    context.log.info(raw_logs.shape)
 
     # Convert CamelCase to snake_case
     raw_logs.columns = raw_logs.columns.str.replace(r"(?<!^)(?=[A-Z])", "_").str.lower()
@@ -62,11 +82,21 @@ def raw_logs(context) -> pd.DataFrame:
     return raw_logs
 
 
-@asset(
-    dagster_type=pandera_schema_to_dagster_type(datasette_schemas.unpack_httprequests)
-)
+@op()
 def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
-    """Unpack http_request dict keys into separate fields."""
+    """
+    Unpack http_request dict keys into separate fields and remove duplicate logs.
+
+    The http_request column contains a dictionary with useful data like
+    remote_ip. This op unpacks the dictionary keys into separate columns.
+
+    This op also removes a couple of duplicate logs.
+
+    Args:
+        raw_logs: Uncleaned extracted datasette logs.
+    Return:
+        unpacked_logs: Logs with http_request data unpacked into columns.
+    """
     # Convert the JSON strings back to dicts
     for field in JSON_FIELDS:
         raw_logs[field] = raw_logs[field].apply(json.loads)
@@ -103,25 +133,27 @@ def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
     return unpacked_logs
 
 
-@asset(
-    dagster_type=pandera_schema_to_dagster_type(datasette_schemas.clean_datasette_logs)
-)
-def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataFrame:
+@op()
+def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
     """
-    Clean the raw logs.
+    Parse the request url into component parts.
 
-    Transformations:
-    - unpack the request url into component parts
-    - geocode the ip addresses
+    Datasette request_urls contain information like data source
+    (pudl, ferc) and which tables people are accessing. This op
+    parses the urls in the http request and creates columns for each
+    url component.
+
+    Args:
+        df: datasette logs with unpacked http_request fields.
+    Returns:
+        parsed_logs: logs with new fields for each url component.
     """
     # Remove columns that don't contain any data
-    unpack_httprequests = unpack_httprequests.drop(columns=EMPTY_COLUMNS)
+    df = df.drop(columns=EMPTY_COLUMNS)
 
     # Parse the request url
-    unpack_httprequests = unpack_httprequests.set_index("insert_id")
-    parsed_requests = unpack_httprequests.request_url.apply(
-        lambda x: parse_request_url(x)
-    ).to_frame()
+    df = df.set_index("insert_id")
+    parsed_requests = df.request_url.apply(lambda x: parse_request_url(x)).to_frame()
     parsed_requests = pd.DataFrame.from_dict(
         parsed_requests.request_url.to_dict(), orient="index"
     )
@@ -132,15 +164,30 @@ def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataF
         parsed_requests[field] = parsed_requests[field].replace("", pd.NA)
 
     # Add the component fields back to the logs
-    parsed_logs = pd.concat([unpack_httprequests, parsed_requests], axis=1)
+    parsed_logs = pd.concat([df, parsed_requests], axis=1)
     parsed_logs.index.name = "insert_id"
     parsed_logs = parsed_logs.reset_index()
-    assert len(unpack_httprequests) == len(parsed_logs)
+    assert len(df) == len(parsed_logs)
+    return parsed_logs
 
+
+@op()
+def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Geocode the ip addresses using ipinfo API.
+
+    This op geocodes the users ip address to get useful
+    information like ip location and organization.
+
+    Args:
+        df: datasette logs with unpacked http_request fields.
+    Returns:
+        geocoded_logs: logs with ip location info columns.
+    """
     # Geocode the remote ip addresses
-    logging.info("Geocoding ip addresses.")
+    context.log.info("Geocoding ip addresses.")
     # Instead of geocoding every log, geocode the distinct ips
-    unique_ips = pd.Series(parsed_logs.remote_ip.unique())
+    unique_ips = pd.Series(df.remote_ip.unique())
     geocoded_ips = unique_ips.apply(lambda ip: geocode_ip(ip))
     geocoded_ips = pd.DataFrame.from_dict(geocoded_ips.to_dict(), orient="index")
     geocoded_ip_column_map = {
@@ -156,15 +203,14 @@ def clean_datasette_logs(context, unpack_httprequests: pd.DataFrame) -> pd.DataF
     )
 
     # Add the component fields back to the logs
-    clean_logs = parsed_logs.merge(
-        geocoded_ips, on="remote_ip", how="left", validate="m:1"
-    )
+    # TODO: Could create a separate db table for ip information.
+    # I'm not sure if IP addresses always geocode to the same information.
+    geocoded_logs = df.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
+    return geocoded_logs
 
-    return clean_logs
 
-
-@asset(dagster_type=pandera_schema_to_dagster_type(datasette_schemas.data_request_logs))
-def data_request_logs(clean_datasette_logs: pd.DataFrame) -> pd.DataFrame:
+@op(required_resource_keys={"database_manager"})
+def load(context, clean_datasette_logs: pd.DataFrame) -> None:
     """
     Filter the useful data request logs.
 
@@ -177,16 +223,18 @@ def data_request_logs(clean_datasette_logs: pd.DataFrame) -> pd.DataFrame:
     data_request_logs = clean_datasette_logs[
         clean_datasette_logs.request_url_path.str.contains("|".join(DATA_PATHS))
     ]
-    return data_request_logs
-
-
-@io_manager
-def df_to_sqlite_io_manager(_):
-    """Create SQLite IOManager."""
-    return DataframeSQLiteIOManager()
-
-
-datasette_asset_group = AssetGroup(
-    [unpack_httprequests, raw_logs, clean_datasette_logs, data_request_logs],
-    resource_defs={"io_manager": df_to_sqlite_io_manager},
-)
+    context.resources.database_manager.append_df_to_table(
+        data_request_logs, "datasette_request_logs"
+    )
+    context.log_event(
+        AssetMaterialization(
+            asset_key="data_request_logs",
+            description="Clean data request logs from datasette.",
+            partition=context.get_mapping_key(),
+            metadata={
+                "Number of Rows:": len(data_request_logs),
+                "Min Date": str(data_request_logs.timestamp.min()),
+                "Max Date": str(data_request_logs.timestamp.max()),
+            },
+        )
+    )

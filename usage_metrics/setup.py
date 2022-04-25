@@ -4,13 +4,13 @@
 from setuptools import find_packages, setup
 
 setup(
-    # This should be the *installed* package name e.g. catalystcoop.pudl not pudl
     name="usage_metrics",
-    description="A one line description of the package.",
+    description="A package for processing PUDl usage metrics using Dagster.",
     # long_description=long_description,
     long_description_content_type="text/x-rst",
     # setuptools_scm lets us automagically get package version from GitHub tags
     setup_requires=["setuptools_scm"],
+    # .git is in the directory above
     use_scm_version={"root": "../"},
     author="Catalyst Cooperative",
     author_email="pudl@catalyst.coop",
@@ -94,9 +94,9 @@ setup(
         "Programming Language :: Python :: 3.10",
     ],
     # Directory to search recursively for __init__.py files defining Python packages
-    packages=find_packages("./usage_metrics"),
+    packages=find_packages("src"),
     # Location of the "root" package:
-    package_dir={"": "usage_metrics"},
+    package_dir={"": "src"},
     # package_data is data that is deployed within the python package on the
     # user's system. setuptools will get whatever is listed in MANIFEST.in
     include_package_data=True,

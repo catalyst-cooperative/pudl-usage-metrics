@@ -5,8 +5,11 @@ venv
 usage_metrics/bigquery-service-account-key.json
 
 *.DS_Store
-/usage_metrics/cache/*
-
-/usage_metrics/local.env
+/usage_metrics/cache/
+/usage_metrics/data/
 
 /usage_metrics/notebooks/.ipynb_checkpoints
+
+
+/usage_metrics/dagster_home/*
+!/usage_metrics/dagster_home/dagster.yaml
