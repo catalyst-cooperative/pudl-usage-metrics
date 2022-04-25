@@ -1,8 +1,10 @@
 """Test usage metrics dagster jobs."""
+import pandas as pd
 import pytest
 import sqlalchemy as sa
 
 from usage_metrics.jobs.datasette import process_datasette_logs_locally
+from usage_metrics.resources.sqlite import SQLiteManager
 
 
 def test_datasette_job(sqlite_db_path):
@@ -21,6 +23,16 @@ def test_datasette_job(sqlite_db_path):
     )
 
     assert result.success
+
+    # Make sure we got the correct number of rows.
+    engine = SQLiteManager().get_engine()
+    with engine.connect() as con:
+        logs = pd.read_sql(
+            "select insert_id from datasette_request_logs"
+            " where timestamp < '2022-02-06'",
+            con,
+        )
+    assert len(logs) == 891
 
 
 def test_primary_key_failure(sqlite_db_path):
