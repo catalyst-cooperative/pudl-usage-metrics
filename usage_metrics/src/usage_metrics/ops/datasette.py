@@ -220,21 +220,21 @@ def load(context, clean_datasette_logs: pd.DataFrame) -> None:
 
     This asset also removes columns not needed for analysis.
     """
-    data_request_logs = clean_datasette_logs[
+    datasette_request_logs = clean_datasette_logs[
         clean_datasette_logs.request_url_path.str.contains("|".join(DATA_PATHS))
     ]
     context.resources.database_manager.append_df_to_table(
-        data_request_logs, "datasette_request_logs"
+        datasette_request_logs, "datasette_request_logs"
     )
     context.log_event(
         AssetMaterialization(
-            asset_key="data_request_logs",
+            asset_key="datasette_request_logs",
             description="Clean data request logs from datasette.",
             partition=context.get_mapping_key(),
             metadata={
-                "Number of Rows:": len(data_request_logs),
-                "Min Date": str(data_request_logs.timestamp.min()),
-                "Max Date": str(data_request_logs.timestamp.max()),
+                "Number of Rows:": len(datasette_request_logs),
+                "Min Date": str(datasette_request_logs.timestamp.min()),
+                "Max Date": str(datasette_request_logs.timestamp.max()),
             },
         )
     )

@@ -3,8 +3,8 @@ from sqlalchemy import Boolean, Column, Date, Float, Integer, MetaData, String, 
 
 usage_metrics_metadata = MetaData()
 
-data_request_logs = Table(
-    "data_request_logs",
+datasette_request_logs = Table(
+    "datasette_request_logs",
     usage_metrics_metadata,
     Column("insert_id", String, primary_key=True, comment="A unique ID for each log."),
     Column("log_name", String),

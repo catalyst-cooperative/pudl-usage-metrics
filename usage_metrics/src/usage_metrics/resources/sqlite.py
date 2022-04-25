@@ -7,37 +7,38 @@ from dagster import Field, resource
 
 from usage_metrics.models import usage_metrics_metadata
 
+SQLITE_PATH = Path(__file__).parents[3] / "data/usage_metrics.db"
+
 
 class SQLiteManager:
     """Manage connection with SQLite Database."""
 
-    def __init__(self, clobber: bool = False) -> None:
+    def __init__(self, clobber: bool = False, db_path: Path = SQLITE_PATH) -> None:
         """
         Initialize SQLiteManager object.
 
         Args:
             clobber: Clobber and recreate the database if True.
+            db_path: Path to the sqlite database. Defaults to
+            usage_metrics/data/usage_metrics.db.
         """
-        self.engine = self.setup_db(clobber)
+        engine = sa.create_engine("sqlite:///" + str(db_path))
+        if not db_path.exists() or clobber:
+            db_path.parent.mkdir(exist_ok=True)
+            db_path.touch()
+            usage_metrics_metadata.drop_all(engine)
+            usage_metrics_metadata.create_all(engine)
 
-    @staticmethod
-    def setup_db(clobber: bool = False) -> sa.engine.Engine:
+        self.engine = engine
+
+    def get_engine(self) -> sa.engine.Engine:
         """
-        Create a sqlite db if it doesn't exist and create table schemas.
+        Get SQLAlchemy engine to interact with the db.
 
-        Args:
-            clobber: Clobber and recreate the database if True.
         Returns:
             engine: SQLAlchemy engine for the sqlite db.
         """
-        sqlite_path = Path(__file__).parents[3] / "data/usage_metrics.db"
-        engine = sa.create_engine("sqlite:///" + str(sqlite_path))
-        if not sqlite_path.exists() or clobber:
-            sqlite_path.parent.mkdir(exist_ok=True)
-            sqlite_path.touch()
-            usage_metrics_metadata.drop_all(engine)
-            usage_metrics_metadata.create_all(engine)
-        return engine
+        return self.engine
 
     def append_df_to_table(self, df: pd.DataFrame, table_name: str) -> None:
         """
@@ -62,12 +63,18 @@ class SQLiteManager:
     config_schema={
         "clobber": Field(
             bool,
-            description="Clobber and recreate the database if True",
+            description="Clobber and recreate the database if True.",
             default_value=False,
-        )
+        ),
+        "db_path": Field(
+            str,
+            description="Path to the sqlite database.",
+            default_value=str(SQLITE_PATH),
+        ),
     }
 )
 def sqlite_manager(init_context) -> SQLiteManager:
     """Create a SQLiteManager dagster resource."""
     clobber = init_context.resource_config["clobber"]
-    return SQLiteManager(clobber)
+    db_path = init_context.resource_config["db_path"]
+    return SQLiteManager(clobber=clobber, db_path=Path(db_path))
