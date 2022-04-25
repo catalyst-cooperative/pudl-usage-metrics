@@ -4,13 +4,13 @@
 from setuptools import find_packages, setup
 
 setup(
-    # This should be the *installed* package name e.g. catalystcoop.pudl not pudl
     name="usage_metrics",
-    description="A one line description of the package.",
+    description="A package for processing PUDl usage metrics using Dagster.",
     # long_description=long_description,
     long_description_content_type="text/x-rst",
     # setuptools_scm lets us automagically get package version from GitHub tags
     setup_requires=["setuptools_scm"],
+    # .git is in the directory above
     use_scm_version={"root": "../"},
     author="Catalyst Cooperative",
     author_email="pudl@catalyst.coop",

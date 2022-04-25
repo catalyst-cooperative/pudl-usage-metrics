@@ -9,10 +9,19 @@ from google.oauth2 import service_account
 from google.oauth2.service_account import Credentials
 
 from usage_metrics.helpers import geocode_ip, parse_request_url
-from usage_metrics.schemas.datasette import EMPTY_COLUMNS
 
 JSON_FIELDS = ["resource", "http_request", "labels"]
-DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json"]
+EMPTY_COLUMNS = [
+    "cache_lookup",
+    "cache_hit",
+    "cache_validated_with_origin_server",
+    "cache_fill_bytes",
+    "operation",
+    "span_id",
+    "trace_sampled",
+    "source_location",
+]
+DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json", ".csv"]
 
 GCP_PROJECT_ID = "catalyst-cooperative-pudl"
 
@@ -46,7 +55,6 @@ def extract(context) -> pd.DataFrame:
     """
     credentials = get_bq_credentials()
 
-    context.log.info(dir(context))
     context.log.info(context.op_config)
     start_date = context.op_config["start_date"]
     end_date = context.op_config["end_date"]
@@ -202,7 +210,7 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
 
 
 @op(required_resource_keys={"database_manager"})
-def load(context, clean_datasette_logs: pd.DataFrame):
+def load(context, clean_datasette_logs: pd.DataFrame) -> None:
     """
     Filter the useful data request logs.
 

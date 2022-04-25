@@ -44,8 +44,8 @@ def datasette_weekly_partition(start: datetime, end: datetime):
     resource_defs={"database_manager": sqlite_manager},
     executor_def=in_process_executor,
 )
-def process_datasette_logs():
-    """Process datasette logs."""
-    df = da.extract()
-    df = transform(df)
-    df = da.load(df)
+def process_datasette_logs_locally():
+    """Process datasette logs locally using a SQLite database."""
+    raw_logs = da.extract()
+    clean_logs = transform(raw_logs)
+    da.load(clean_logs)

@@ -48,7 +48,7 @@ class SQLiteManager:
             table_name: the name of the database table to append to.
         """
         # TODO: could also get the insert_ids already in the database
-        # and append just the new data.
+        # and only append the new data.
         with self.engine.begin() as conn:
             df.to_sql(
                 name=table_name,
