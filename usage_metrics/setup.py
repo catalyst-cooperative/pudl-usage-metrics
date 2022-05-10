@@ -6,8 +6,6 @@ from setuptools import find_packages, setup
 setup(
     name="usage_metrics",
     description="A package for processing PUDl usage metrics using Dagster.",
-    # long_description=long_description,
-    long_description_content_type="text/x-rst",
     # setuptools_scm lets us automagically get package version from GitHub tags
     setup_requires=["setuptools_scm"],
     # .git is in the directory above

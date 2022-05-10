@@ -1,5 +1,6 @@
-"""Dagster software defined assets for datasette logs."""
+"""Dagster ops for datasette logs."""
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -25,9 +26,7 @@ DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json", ".csv"]
 
 GCP_PROJECT_ID = "catalyst-cooperative-pudl"
 
-SERVICE_ACCOUNT_KEY_PATH = (
-    Path(__file__).parents[3] / "bigquery-service-account-key.json"
-)
+SERVICE_ACCOUNT_KEY_PATH = Path(os.environ["BQ_SERVICE_ACCOUNT_KEY"])
 
 
 def get_bq_credentials() -> Credentials:
