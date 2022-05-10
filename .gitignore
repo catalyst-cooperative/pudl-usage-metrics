@@ -5,6 +5,8 @@ venv
 *.DS_Store
 /usage_metrics/cache/
 /usage_metrics/data/
+/usage_metrics/.eggs/
+/usage_metrics/local.env
 
 /usage_metrics/notebooks/.ipynb_checkpoints
 
