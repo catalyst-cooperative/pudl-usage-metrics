@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pandas as pd
 import pandas_gbq
-from dagster import AssetMaterialization, op
+from dagster import AssetMaterialization, RetryPolicy, op
 from google.oauth2 import service_account
 from google.oauth2.service_account import Credentials
 
@@ -170,7 +170,7 @@ def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
     return parsed_logs
 
 
-@op()
+@op(retry_policy=RetryPolicy(max_retries=1))
 def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
     """
     Geocode the ip addresses using ipinfo API.
