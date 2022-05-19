@@ -1,4 +1,4 @@
-name: business-dev
+name: pudl-usage-metrics
 channels:
   - conda-forge
   - defaults
@@ -9,4 +9,4 @@ dependencies:
   - setuptools<62
   - pre-commit~=2.9
   - pip:
-      - --editable ./usage_metrics/[doc,test,dev]
+      - --editable ./[doc,test,dev]

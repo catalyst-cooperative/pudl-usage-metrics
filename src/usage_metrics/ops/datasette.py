@@ -170,7 +170,7 @@ def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
     return parsed_logs
 
 
-@op(retry_policy=RetryPolicy(max_retries=1))
+@op(retry_policy=RetryPolicy(max_retries=5))
 def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
     """
     Geocode the ip addresses using ipinfo API.

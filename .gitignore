@@ -3,13 +3,13 @@
 venv
 
 *.DS_Store
-/usage_metrics/cache/
-/usage_metrics/data/
-/usage_metrics/.eggs/
-/usage_metrics/local.env
+cache/
+data/
+.eggs/
+local.env
 
-/usage_metrics/notebooks/.ipynb_checkpoints
+notebooks/.ipynb_checkpoints
 
 # Exclude everything in dagster_home except the dagster.yaml config file.
-/usage_metrics/dagster_home/*
-!/usage_metrics/dagster_home/dagster.yaml
+dagster_home/*
+!/dagster_home/dagster.yaml

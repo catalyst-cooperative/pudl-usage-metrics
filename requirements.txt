@@ -1,7 +1,0 @@
-pandas
-requests
-gspread<5
-gspread_pandas
-google-cloud-storage
-matplotlib
-jupyter
