@@ -11,6 +11,8 @@ cache_dir = Path(__file__).parents[2] / "cache"
 cache_dir.mkdir(exist_ok=True)
 ip_address_cache = Memory(cache_dir, verbose=0)
 
+REQUEST_TIMEOUT = 10
+
 
 @ip_address_cache.cache
 def geocode_ip(ip_address: str) -> Dict:
@@ -29,7 +31,9 @@ def geocode_ip(ip_address: str) -> Dict:
         IPINFO_TOKEN = os.environ["IPINFO_TOKEN"]
     except KeyError:
         raise AssertionError("Can't find IPINFO_TOKEN.")
-    handler = ipinfo.getHandler(IPINFO_TOKEN)
+    handler = ipinfo.getHandler(
+        IPINFO_TOKEN, request_options={"timeout": REQUEST_TIMEOUT}
+    )
 
     details = handler.getDetails(ip_address)
     return details.all
