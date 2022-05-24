@@ -33,10 +33,15 @@ jobs:
         conda config --show-sources
         conda config --show
         printenv | sort
-
+    
+    # Authentication via credentials json
+    - name: Authenticate gcloud
+      uses: "google-github-actions/auth@v0"
+      with:
+        credentials_json: "${{ secrets.GCE_SA_KEY }}"
+        
     - name: Run pytest
       env:
-        BQ_SERVICE_ACCOUNT_KEY: ${{ secrets.BQ_SERVICE_ACCOUNT_KEY }}
         IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
       run: |
         mamba run -n pudl-usage-metrics pytest
