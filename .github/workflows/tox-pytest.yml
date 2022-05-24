@@ -35,6 +35,9 @@ jobs:
         printenv | sort
 
     - name: Run pytest
+      env:
+        BQ_SERVICE_ACCOUNT_KEY: ${{ secrets.BQ_SERVICE_ACCOUNT_KEY }}
+        IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
       run: |
         mamba run -n pudl-usage-metrics pytest
 
