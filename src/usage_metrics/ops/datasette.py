@@ -1,13 +1,10 @@
 """Dagster ops for datasette logs."""
 import json
-import os
-from pathlib import Path
 
+import google.auth
 import pandas as pd
 import pandas_gbq
 from dagster import AssetMaterialization, RetryPolicy, op
-from google.oauth2 import service_account
-from google.oauth2.service_account import Credentials
 
 from usage_metrics.helpers import geocode_ip, parse_request_url
 
@@ -24,25 +21,6 @@ EMPTY_COLUMNS = [
 ]
 DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json", ".csv"]
 
-GCP_PROJECT_ID = "catalyst-cooperative-pudl"
-
-SERVICE_ACCOUNT_KEY_PATH = Path(os.environ["BQ_SERVICE_ACCOUNT_KEY"])
-
-
-def get_bq_credentials() -> Credentials:
-    """
-    Get credentials object for datasette-logs-viewer service account.
-
-    Returns:
-        credentials: Google Auth credentials for service account.
-    """
-    try:
-        return service_account.Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_KEY_PATH
-        )
-    except FileNotFoundError:
-        FileNotFoundError("Can't find the service account key json file.")
-
 
 @op()
 def extract(context) -> pd.DataFrame:
@@ -52,7 +30,8 @@ def extract(context) -> pd.DataFrame:
     Returns:
         raw_logs: Uncleaned extracted datasette logs.
     """
-    credentials = get_bq_credentials()
+    # Infer google credentials and project_id from local env
+    credentials, project_id = google.auth.default()
 
     context.log.info(context.op_config)
     start_date = context.op_config["start_date"]
@@ -61,7 +40,7 @@ def extract(context) -> pd.DataFrame:
     raw_logs = pandas_gbq.read_gbq(
         "SELECT * FROM `datasette_logs.run_googleapis_com_requests`"
         f" WHERE DATE(timestamp) >= '{start_date}' AND DATE(timestamp) < '{end_date}'",
-        project_id=GCP_PROJECT_ID,
+        project_id=project_id,
         credentials=credentials,
     )
     context.log.info(raw_logs.timestamp.describe())
