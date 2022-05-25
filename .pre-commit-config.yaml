@@ -68,7 +68,8 @@ repos:
         verbose: false
         pass_filenames: false
         always_run: true
-        entry: pytest usage_metrics_tests/unit
+        entry: pytest tests/unit
+
 # Configuration for pre-commit.ci
 ci:
   autofix_commit_msg: |
@@ -78,4 +79,5 @@ ci:
   autoupdate_branch: main
   autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
   autoupdate_schedule: weekly
+  skip: [unit-tests]
   submodules: false
