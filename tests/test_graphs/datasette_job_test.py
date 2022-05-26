@@ -25,7 +25,7 @@ def test_datasette_job(sqlite_db_path):
     assert result.success
 
     # Make sure we got the correct number of rows.
-    engine = SQLiteManager().get_engine()
+    engine = SQLiteManager(db_path=sqlite_db_path).get_engine()
     with engine.connect() as con:
         logs = pd.read_sql(
             "select insert_id from datasette_request_logs"

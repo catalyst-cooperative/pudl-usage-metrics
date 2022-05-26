@@ -1,6 +1,7 @@
 **/__pycache__/*
 **/*.egg-info
 venv
+*.swp
 
 *.DS_Store
 cache/
