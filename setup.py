@@ -33,7 +33,7 @@ setup(
         "dagster-pandera==0.14.9",
         "pandas-gbq~=0.17.0",
         "pydata-google-auth~=1.3.0",
-        "jupyterlab~=3.2.8",
+        "jupyterlab>=3.2.8,<3.5.0",
         "psycopg2~=2.9.3",
         "ipinfo~=4.2.1",
         "joblib~=1.1.0",
