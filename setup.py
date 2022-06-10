@@ -32,7 +32,7 @@ setup(
         "dagit==0.14.9",
         "dagster-pandera==0.14.9",
         "pandas-gbq~=0.17.0",
-        "pydata-google-auth~=1.3.0",
+        "pydata-google-auth>=1.3,<1.5",
         "jupyterlab>=3.2.8,<3.5.0",
         "psycopg2~=2.9.3",
         "ipinfo~=4.2.1",
@@ -49,7 +49,7 @@ setup(
         ],
         "docs": [
             "doc8>=0.9,<0.12",  # Ensures clean documentation formatting
-            "sphinx>=4,<5",  # The default Python documentation redering engine
+            "sphinx>=4,<6",  # The default Python documentation redering engine
             "sphinx-autoapi>=1.8,<2",  # Generates documentation from docstrings
             "sphinx-issues>=1.2,<4.0",  # Allows references to GitHub issues
             "sphinx-rtd-dark-mode>=1.2,<2",  # Allow user to toggle light/dark mode
