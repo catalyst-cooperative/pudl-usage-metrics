@@ -4,7 +4,7 @@ import json
 import google.auth
 import pandas as pd
 import pandas_gbq
-from dagster import AssetMaterialization, RetryPolicy, op
+from dagster import AssetMaterialization, Out, Output, RetryPolicy, op
 
 from usage_metrics.helpers import geocode_ip, parse_request_url
 
@@ -22,7 +22,7 @@ EMPTY_COLUMNS = [
 DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json", ".csv"]
 
 
-@op()
+@op(out={"raw_logs": Out(is_required=False)})
 def extract(context) -> pd.DataFrame:
     """
     Extract Datasette logs from BigQuery instance.
@@ -57,7 +57,8 @@ def extract(context) -> pd.DataFrame:
     for field in raw_logs.select_dtypes(include=["datetimetz"]):
         raw_logs[field] = raw_logs[field].dt.tz_localize(None)
 
-    return raw_logs
+    if len(raw_logs) > 0:
+        yield Output(raw_logs, output_name="raw_logs")
 
 
 @op()
