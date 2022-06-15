@@ -19,19 +19,6 @@ jobs:
         with:
           credentials_json: "${{ secrets.BQ_SA_KEY }}"
 
-      # Get github runner's IP address
-      - name: Public IP
-        id: ip
-        uses: haythem/public-ip@v1.2
-
-      # Setup gcloud CLI
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v0
-
-      - name: Whitelist the runner's IP
-        run: |-
-          gcloud sql instances patch pudl-usage-metrics-db --authorized-networks=${{ steps.ip.outputs.ipv4 }},44.193.153.196,52.70.123.52,54.83.88.93
-
       - name: Set up conda environment for testing
         uses: conda-incubator/setup-miniconda@v2.1.1
         with:
@@ -61,7 +48,3 @@ jobs:
       - name: Echo size of DB
         run: |
           echo $(ls -lah ./data/usage_metrics.db)
-
-      - name: Drop the runner's IP
-        run: |-
-          gcloud sql instances patch pudl-usage-metrics-db --authorized-networks=44.193.153.196,52.70.123.52,54.83.88.93

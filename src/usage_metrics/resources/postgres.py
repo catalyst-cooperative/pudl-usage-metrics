@@ -2,8 +2,10 @@
 import os
 
 import pandas as pd
+import pg8000
 import sqlalchemy as sa
 from dagster import Field, resource
+from google.cloud.sql.connector import connector
 
 from usage_metrics.models import usage_metrics_metadata
 
@@ -18,16 +20,31 @@ class PostgresManager:
         Args:
             clobber: Clobber and recreate the database if True.
         """
-        user = os.environ["POSTGRES_USER"]
-        password = os.environ["POSTGRES_PASSWORD"]
-        db = os.environ["POSTGRES_DB"]
-        db_ip = os.environ["POSTGRES_IP"]
-        engine = sa.create_engine(f"postgresql://{user}:{password}@{db_ip}/{db}")
+        self.engine = self._init_connection_engine()
         if clobber:
-            usage_metrics_metadata.drop_all(engine)
-        usage_metrics_metadata.create_all(engine)
+            usage_metrics_metadata.drop_all(self.engine)
+        usage_metrics_metadata.create_all(self.engine)
 
-        self.engine = engine
+    def _init_connection_engine(self) -> sa.engine.Engine:
+        """Create a SqlAlchemy engine using Cloud SQL connection client."""
+
+        def getconn() -> pg8000.dbapi.Connection:
+            conn: pg8000.dbapi.Connection = connector.connect(
+                os.environ["POSTGRES_CONNECTION_NAME"],
+                "pg8000",
+                user=os.environ["POSTGRES_USER"],
+                password=os.environ["POSTGRES_PASS"],
+                db=os.environ["POSTGRES_DB"],
+                enable_iam_auth=True,
+            )
+            return conn
+
+        engine = sa.create_engine(
+            "postgresql+pg8000://",
+            creator=getconn,
+        )
+        engine.dialect.description_encoding = None
+        return engine
 
     def get_engine(self) -> sa.engine.Engine:
         """
