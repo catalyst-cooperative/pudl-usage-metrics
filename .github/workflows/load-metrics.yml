@@ -3,7 +3,7 @@ name: load-metrics
 on:
   push:
     branches:
-      - continuous-delivery # for testing purposes
+      - continuous-deployment # for testing purposes
 
 jobs:
   ci-test:
