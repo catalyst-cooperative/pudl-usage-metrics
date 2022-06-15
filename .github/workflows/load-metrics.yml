@@ -1,0 +1,34 @@
+name: load-metrics
+
+on:
+  push:
+    branches:
+      - continuous-delivery # for testing purposes
+
+jobs:
+  ci-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Set up conda environment for testing
+        uses: conda-incubator/setup-miniconda@v2.1.1
+        with:
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          use-mamba: true
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: pudl-usage-metrics
+          environment-file: environment.yml
+      - shell: bash -l {0}
+        run: |
+          mamba info
+          mamba list
+          conda config --show-sources
+          conda config --show
+          printenv | sort
