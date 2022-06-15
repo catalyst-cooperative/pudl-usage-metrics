@@ -25,7 +25,7 @@ def main():
 
     # Run the jobs
     for _, job in DATASET_JOBS.items():
-        subprocess.run(
+        return_code = subprocess.run(
             [
                 "dagster",
                 "job",
@@ -37,7 +37,9 @@ def main():
                 "-c",
                 "schedule_run_config.yaml",
             ]
-        )
+        ).returncode
+        if return_code != 0:
+            exit(return_code)
 
 
 if __name__ == "__main__":
