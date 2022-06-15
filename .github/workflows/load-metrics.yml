@@ -43,7 +43,7 @@ jobs:
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
         run: |
-          mamba run -n pudl-usage-metrics dagster job execute -m usage_metrics -c schedule_run_config.yml
+          mamba run -n pudl-usage-metrics python run_data_update.py
 
       - name: Echo size of DB
         run: |
