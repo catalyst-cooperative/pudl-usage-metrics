@@ -13,6 +13,12 @@ jobs:
         with:
           fetch-depth: 2
 
+      # Authentication via credentials json
+      - id: "auth"
+        uses: "google-github-actions/auth@v0"
+        with:
+          credentials_json: "${{ secrets.BQ_SA_KEY }}"
+
       - name: Set up conda environment for testing
         uses: conda-incubator/setup-miniconda@v2.1.1
         with:
@@ -32,12 +38,6 @@ jobs:
           conda config --show-sources
           conda config --show
           printenv | sort
-
-      # Authentication via credentials json
-      - id: "auth"
-        uses: "google-github-actions/auth@v0"
-        with:
-          credentials_json: "${{ secrets.BQ_SA_KEY }}"
 
       - name: Run ETL
         env:

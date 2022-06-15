@@ -2,7 +2,7 @@
 from datetime import datetime
 
 import pandas as pd
-from dagster import graph, in_process_executor, job, weekly_partitioned_config
+from dagster import daily_partitioned_config, graph, in_process_executor, job
 
 import usage_metrics.ops.datasette as da
 from usage_metrics.resources.sqlite import sqlite_manager
@@ -24,9 +24,9 @@ def transform(raw_logs: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-@weekly_partitioned_config(start_date=datetime(2022, 1, 24))
-def datasette_weekly_partition(start: datetime, end: datetime):
-    """Dagster weekly partition config for datasette logs."""
+@daily_partitioned_config(start_date=datetime(2022, 1, 24))
+def datasette_daily_partition(start: datetime, end: datetime):
+    """Dagster daily partition config for datasette logs."""
     return {
         "ops": {
             "extract": {
@@ -40,7 +40,7 @@ def datasette_weekly_partition(start: datetime, end: datetime):
 
 
 @job(
-    config=datasette_weekly_partition,
+    config=datasette_daily_partition,
     resource_defs={"database_manager": sqlite_manager},
     executor_def=in_process_executor,
 )
