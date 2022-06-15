@@ -10,7 +10,7 @@ ops:
       start_date: "{}"
 """
 
-DATASET_JOBS = {"datasette": "process_datasette_logs_locally"}
+DATASET_JOBS = {"datasette": "process_datasette_logs_gcp"}
 
 
 def main():
