@@ -24,7 +24,7 @@ def main():
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
     coloredlogs.install(fmt=log_format, level="INFO", logger=usage_metrics_logger)
 
-    today = datetime.date.today()
+    yesterday = datetime.date.today() - datetime.timedelta(days=1)
 
     return_codes = []
 
@@ -35,9 +35,11 @@ def main():
             partition_set.get_partitions(), key=lambda x: x.value.start
         ).value
 
-        # Run the most recent partition if the end_date it today
-        if most_recent_partition.start.date() != today:
-            usage_metrics_logger.info(f"No partition for {job.name} today, skipping.")
+        # Run the most recent partition if the end_date it yesterday
+        if most_recent_partition.start.date() != yesterday:
+            usage_metrics_logger.info(
+                f"No partition for {job.name} yesterday, skipping."
+            )
             continue
         usage_metrics_logger.info(
             f"""Processing partition: ({most_recent_partition.start.date()},
@@ -46,7 +48,7 @@ def main():
 
         start_date = most_recent_partition.end.date()
         with open("schedule_run_config.yaml", "w") as f:
-            f.write(CONFIG_TEMPLATE.format(today, start_date))
+            f.write(CONFIG_TEMPLATE.format(yesterday, start_date))
 
         return_code = subprocess.run(
             [
