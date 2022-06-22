@@ -57,6 +57,7 @@ def extract(context) -> pd.DataFrame:
     for field in raw_logs.select_dtypes(include=["datetimetz"]):
         raw_logs[field] = raw_logs[field].dt.tz_localize(None)
 
+    # Skip downstream ops if there are no logs to process
     if len(raw_logs) > 0:
         yield Output(raw_logs, output_name="raw_logs")
 
