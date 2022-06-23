@@ -1,6 +1,7 @@
 """Datasette ELT dagster job."""
 from datetime import datetime
 
+import pandas as pd
 from dagster import daily_partitioned_config, graph, in_process_executor
 
 import usage_metrics.ops.datasette as da
@@ -24,13 +25,19 @@ def datasette_daily_partition(start: datetime, end: datetime):
 
 
 @graph
+def transform(raw_logs: pd.DataFrame) -> pd.DataFrame:
+    """Transform datasette logs."""
+    df = da.unpack_httprequests(raw_logs)
+    df = da.parse_urls(df)
+    return da.geocode_ips(df)
+
+
+@graph
 def process_datasette_logs():
     """Process datasette logs locally using a SQLite database."""
     raw_logs = da.extract()
-    df = da.unpack_httprequests(raw_logs)
-    df = da.parse_urls(df)
-    clean_logs = da.geocode_ips(df)
-    da.load(clean_logs)
+    transformed_logs = transform(raw_logs)
+    da.load(transformed_logs)
 
 
 process_datasette_logs_locally = process_datasette_logs.to_job(
