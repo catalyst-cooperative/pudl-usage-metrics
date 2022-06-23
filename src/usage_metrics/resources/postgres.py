@@ -11,25 +11,27 @@ from usage_metrics.models import usage_metrics_metadata
 class PostgresManager:
     """Manage connection with a Postgres Database."""
 
-    def __init__(self, clobber: bool = False) -> None:
+    def __init__(
+        self,
+        user: str,
+        password: str,
+        db: str,
+        ip: str,
+        port: str,
+        clobber: bool = False,
+    ) -> None:
         """
         Initialize SQLiteManager object.
 
         Args:
             clobber: Clobber and recreate the database if True.
         """
-        self.engine = self._create_engine()
+        self.engine = sa.create_engine(
+            f"postgresql://{user}:{password}@{ip}:{port}/{db}"
+        )
         if clobber:
             usage_metrics_metadata.drop_all(self.engine)
         usage_metrics_metadata.create_all(self.engine)
-
-    def _create_engine(self) -> sa.engine.Engine:
-        """Create a SqlAlchemy engine for the Cloud SQL databse."""
-        user = os.environ["POSTGRES_USER"]
-        password = os.environ["POSTGRES_PASS"]
-        db = os.environ["POSTGRES_DB"]
-        db_ip = os.environ["POSTGRES_IP"]
-        return sa.create_engine(f"postgresql://{user}:{password}@{db_ip}:5432/{db}")
 
     def get_engine(self) -> sa.engine.Engine:
         """
@@ -66,9 +68,46 @@ class PostgresManager:
             description="Clobber and recreate the database if True.",
             default_value=False,
         ),
+        "postgres_user": Field(
+            str,
+            description="Postgres connection string user.",
+            default_value=os.environ["POSTGRES_USER"],
+        ),
+        "postgres_password": Field(
+            str,
+            description="Postgres connection string password.",
+            default_value=os.environ["POSTGRES_PASSWORD"],
+        ),
+        "postgres_db": Field(
+            str,
+            description="Postgres connection string database.",
+            default_value=os.environ["POSTGRES_DB"],
+        ),
+        "postgres_ip": Field(
+            str,
+            description="Postgres connection string ip address.",
+            default_value=os.environ["POSTGRES_IP"],
+        ),
+        "postgres_port": Field(
+            str,
+            description="Postgres connection string port.",
+            default_value=os.environ["POSTGRES_PORT"],
+        ),
     }
 )
 def postgres_manager(init_context) -> PostgresManager:
     """Create a PostgresManager dagster resource."""
     clobber = init_context.resource_config["clobber"]
-    return PostgresManager(clobber=clobber)
+    user = init_context.resource_config["postgres_user"]
+    password = init_context.resource_config["postgres_password"]
+    db = init_context.resource_config["postgres_db"]
+    ip = init_context.resource_config["postgres_ip"]
+    port = init_context.resource_config["postgres_port"]
+    return PostgresManager(
+        clobber=clobber,
+        user=user,
+        password=password,
+        db=db,
+        ip=ip,
+        port=port,
+    )
