@@ -4,9 +4,7 @@ import logging
 
 import coloredlogs
 
-from usage_metrics.jobs.datasette import process_datasette_logs_gcp
-
-DATASET_JOBS = {"datasette": process_datasette_logs_gcp}
+from usage_metrics.repository import gcp_usage_metrics
 
 
 def main():
@@ -18,7 +16,7 @@ def main():
     today = datetime.date.today()
 
     # Run the jobs
-    for _, job in DATASET_JOBS.items():
+    for job in gcp_usage_metrics.get_all_jobs():
         partition_set = job.get_partition_set_def()
         most_recent_partition = max(
             partition_set.get_partitions(), key=lambda x: x.value.start
