@@ -32,8 +32,8 @@ setup(
         "dagit==0.15.0",
         "dagster-pandera==0.15.0",
         "pandas-gbq~=0.17.0",
-        "pydata-google-auth~=1.3.0",
-        "jupyterlab~=3.2.8",
+        "pydata-google-auth>=1.3,<1.5",
+        "jupyterlab>=3.2.8,<3.5.0",
         "psycopg2~=2.9.3",
         "ipinfo~=4.2.1",
         "joblib~=1.1.0",
@@ -51,7 +51,7 @@ setup(
         ],
         "docs": [
             "doc8>=0.9,<0.12",  # Ensures clean documentation formatting
-            "sphinx>=4,<5",  # The default Python documentation redering engine
+            "sphinx>=4,<6",  # The default Python documentation redering engine
             "sphinx-autoapi>=1.8,<2",  # Generates documentation from docstrings
             "sphinx-issues>=1.2,<4.0",  # Allows references to GitHub issues
             "sphinx-rtd-dark-mode>=1.2,<2",  # Allow user to toggle light/dark mode
@@ -68,7 +68,7 @@ setup(
             "flake8-rst-docstrings>=0.2,<0.3",  # Allow use of ReST in docstrings
             "flake8-use-fstring>=1,<2",  # Highlight use of old-style string formatting
             "mccabe>=0.6,<0.8",  # Checks that code isn't overly complicated
-            "pep8-naming>=0.12,<0.13",  # Require PEP8 compliant variable names
+            "pep8-naming>=0.12,<0.14",  # Require PEP8 compliant variable names
             "pre-commit>=2.9,<3",  # Allow us to run pre-commit hooks in testing
             "pydocstyle>=5.1,<7",  # Style guidelines for Python documentation
             "pytest>=6.2,<8",  # Our testing framework
