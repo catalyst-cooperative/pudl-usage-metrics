@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10"]
+        python-version: ["3.8", "3.9", "3.10"]
       fail-fast: false
     steps:
       - uses: actions/checkout@v3
@@ -38,11 +38,16 @@ jobs:
       - name: Authenticate gcloud
         uses: "google-github-actions/auth@v0"
         with:
-          credentials_json: "${{ secrets.GCE_SA_KEY }}"
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
       - name: Run pytest
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
+          POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
         run: |
           mamba run -n pudl-usage-metrics pytest
 
