@@ -43,6 +43,11 @@ jobs:
       - name: Run pytest
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
+          POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
         run: |
           mamba run -n pudl-usage-metrics pytest
 
