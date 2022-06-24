@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - continuous-deployment # for testing purposes
+  schedule:
+    - cron: "15 0 * * *" # Every day at 12:15 AM UTC
 
 env:
   PRESET_IP1: 44.193.153.196
@@ -17,6 +19,7 @@ jobs:
       - uses: actions/checkout@v3
         with:
           fetch-depth: 2
+          ref: continuous-deployment # for testing purposes
 
       # Authentication via credentials json
       - id: "auth"
