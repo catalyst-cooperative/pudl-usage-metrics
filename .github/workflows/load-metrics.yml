@@ -1,0 +1,71 @@
+name: load-metrics
+
+on:
+  push:
+    branches:
+      - continuous-deployment # for testing purposes
+  schedule:
+    - cron: "15 0 * * *" # Every day at 12:15 AM UTC
+
+env:
+  PRESET_IP1: 44.193.153.196
+  PRESET_IP2: 52.70.123.52
+  PRESET_IP3: 54.83.88.93
+
+jobs:
+  load-metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+          ref: continuous-deployment # for testing purposes
+
+      # Authentication via credentials json
+      - id: "auth"
+        uses: "google-github-actions/auth@v0"
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+
+      - name: Set up conda environment for testing
+        uses: conda-incubator/setup-miniconda@v2.1.1
+        with:
+          miniforge-variant: Mambaforge
+          miniforge-version: latest
+          use-mamba: true
+          mamba-version: "*"
+          channels: conda-forge,defaults
+          channel-priority: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: pudl-usage-metrics
+          environment-file: environment.yml
+      - shell: bash -l {0}
+        run: |
+          mamba info
+          mamba list
+          conda config --show-sources
+          conda config --show
+          printenv | sort
+
+      - name: Get GitHub Action runner's IP Address
+        id: ip
+        uses: haythem/public-ip@v1.2
+
+      - name: Whitelist Github Action and Superset IPs
+        run: |
+          gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ steps.ip.outputs.ipv4 }},${{ env.PRESET_IP1 }},${{ env.PRESET_IP2 }},${{ env.PRESET_IP3 }}
+
+      - name: Run ETL
+        env:
+          IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
+          POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+        run: |
+          mamba run -n pudl-usage-metrics python run_data_update.py
+
+      - name: Remove Github Action runner's IP
+        run: |
+          gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ env.PRESET_IP1 }},${{ env.PRESET_IP2 }},${{ env.PRESET_IP3 }}
