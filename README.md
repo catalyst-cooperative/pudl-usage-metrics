@@ -97,34 +97,58 @@ Dagit allows you to kick off [`backfills`](https://docs.dagster.io/concepts/part
 
 ## Run the ETL
 
-You can run the ETL via the dagit UI or the [dagster CLI](https://docs.dagster.io/_apidocs/cli). Running backfills will populate the `usage_metrics/data/usage_metrics.db` sqlite database with clean data from our datasette logs.
+There is a module in the `usage_metrics/jobs` sub package for each datasource (e.g datasette logs, github metrics…) Each job module contains one graph of ops that extracts, transforms and loads the data. Two jobs are created for each graph, one job loads data to a local sqlite database for development and the other job loads data to a Google Cloud SQL Postgres database for a Preset dashboard to access.
+
+You can run the ETL via the dagit UI or the [dagster CLI](https://docs.dagster.io/_apidocs/cli).
 
 ### CLI
 
-To run a complete backfill run:
+To run a complete backfill for a job, run:
 
 ```
-dagster job backfill --all process_datasette_logs_locally
+dagster job backfill --all {YOUR_JOB_NAME}
 ```
-
-from `business/usage_metrics` with the `pudl-usage-metrics` conda env activated.
 
 ### Dagit UI
 
-To run a a complete backfill from the Dagit UI go to the [partitions tab](http://localhost:3000/workspace/usage_metrics@usage_metrics/jobs/process_datasette_logs_locally/partitions). Then click on the "Launch Backfill" button in the upper left corner of the window. This should bring up a new window with a list of partitions. Click "Select All" and then click the "Submit" button. This will submit a run for each partition. You can follow the runs on the ["Runs" tab](http://localhost:3000/instance/runs).
+To run a a complete backfill from the Dagit UI go to the job's partitions tab. Then click on the "Launch Backfill" button in the upper left corner of the window. This should bring up a new window with a list of partitions. Click "Select All" and then click the "Submit" button. This will submit a run for each partition. You can follow the runs on the ["Runs" tab](http://localhost:3000/instance/runs).
 
-### Database
+### Databases
 
-The ETL creates a sqlite database called `usage_metrics.db` in the `usage_metrics/data/` directory. It currently contains one table called `datasette_request_logs`. Each partitioned ETL run will append the new cleaned datasette logs to `datasette_request_logs`. A primary key constraint error will be thrown if you rerun the ETL for a partition. If you want to recreate the entire database just delete the sqlite database and rerun the ETL.
+#### SQLite
+
+Jobs in the `local_usage_metrics` dagster repository create a sqlite database called `usage_metrics.db` in the `usage_metrics/data/` directory. A primary key constraint error will be thrown if you rerun the ETL for a partition. If you want to recreate the entire database just delete the sqlite database and rerun the ETL.
+
+#### Google Cloud SQL Postgres
+
+Jobs in the `gcp_usage_metrics` dagster repository append new partitions to tables in a Cloud SQL postgres database. A primary key constraint error will be thrown if you rerun the ETL for a partition. The `load-metrics` GitHub action is responsible for updating the database with new partitioned data.
+
+If a new column is added or data is processed in a new way, you'll have to delete the table in the database and rerun a complete backfill. **Note: The Preset dashboard will be unavailable during the complete backfill.**
+
+To run jobs in the `gcp_usage_metrics` repo, you need to whitelist your ip address for the database:
+
+```
+gcloud sql instances patch pudl-usage-metrics-db --authorized-networks={YOUR_IP_ADDRESS}
+```
+
+Then add the connection details as environment variables to your conda environment:
+
+```
+conda activate pudl-usage-metrics
+conda env config vars set POSTGRES_IP={PUDL_USAGE_METRICS_DB_IP}
+conda env config vars set POSTGRES_USER={PUDL_USAGE_METRICS_DB_USER}
+conda env config vars set POSTGRES_PASSWORD={PUDL_USAGE_METRICS_DB_PASSWORD}
+conda env config vars set POSTGRES_DB={PUDL_USAGE_METRICS_DB_DB}
+conda env config vars set POSTGRES_PORT={PUDL_USAGE_METRICS_DB_PORT}
+conda activate pudl-usage-metrics
+```
+
+You can find the connection details in the
 
 ### IP Geocoding with ipinfo
 
-I've been using [ipinfo](https://ipinfo.io/) for geocoding the user ip addresses. We get 50k free API requests a month. The `usage_metrics.helpers.geocode_ip()` function using [joblib](https://joblib.readthedocs.io/en/latest/#main-features) to cache API calls so we don't call the API multiple times for a single ip address. The first time you run the ETL no API calls will be cached so the `geocode_ips()` op will take a while to complete.
+The ETL uses [ipinfo](https://ipinfo.io/) for geocoding the user ip addresses which provides 50k free API requests a month. The `usage_metrics.helpers.geocode_ip()` function using [joblib](https://joblib.readthedocs.io/en/latest/#main-features) to cache API calls so we don't call the API multiple times for a single ip address. The first time you run the ETL no API calls will be cached so the `geocode_ips()` op will take a while to complete.
 
 ## Add new data sources
 
-To add a new data source to the dagster repo, add new modules to the `usage_metrics/jobs/` and `usage_metrics/ops/` directories. Then add the new job to the usage_metrics.repository.usage_metrics() repo.
-
-## Review the metrics
-
-To review the datasette log metrics, launch jupyter lab and run the `notebooks/datasette_analysis.ipynb` notebook.
+To add a new data source to the dagster repo, add new modules to the `usage_metrics/jobs/` and `usage_metrics/ops/` directories and create jobs that use the `SQLite` and `PostgresManager`. Once the dataset has been tested locally, run a complete backfill for the job that uses the `PostgresManager` to populate the Cloud SQL database.

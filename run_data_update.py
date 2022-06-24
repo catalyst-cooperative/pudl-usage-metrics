@@ -1,4 +1,12 @@
-"""Temporary script to run scheduled dagster jobs."""
+"""
+Run the most recent partition for every job in the gcp_usage_metrics dagster repository.
+
+This script runs daily in the load-metrics Github Action.
+
+Note: Eventually this script should be deprecated in
+favor of having a long running dagster instance handle
+schedules and job launching.
+"""
 import logging
 from datetime import datetime, timezone
 
@@ -8,7 +16,7 @@ from usage_metrics.repository import gcp_usage_metrics
 
 
 def main():
-    """Load most recent partitions of data to Google Postgres DB."""
+    """Load most recent partitions of data to Google Cloud SQL Postgres DB."""
     usage_metrics_logger = logging.getLogger("usage_metrics")
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
     coloredlogs.install(fmt=log_format, level="INFO", logger=usage_metrics_logger)
@@ -24,7 +32,16 @@ def main():
         time_window = most_recent_partition.value
         usage_metrics_logger.info(time_window)
 
-        # Run the most recent partition if the end_date is today
+        # Raise an error if the time window is less than a day
+        time_window_diff = (time_window.end - time_window.start).in_days()
+        if time_window_diff != 1:
+            raise RuntimeError(
+                f"""The {job.name} job's partition is less than a day.
+                                    Choose a less frequent partition definition."""
+            )
+
+        # Run the most recent partition if the end_date is today.
+        # The start_date is inclusive and the end_date is exclusive.
         if time_window.end.date() == today:
             usage_metrics_logger.info(
                 f"""Processing partition: ({time_window.start.date()},

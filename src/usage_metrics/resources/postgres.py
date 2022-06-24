@@ -1,4 +1,4 @@
-"""Dagster SQLite IOManager."""
+"""Dagster Postgres IOManager."""
 import os
 
 import pandas as pd

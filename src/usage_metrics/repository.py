@@ -1,4 +1,15 @@
-"""Usage metrics dagster repository."""
+"""
+Create repositories for GCP and local jobs.
+
+Dagster JobDefinitions are collected from each module in
+the usage_metrics.jobs subpackage. Each module in the usage_metrics.jobs
+subpackage should have a postgres and sqlite job for gcp and local
+processing respectively.
+
+Dagster repositories are a means of organizing jobs. The repositories
+are separated by the destination so it is easy to run all jobs
+for a given destination.
+"""
 import importlib
 import pkgutil
 from pathlib import Path
@@ -21,6 +32,7 @@ for module_info in pkgutil.iter_modules(modules):
     for attr_name in dir(module):
         attr = getattr(module, attr_name)
         if type(attr) == JobDefinition:
+            # Separte jobs by loading destination
             if attr.resource_defs["database_manager"] == sqlite_manager:
                 local_jobs.append(attr)
             elif attr.resource_defs["database_manager"] == postgres_manager:
@@ -33,11 +45,11 @@ for module_info in pkgutil.iter_modules(modules):
 
 @repository
 def gcp_usage_metrics():
-    """Define dagster repository of jobs that populate local sqlite db."""
+    """Define dagster repository of jobs that populate a Cloud SQL postgres DB."""
     return gcp_jobs
 
 
 @repository
 def local_usage_metrics():
-    """Define dagster repository of jobs that populate Cloud SQL DB."""
+    """Define dagster repository of jobs that populate a local sqlite db."""
     return local_jobs
