@@ -57,7 +57,7 @@ jobs:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
           POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASS: ${{ secrets.POSTGRES_PASS }}
+          POSTGRES_PASS: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
         run: |
           mamba run -n pudl-usage-metrics python run_data_update.py
@@ -65,7 +65,3 @@ jobs:
       - name: Remove Github Action runner's IP
         run: |
           gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ env.PRESET_IP1 }},${{ env.PRESET_IP2 }},${{ env.PRESET_IP3 }}
-
-      - name: Echo size of DB
-        run: |
-          echo $(ls -lah ./data/usage_metrics.db)
