@@ -34,7 +34,7 @@ def transform(raw_logs: pd.DataFrame) -> pd.DataFrame:
 
 @graph
 def process_datasette_logs():
-    """Process datasette logs locally using a SQLite database."""
+    """Process extract, clean and load logs to a destination."""
     raw_logs = da.extract()
     transformed_logs = transform(raw_logs)
     da.load(transformed_logs)

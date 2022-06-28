@@ -21,7 +21,7 @@ class PostgresManager:
         clobber: bool = False,
     ) -> None:
         """
-        Initialize SQLiteManager object.
+        Initialize PostgresManager object.
 
         Args:
             clobber: Clobber and recreate the database if True.
