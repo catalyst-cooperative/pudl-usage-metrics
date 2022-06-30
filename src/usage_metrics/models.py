@@ -1,5 +1,14 @@
 """SQLAlchemy models for usage_metrics database."""
-from sqlalchemy import Boolean, Column, Date, Float, Integer, MetaData, String, Table
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    Integer,
+    MetaData,
+    String,
+    Table,
+)
 
 usage_metrics_metadata = MetaData()
 
@@ -10,8 +19,8 @@ datasette_request_logs = Table(
     Column("log_name", String),
     Column("resource", String),
     Column("text_payload", String),
-    Column("timestamp", Date),
-    Column("receive_timestamp", Date),
+    Column("timestamp", DateTime),
+    Column("receive_timestamp", DateTime),
     Column("severity", String),
     Column("http_request", String),
     Column("labels", String),
