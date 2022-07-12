@@ -8,5 +8,6 @@ dependencies:
   - python>=3.8,<3.11
   - setuptools<62
   - pre-commit~=2.9
+  - jupyter_contrib_nbextensions~=0.5
   - pip:
       - --editable ./[doc,test,dev]
