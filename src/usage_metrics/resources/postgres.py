@@ -50,6 +50,11 @@ class PostgresManager:
             df: The dataframe to append.
             table_name: the name of the database table to append to.
         """
+        assert (
+            table_name in usage_metrics_metadata.tables.keys()
+        ), f"""{table_name} does not have a database schema defined.
+            Create a schema one in usage_metrics.models."""
+
         # TODO: could also get the insert_ids already in the database
         # and only append the new data.
         with self.engine.begin() as conn:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -90,3 +91,10 @@ def unpack_json_series(series: pd.Series) -> pd.DataFrame:
     unpacked_df = pd.DataFrame.from_dict(series_dict, orient="index")
     assert len(unpacked_df) <= len(series)
     return unpacked_df
+
+
+def str_to_datetime(
+    date: str, fmt: str = "%Y-%m-%d", tzinfo: timezone = timezone.utc
+) -> datetime:
+    """Convert a string to a date."""
+    return datetime.strptime(date, fmt).replace(tzinfo=tzinfo)

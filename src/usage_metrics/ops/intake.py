@@ -1,5 +1,4 @@
 """Dagster ops for intake logs."""
-from datetime import datetime, timezone
 from io import BytesIO
 
 import google.auth
@@ -7,6 +6,8 @@ import pandas as pd
 from dagster import AssetMaterialization, Out, Output, graph, op
 from google.cloud import storage
 from tqdm import tqdm
+
+from usage_metrics.helpers import str_to_datetime
 
 
 def create_rename_mapping(raw_logs: pd.DataFrame) -> dict:
@@ -38,7 +39,7 @@ def create_rename_mapping(raw_logs: pd.DataFrame) -> dict:
 
 
 @op(out={"raw_logs": Out(is_required=False)})
-def extract() -> pd.DataFrame:
+def extract(context) -> pd.DataFrame:
     """
     Extract intake logs from Google Cloud Storage.
 
@@ -53,9 +54,9 @@ def extract() -> pd.DataFrame:
     assert bucket.exists()
 
     logs = []
-    # TODO: for testing purposes, will remove for dagster partition
-    start_date = datetime(year=2022, month=7, day=1, tzinfo=timezone.utc)
-    end_date = datetime(year=2022, month=8, day=1, tzinfo=timezone.utc)
+
+    start_date = str_to_datetime(context.op_config["start_date"])
+    end_date = str_to_datetime(context.op_config["end_date"])
 
     for i in tqdm(bucket.list_blobs()):
         if "usage" in i.name:

@@ -1,14 +1,8 @@
 """
-Create repositories for GCP and local jobs.
-
-Dagster JobDefinitions are collected from each module in
-the usage_metrics.jobs subpackage. Each module in the usage_metrics.jobs
-subpackage should have a postgres and sqlite job for gcp and local
-processing respectively.
+Create repositories for each datasource.
 
 Dagster repositories are a means of organizing jobs. The repositories
-are separated by the destination so it is easy to run all jobs
-for a given destination.
+are organized by datasource.
 """
 
 from dagster import repository
