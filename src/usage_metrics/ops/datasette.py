@@ -160,9 +160,9 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
     information like ip location and organization.
 
     Args:
-        df: datasette logs with unpacked http_request fields.
+        df: dataframe with a remote_ip column.
     Returns:
-        geocoded_logs: logs with ip location info columns.
+        geocoded_logs: dataframe with ip location info columns.
     """
     # Geocode the remote ip addresses
     context.log.info("Geocoding ip addresses.")

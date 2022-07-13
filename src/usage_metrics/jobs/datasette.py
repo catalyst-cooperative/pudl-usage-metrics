@@ -1,4 +1,4 @@
-"""Datasette ELT dagster job."""
+"""Datasette logs ETL dagster jobs."""
 from datetime import datetime
 
 import pandas as pd
