@@ -11,7 +11,10 @@ from usage_metrics.jobs.datasette import (
     process_datasette_logs_gcp,
     process_datasette_logs_locally,
 )
-from usage_metrics.jobs.intake import process_intake_logs_locally
+from usage_metrics.jobs.intake import (
+    process_intake_logs_gcp,
+    process_intake_logs_locally,
+)
 
 
 @repository
@@ -23,4 +26,4 @@ def datasette_logs():
 @repository
 def intake_logs():
     """Define dagster repository of jobs that process Intake logs."""
-    return [process_intake_logs_locally]
+    return [process_intake_logs_locally, process_intake_logs_gcp]

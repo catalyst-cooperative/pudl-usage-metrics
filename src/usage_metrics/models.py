@@ -1,5 +1,6 @@
 """SQLAlchemy models for usage_metrics database."""
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     Column,
     DateTime,
@@ -71,9 +72,9 @@ intake_logs = Table(
     Column("request_method", String),
     Column("request_uri", String),
     Column("response_status", Integer),
-    Column("request_bytes", Integer),
-    Column("response_bytes", Integer),
-    Column("response_time_taken", Integer),
+    Column("request_bytes", BigInteger),
+    Column("response_bytes", BigInteger),
+    Column("response_time_taken", BigInteger),
     Column("request_host", String),
     Column("request_referer", String),
     Column("request_user_agent", String),

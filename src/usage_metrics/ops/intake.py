@@ -59,10 +59,10 @@ def extract(context) -> pd.DataFrame:
     start_date = str_to_datetime(context.op_config["start_date"])
     end_date = str_to_datetime(context.op_config["end_date"])
 
-    for i in tqdm(bucket.list_blobs()):
-        if "usage" in i.name:
-            if i.time_created >= start_date and i.time_created < end_date:
-                logs.append(pd.read_csv(BytesIO(i.download_as_bytes())))
+    for blob in tqdm(bucket.list_blobs()):
+        if "usage" in blob.name:
+            if blob.time_created >= start_date and blob.time_created < end_date:
+                logs.append(pd.read_csv(BytesIO(blob.download_as_bytes())))
 
     if not logs:
         return
