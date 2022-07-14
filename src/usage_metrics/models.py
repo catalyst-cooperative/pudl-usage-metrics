@@ -57,8 +57,8 @@ datasette_request_logs = Table(
     Column("remote_ip_asn", String),
     Column("remote_ip_country", String),
     Column("remote_ip_timezone", String),
-    Column("remote_ip_latitude", String),
-    Column("remote_ip_longitude", String),
+    Column("remote_ip_latitude", Float),
+    Column("remote_ip_longitude", Float),
     Column("remote_ip_postal", String),
     Column("remote_ip_region", String),
 )
@@ -92,8 +92,8 @@ intake_logs = Table(
     Column("remote_ip_asn", String),
     Column("remote_ip_country", String),
     Column("remote_ip_timezone", String),
-    Column("remote_ip_latitude", String),
-    Column("remote_ip_longitude", String),
+    Column("remote_ip_latitude", Float),
+    Column("remote_ip_longitude", Float),
     Column("remote_ip_postal", String),
     Column("remote_ip_region", String),
 )
