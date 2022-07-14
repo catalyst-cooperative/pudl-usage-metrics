@@ -8,6 +8,7 @@ from google.cloud import storage
 from tqdm import tqdm
 
 from usage_metrics.helpers import str_to_datetime
+from usage_metrics.ops.datasette import geocode_ips
 
 
 def create_rename_mapping(raw_logs: pd.DataFrame) -> dict:
@@ -63,15 +64,16 @@ def extract(context) -> pd.DataFrame:
             if i.time_created >= start_date and i.time_created < end_date:
                 logs.append(pd.read_csv(BytesIO(i.download_as_bytes())))
 
+    if not logs:
+        return
+
     raw_logs = pd.concat(logs)
 
     # rename the columns
     column_mappings = create_rename_mapping(raw_logs)
     raw_logs = raw_logs.rename(columns=column_mappings)
 
-    # Drop unused region column
-    raw_logs = raw_logs.drop(columns=["remote_ip_region"])
-
+    # set index
     assert raw_logs.insert_id.is_unique
     raw_logs = raw_logs.set_index("insert_id")
 
@@ -80,7 +82,7 @@ def extract(context) -> pd.DataFrame:
 
 
 @op(out={"intake_logs": Out(is_required=False)})
-def filter_intake_logs(raw_logs):
+def filter_intake_logs(context, raw_logs):
     """Filter get logs from python client."""
     # Get all request logs produced by python client.
     intake_logs = raw_logs[
@@ -95,18 +97,28 @@ def filter_intake_logs(raw_logs):
         intake_logs.timestamp, origin="unix", unit="us"
     )
 
+    # Remove unused fields
+    intake_logs = intake_logs.drop(columns=["remote_ip_region"])
+
     if len(intake_logs) > 0:
         yield Output(intake_logs, output_name="intake_logs")
 
 
 @op
-def clean_object_name(intake_logs: pd.DataFrame) -> pd.DataFrame:
+def clean_object_name(context, intake_logs: pd.DataFrame) -> pd.DataFrame:
     """Remove prefix and extract tag and object name from request_object."""
-    split_object_path_df = intake_logs["request_object"].str.split("/", 1, expand=True)[
-        0
-    ]
-    intake_logs["tag"] = split_object_path_df[0]
-    intake_logs["object_path"] = split_object_path_df[1]
+    # Get everything after the first backslash
+    intake_logs["object_path"] = (
+        intake_logs["request_object"]
+        .str.extract(r"(\/([\s\S]*)$)", expand=False)[1]
+        .replace("", pd.NA)
+    )
+    # Get everything before the first backslash
+    intake_logs["tag"] = intake_logs["request_object"].str.extract(
+        r"^([^/]+?)(\s*[/])"
+    )[0]
+
+    intake_logs = intake_logs.reset_index()
     return intake_logs
 
 
@@ -115,6 +127,7 @@ def transform(raw_logs: pd.DataFrame) -> pd.DataFrame:
     """Transform intake logs."""
     intake_logs = filter_intake_logs(raw_logs)
     intake_logs = clean_object_name(intake_logs)
+    intake_logs = geocode_ips(intake_logs)
     return intake_logs
 
 

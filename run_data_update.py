@@ -11,8 +11,10 @@ import logging
 from datetime import datetime, timezone
 
 import coloredlogs
+from dagster import RepositoryDefinition
 
-from usage_metrics.repository import gcp_usage_metrics
+from usage_metrics import repository
+from usage_metrics.resources.postgres import postgres_manager
 
 
 def main():
@@ -23,8 +25,18 @@ def main():
 
     today = datetime.now(tz=timezone.utc).date()
 
+    # Collect GCP jobs
+    gcp_jobs = []
+
+    for attr_name in dir(repository):
+        attr = getattr(repository, attr_name)
+        if type(attr) == RepositoryDefinition:
+            for job in attr.get_all_jobs():
+                if job.resource_defs["database_manager"] == postgres_manager:
+                    gcp_jobs.append(job)
+
     # Run the jobs
-    for job in gcp_usage_metrics.get_all_jobs():
+    for job in gcp_jobs:
         partition_set = job.get_partition_set_def()
         most_recent_partition = max(
             partition_set.get_partitions(), key=lambda x: x.value.start
