@@ -151,4 +151,4 @@ The ETL uses [ipinfo](https://ipinfo.io/) for geocoding the user ip addresses wh
 
 ## Add new data sources
 
-To add a new data source to the dagster repo, add new modules to the `usage_metrics/jobs/` and `usage_metrics/ops/` directories and create jobs that use the `SQLite` and `PostgresManager`. Once the dataset has been tested locally, run a complete backfill for the job that uses the `PostgresManager` to populate the Cloud SQL database.
+To add a new data source to the dagster repo, add new modules to the `usage_metrics/jobs/` and `usage_metrics/ops/` directories and create jobs that use the `SQLite` and `PostgresManager`. Then, create a new dagster repository in the repository module that contains the dataset jobs. Once the dataset has been tested locally, run a complete backfill for the job that uses the `PostgresManager` to populate the Cloud SQL database.
