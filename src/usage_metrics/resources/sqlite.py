@@ -23,13 +23,13 @@ class SQLiteManager:
             usage_metrics/data/usage_metrics.db.
         """
         engine = sa.create_engine("sqlite:///" + str(db_path))
-        if not db_path.exists() or clobber:
+        if not db_path.exists():
             db_path.parent.mkdir(exist_ok=True)
             db_path.touch()
-            usage_metrics_metadata.drop_all(engine)
 
         usage_metrics_metadata.create_all(engine)
         self.engine = engine
+        self.clobber = clobber
 
     def get_engine(self) -> sa.engine.Engine:
         """
@@ -52,6 +52,10 @@ class SQLiteManager:
             table_name in usage_metrics_metadata.tables.keys()
         ), f"""{table_name} does not have a database schema defined.
             Create a schema one in usage_metrics.models."""
+
+        if self.clobber:
+            table_obj = usage_metrics_metadata.tables[table_name]
+            usage_metrics_metadata.drop_all(self.engine, tables=[table_obj])
 
         # TODO: could also get the insert_ids already in the database
         # and only append the new data.

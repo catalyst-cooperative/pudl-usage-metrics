@@ -26,11 +26,10 @@ class PostgresManager:
         Args:
             clobber: Clobber and recreate the database if True.
         """
+        self.clobber = clobber
         self.engine = sa.create_engine(
             f"postgresql://{user}:{password}@{ip}:{port}/{db}"
         )
-        if clobber:
-            usage_metrics_metadata.drop_all(self.engine)
         usage_metrics_metadata.create_all(self.engine)
 
     def get_engine(self) -> sa.engine.Engine:
@@ -54,6 +53,10 @@ class PostgresManager:
             table_name in usage_metrics_metadata.tables.keys()
         ), f"""{table_name} does not have a database schema defined.
             Create a schema one in usage_metrics.models."""
+
+        if self.clobber:
+            table_obj = usage_metrics_metadata.tables[table_name]
+            usage_metrics_metadata.drop_all(self.engine, tables=[table_obj])
 
         # TODO: could also get the insert_ids already in the database
         # and only append the new data.
