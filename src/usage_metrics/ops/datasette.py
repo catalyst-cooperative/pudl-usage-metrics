@@ -184,6 +184,15 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
         geocoded_ips.remote_ip_org.str.split(" ").str[1:].str.join(sep=" ")
     )
 
+    # Create a verbose ip location field
+    geocoded_ips["remote_ip_full_location"] = (
+        geocoded_ips.remote_ip_city
+        + ", "
+        + geocoded_ips.remote_ip_region
+        + ", "
+        + geocoded_ips.remote_ip_country
+    )
+
     # Add the component fields back to the logs
     # TODO: Could create a separate db table for ip information.
     # I'm not sure if IP addresses always geocode to the same information.
