@@ -52,18 +52,23 @@ def extract(context) -> pd.DataFrame:
     bucket = storage.Client(credentials=credentials).bucket(
         bucket_url, user_project=project_id
     )
-    assert bucket.exists()
+    assert bucket.exists(), f"{bucket_url} does not exist."
 
     logs = []
 
     start_date = str_to_datetime(context.op_config["start_date"])
     end_date = str_to_datetime(context.op_config["end_date"])
 
+    # Intake storage bucket usage logs are saved every hour.
+    # GCP also saves storage logs every day.
+    # We are only interested in processing the usage logs.
     for blob in tqdm(bucket.list_blobs()):
         if "usage" in blob.name:
+            # Get the batch of logs for the given partition.
             if blob.time_created >= start_date and blob.time_created < end_date:
                 logs.append(pd.read_csv(BytesIO(blob.download_as_bytes())))
 
+    # Skip downstream steps if there are no logs to process.
     if not logs:
         return
 
@@ -77,6 +82,7 @@ def extract(context) -> pd.DataFrame:
     assert raw_logs.insert_id.is_unique
     raw_logs = raw_logs.set_index("insert_id")
 
+    # Skip downstream steps if there are no logs to process.
     if len(raw_logs) > 0:
         yield Output(raw_logs, output_name="raw_logs")
 
@@ -100,6 +106,7 @@ def filter_intake_logs(context, raw_logs):
     # Remove unused fields
     intake_logs = intake_logs.drop(columns=["remote_ip_region"])
 
+    # Skip downstream steps if there are no logs to process.
     if len(intake_logs) > 0:
         yield Output(intake_logs, output_name="intake_logs")
 

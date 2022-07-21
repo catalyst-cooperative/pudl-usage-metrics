@@ -89,7 +89,9 @@ def unpack_json_series(series: pd.Series) -> pd.DataFrame:
     series_dict = {index: v if v else {} for index, v in series_dict.items()}
 
     unpacked_df = pd.DataFrame.from_dict(series_dict, orient="index")
-    assert len(unpacked_df) <= len(series)
+    assert len(unpacked_df) <= len(
+        series
+    ), "Unpacked more JSON records than there are records in the DataFrame."
     return unpacked_df
 
 
