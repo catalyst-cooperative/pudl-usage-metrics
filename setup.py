@@ -40,6 +40,7 @@ setup(
         "matplotlib~=3.5.1",
         "pytest~=7.1.1",
         "pg8000~=1.29.1",
+        "google-cloud-storage~=2.4.0",
         "cloud-sql-python-connector[pg8000]>=0.6.2,<0.8.0",
     ],
     extras_require={
@@ -89,8 +90,6 @@ setup(
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3 :: Only",
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
     ],
     # Directory to search recursively for __init__.py files defining Python packages

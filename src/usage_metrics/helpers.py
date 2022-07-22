@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
 import ipinfo
+import pandas as pd
 from joblib import Memory
 
 cache_dir = Path(__file__).parents[2] / "cache"
@@ -56,3 +58,45 @@ def parse_request_url(url: str) -> dict:
         "path": pr.path,
         "query": pr.query,
     }
+
+
+def convert_camel_case_columns_to_snake_case(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Convert CamelCase columns of a dataframe to snake_case.
+
+    Args:
+        df: A dataframe with CamelCase columns.
+    Returns:
+        df: A dataframe with snake_case columns.
+    """
+    df.columns = df.columns.str.replace(r"(?<!^)(?=[A-Z])", "_").str.lower()
+    return df
+
+
+def unpack_json_series(series: pd.Series) -> pd.DataFrame:
+    """
+    Unpack a series containing json records to a DataFrame.
+
+    Expects no more than one json record per series element.
+
+    Args:
+        series: A pandas series on json records.
+    Returns:
+        unpacked_df: A dataframe where columns are the fields of the json records.
+    """
+    series_dict = series.to_dict()
+    # Replace missing data with empty dicts
+    series_dict = {index: v if v else {} for index, v in series_dict.items()}
+
+    unpacked_df = pd.DataFrame.from_dict(series_dict, orient="index")
+    assert len(unpacked_df) <= len(
+        series
+    ), "Unpacked more JSON records than there are records in the DataFrame."
+    return unpacked_df
+
+
+def str_to_datetime(
+    date: str, fmt: str = "%Y-%m-%d", tzinfo: timezone = timezone.utc
+) -> datetime:
+    """Convert a string to a date."""
+    return datetime.strptime(date, fmt).replace(tzinfo=tzinfo)

@@ -5,7 +5,7 @@ channels:
 dependencies:
   # Used to set up the environment
   - pip>=21,<23
-  - python>=3.8,<3.11
+  - python>=3.10,<3.11
   - setuptools<62
   - pre-commit~=2.9
   - jupyter_contrib_nbextensions~=0.5

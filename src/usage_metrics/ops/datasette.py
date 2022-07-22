@@ -6,7 +6,11 @@ import pandas as pd
 import pandas_gbq
 from dagster import AssetMaterialization, Out, Output, RetryPolicy, op
 
-from usage_metrics.helpers import geocode_ip, parse_request_url
+from usage_metrics.helpers import (
+    convert_camel_case_columns_to_snake_case,
+    geocode_ip,
+    parse_request_url,
+)
 
 JSON_FIELDS = ["resource", "http_request", "labels"]
 EMPTY_COLUMNS = [
@@ -47,7 +51,7 @@ def extract(context) -> pd.DataFrame:
     context.log.info(raw_logs.shape)
 
     # Convert CamelCase to snake_case
-    raw_logs.columns = raw_logs.columns.str.replace(r"(?<!^)(?=[A-Z])", "_").str.lower()
+    raw_logs = convert_camel_case_columns_to_snake_case(raw_logs)
 
     # Convert the JSON fields into str because sqlalchemy can't write dicts to json
     for field in JSON_FIELDS:
@@ -102,9 +106,7 @@ def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
     unpacked_logs = unpacked_logs.reset_index()
 
     # Convert the new columns to snake_case
-    unpacked_logs.columns = unpacked_logs.columns.str.replace(
-        r"(?<!^)(?=[A-Z])", "_"
-    ).str.lower()
+    unpacked_logs = convert_camel_case_columns_to_snake_case(unpacked_logs)
 
     # Convert the JSON fields into str because sqlalchemy can't write dicts to json
     for field in JSON_FIELDS:
@@ -160,9 +162,9 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
     information like ip location and organization.
 
     Args:
-        df: datasette logs with unpacked http_request fields.
+        df: dataframe with a remote_ip column.
     Returns:
-        geocoded_logs: logs with ip location info columns.
+        geocoded_logs: dataframe with ip location info columns.
     """
     # Geocode the remote ip addresses
     context.log.info("Geocoding ip addresses.")
@@ -180,6 +182,15 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
     geocoded_ips["remote_ip_asn"] = geocoded_ips.remote_ip_org.str.split(" ").str[0]
     geocoded_ips["remote_ip_org"] = (
         geocoded_ips.remote_ip_org.str.split(" ").str[1:].str.join(sep=" ")
+    )
+
+    # Create a verbose ip location field
+    geocoded_ips["remote_ip_full_location"] = (
+        geocoded_ips.remote_ip_city
+        + ", "
+        + geocoded_ips.remote_ip_region
+        + ", "
+        + geocoded_ips.remote_ip_country
     )
 
     # Add the component fields back to the logs
