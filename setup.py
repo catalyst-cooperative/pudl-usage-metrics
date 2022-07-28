@@ -51,7 +51,7 @@ setup(
             "tox>=3.20,<4",  # Python test environment manager
         ],
         "docs": [
-            "doc8>=0.9,<0.12",  # Ensures clean documentation formatting
+            "doc8>=0.9,<1.1",  # Ensures clean documentation formatting
             "sphinx>=4,<6",  # The default Python documentation redering engine
             "sphinx-autoapi>=1.8,<2",  # Generates documentation from docstrings
             "sphinx-issues>=1.2,<4.0",  # Allows references to GitHub issues
@@ -61,7 +61,7 @@ setup(
         "tests": [
             "bandit>=1.6,<2",  # Checks code for security issues
             "coverage>=5.3,<7",  # Lets us track what code is being tested
-            "doc8>=0.9,<0.12",  # Ensures clean documentation formatting
+            "doc8>=0.9,<1.1",  # Ensures clean documentation formatting
             "flake8>=4,<5",  # A framework for linting & static analysis
             "flake8-builtins>=1.5,<2",  # Avoid shadowing Python built-in names
             "flake8-colors>=0.1,<0.2",  # Produce colorful error / warning output
