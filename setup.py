@@ -30,7 +30,7 @@ setup(
         "sqlalchemy>=1.4,<2",
         "dagster~=0.15.0",
         "dagit~=0.15.0",
-        "dagster-pandera~=0.15.0",
+        "dagster-pandera>=0.15,<0.17",
         "pandas-gbq~=0.17.0",
         "pydata-google-auth>=1.3,<1.5",
         "jupyterlab>=3.2.8,<3.5.0",
