@@ -40,7 +40,7 @@ setup(
         "matplotlib~=3.5.1",
         "pytest~=7.1.1",
         "pg8000~=1.29.1",
-        "google-cloud-storage~=2.4.0",
+        "google-cloud-storage>=2.4,<2.8",
         "cloud-sql-python-connector[pg8000]>=0.6.2,<0.8.0",
     ],
     extras_require={
