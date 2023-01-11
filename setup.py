@@ -41,7 +41,7 @@ setup(
         "pytest~=7.1.1",
         "pg8000~=1.29.1",
         "google-cloud-storage~=2.4.0",
-        "cloud-sql-python-connector[pg8000]>=0.6.2,<0.8.0",
+        "cloud-sql-python-connector[pg8000]>=0.6.2,<1.2.0",
     ],
     extras_require={
         "dev": [
