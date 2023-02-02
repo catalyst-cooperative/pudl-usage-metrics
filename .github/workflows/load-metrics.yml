@@ -46,7 +46,7 @@ jobs:
 
       - name: Get GitHub Action runner's IP Address
         id: ip
-        uses: haythem/public-ip@v1.2
+        uses: haythem/public-ip@v1.3
 
       - name: Whitelist Github Action and Superset IPs
         run: |
