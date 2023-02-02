@@ -28,9 +28,9 @@ setup(
     install_requires=[
         "pandas>=1.4,<1.5",
         "sqlalchemy>=1.4,<2",
-        "dagster~=0.15.0",
+        "dagster>=0.15,<1.2",
         "dagit~=0.15.0",
-        "dagster-pandera~=0.15.0",
+        "dagster-pandera>=0.15,<0.18",
         "pandas-gbq~=0.17.0",
         "pydata-google-auth>=1.3,<1.5",
         "jupyterlab>=3.2.8,<3.5.0",
@@ -40,8 +40,8 @@ setup(
         "matplotlib~=3.5.1",
         "pytest~=7.1.1",
         "pg8000~=1.29.1",
-        "google-cloud-storage~=2.4.0",
-        "cloud-sql-python-connector[pg8000]>=0.6.2,<0.8.0",
+        "cloud-sql-python-connector[pg8000]>=0.6.2,<1.2.0",
+        "google-cloud-storage>=2.4,<2.8",
     ],
     extras_require={
         "dev": [
@@ -62,7 +62,7 @@ setup(
             "bandit>=1.6,<2",  # Checks code for security issues
             "coverage>=5.3,<7",  # Lets us track what code is being tested
             "doc8>=0.9,<1.1",  # Ensures clean documentation formatting
-            "flake8>=4,<5",  # A framework for linting & static analysis
+            "flake8>=4,<7",  # A framework for linting & static analysis
             "flake8-builtins>=1.5,<2",  # Avoid shadowing Python built-in names
             "flake8-colors>=0.1,<0.2",  # Produce colorful error / warning output
             "flake8-docstrings>=1.5,<2",  # Ensure docstrings are formatted well

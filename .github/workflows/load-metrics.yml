@@ -20,12 +20,12 @@ jobs:
 
       # Authentication via credentials json
       - id: "auth"
-        uses: "google-github-actions/auth@v0"
+        uses: "google-github-actions/auth@v1"
         with:
           credentials_json: "${{ secrets.GCP_SA_KEY }}"
 
       - name: Set up conda environment for testing
-        uses: conda-incubator/setup-miniconda@v2.1.1
+        uses: conda-incubator/setup-miniconda@v2.2.0
         with:
           miniforge-variant: Mambaforge
           miniforge-version: latest
@@ -46,7 +46,7 @@ jobs:
 
       - name: Get GitHub Action runner's IP Address
         id: ip
-        uses: haythem/public-ip@v1.2
+        uses: haythem/public-ip@v1.3
 
       - name: Whitelist Github Action and Superset IPs
         run: |
