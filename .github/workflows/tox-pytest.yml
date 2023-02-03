@@ -5,6 +5,9 @@ on: [push, pull_request]
 jobs:
   ci-test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
 
@@ -33,11 +36,13 @@ jobs:
           conda config --show
           printenv | sort
 
-      # Authentication via credentials json
       - name: Authenticate gcloud
         uses: "google-github-actions/auth@v1"
+        continue-on-error: true
         with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+          workload_identity_provider: "projects/345950277072/locations/global/workloadIdentityPools/gh-actions-pool/providers/gh-actions-provider"
+          service_account: "tox-pytest-github-action@catalyst-cooperative-pudl.iam.gserviceaccount.com"
+          create_credentials_file: true
 
       - name: Run pytest
         env:
@@ -60,6 +65,7 @@ jobs:
     steps:
       - name: Inform the Codemonkeys
         uses: 8398a7/action-slack@v3
+        continue-on-error: true
         with:
           status: custom
           fields: workflow,job,commit,repo,ref,author,took
