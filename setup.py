@@ -29,7 +29,7 @@ setup(
         "pandas>=1.4,<1.5",
         "sqlalchemy>=1.4,<2",
         "dagster>=0.15,<1.2",
-        "dagit~=0.15.0",
+        "dagit>=0.15,<1.2",
         "dagster-pandera>=0.15,<0.18",
         "pandas-gbq~=0.17.0",
         "pydata-google-auth>=1.3,<1.5",
