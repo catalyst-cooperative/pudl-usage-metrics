@@ -38,7 +38,6 @@ jobs:
 
       - name: Authenticate gcloud
         uses: "google-github-actions/auth@v1"
-        continue-on-error: true
         with:
           workload_identity_provider: "projects/345950277072/locations/global/workloadIdentityPools/gh-actions-pool/providers/gh-actions-provider"
           service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
