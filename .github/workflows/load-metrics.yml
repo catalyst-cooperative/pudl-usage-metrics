@@ -3,7 +3,7 @@ name: load-metrics
 on:
   workflow_dispatch:
   schedule:
-    - cron: "15 0 * * *" # Every day at 12:15 AM UTC
+    - cron: "14 0 * * *" # Every day at 12:14 AM UTC
 
 env:
   PRESET_IP1: 44.193.153.196
@@ -13,6 +13,9 @@ env:
 jobs:
   load-metrics:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v3
         with:
@@ -22,7 +25,9 @@ jobs:
       - id: "auth"
         uses: "google-github-actions/auth@v1"
         with:
-          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+          workload_identity_provider: "projects/345950277072/locations/global/workloadIdentityPools/gh-actions-pool/providers/gh-actions-provider"
+          service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
+          create_credentials_file: true
 
       - name: Set up conda environment for testing
         uses: conda-incubator/setup-miniconda@v2.2.0
