@@ -26,7 +26,7 @@ setup(
     # In order for the dependabot to update versions, they must be listed here.
     # Use the format package_name>=x,<y", Included packages are just examples:
     install_requires=[
-        "pandas>=1.4,<1.5",
+        "pandas>=1.4,<2.1",
         "sqlalchemy>=1.4,<2",
         "dagster>=0.15,<1.2",
         "dagit>=0.15,<1.3",
