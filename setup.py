@@ -27,7 +27,7 @@ setup(
     # Use the format package_name>=x,<y", Included packages are just examples:
     install_requires=[
         "pandas>=1.4,<1.5",
-        "sqlalchemy>=1.4,<2",
+        "sqlalchemy>=1.4,<3",
         "dagster>=0.15,<1.2",
         "dagit>=0.15,<1.3",
         "dagster-pandera>=0.15,<0.18",
