@@ -36,7 +36,7 @@ setup(
         "jupyterlab>=3.2.8,<3.5.0",
         "psycopg2~=2.9.3",
         "ipinfo~=4.2.1",
-        "joblib~=1.1.0",
+        "joblib>=1.1,<1.4",
         "matplotlib~=3.5.1",
         "pytest~=7.1.1",
         "pg8000~=1.29.1",
