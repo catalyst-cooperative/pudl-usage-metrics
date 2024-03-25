@@ -1,4 +1,5 @@
 """General utility functions for cleaning usage metrics data."""
+
 from __future__ import annotations
 
 import os
