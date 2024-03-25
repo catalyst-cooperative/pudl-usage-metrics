@@ -1,4 +1,5 @@
 """Dagster ops for datasette logs."""
+
 import json
 
 import google.auth

@@ -7,6 +7,7 @@ Note: Eventually this script should be deprecated in
 favor of having a long running dagster instance handle
 schedules and job launching.
 """
+
 import logging
 from datetime import datetime, timezone
 

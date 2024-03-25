@@ -1,4 +1,5 @@
 """Dagster ops for intake logs."""
+
 from io import BytesIO
 
 import google.auth
