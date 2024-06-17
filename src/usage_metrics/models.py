@@ -1,4 +1,5 @@
 """SQLAlchemy models for usage_metrics database."""
+
 from sqlalchemy import (
     BigInteger,
     Boolean,
