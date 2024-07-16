@@ -41,11 +41,31 @@ def extract(context) -> pd.DataFrame:
     start_date = context.op_config["start_date"]
     end_date = context.op_config["end_date"]
 
-    raw_logs = pandas_gbq.read_gbq(
+    sql = (
         "SELECT * FROM `datasette_logs.run_googleapis_com_requests`"
-        f" WHERE DATE(timestamp) >= '{start_date}' AND DATE(timestamp) < '{end_date}'",
-        project_id=project_id,
-        credentials=credentials,
+        " WHERE DATE(timestamp) >= '@start_date' AND DATE(timestamp) < '@end_date'"
+    )
+
+    query_config = {
+        "query": {
+            "parameterMode": "NAMED",
+            "queryParameters": [
+                {
+                    "name": "start_date",
+                    "parameterType": {"type": "STRING"},
+                    "parameterValue": {"value": str(start_date)},
+                },
+                {
+                    "name": "end_date",
+                    "parameterType": {"type": "STRING"},
+                    "parameterValue": {"value": str(end_date)},
+                },
+            ],
+        }
+    }
+
+    raw_logs = pandas_gbq.read_gbq(
+        sql, project_id=project_id, credentials=credentials, configuration=query_config
     )
     context.log.info(raw_logs.timestamp.describe())
     context.log.info(raw_logs.shape)

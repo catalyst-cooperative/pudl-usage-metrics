@@ -47,7 +47,7 @@ class PostgresManager:
             table_name: the name of the database table to append to.
         """
         assert (
-            table_name in usage_metrics_metadata.tables.keys()
+            table_name in usage_metrics_metadata.tables
         ), f"""{table_name} does not have a database schema defined.
             Create a schema one in usage_metrics.models."""
 
