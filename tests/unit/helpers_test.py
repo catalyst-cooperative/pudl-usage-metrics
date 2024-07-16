@@ -19,6 +19,19 @@ def test_geocode_ip() -> None:
         "city": "Mountain View",
         "region": "California",
         "country": "US",
+        "continent": {
+            'code': 'NA',
+            'name': 'North America',
+        },
+        'country_currency': {
+           'code': 'USD',
+           'symbol': '$',
+        },
+        'country_flag': {
+           'emoji': '🇺🇸',
+           'unicode': 'U+1F1FA U+1F1F8',
+        },
+       'country_flag_url': 'https://cdn.ipinfo.io/static/images/countries-flags/US.svg',
         "loc": "37.4056,-122.0775",
         "org": "AS15169 Google LLC",
         "postal": "94043",
@@ -26,6 +39,8 @@ def test_geocode_ip() -> None:
         "country_name": "United States",
         "latitude": "37.4056",
         "longitude": "-122.0775",
+        "isEU": False,
+        
     }
 
 
