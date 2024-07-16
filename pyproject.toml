@@ -1,7 +1,178 @@
-[tool.black]
-line-length = 88
-target-version = ["py38", "py39", "py310"]
-include = "\\.pyi?$"
+[project]
+name = "pudl_usage_metrics"
+version = "0.1.0"
+authors = [{name = "PUDL", email = "pudl@catalyst.coop"}]
+requires-python = ">=3.8,<3.11"
 
-[tool.isort]
-profile = "black"
+dependencies = [
+    "pandas>=1.4,<2.3",
+    "sqlalchemy>=2",
+    "dagster>=1.7",
+    "pandas-gbq>=0.23.1",
+    "pydata-google-auth>=1.8.2",
+    "jupyterlab>=4.2.3",
+    "psycopg2>=2.9.9",
+    "ipinfo>=5.0.1",
+    "joblib>=1.4.2",
+    "matplotlib>=3.9.1",
+    "pytest>=8",
+    "pg8000>=1.31.1",
+    "cloud-sql-python-connector[pg8000]>=1.11.0",
+    "google-cloud-storage>=2.17",
+    ]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+]
+
+
+[project.optional-dependencies]
+dev = [
+    "black>=22,<23",  # A deterministic code formatter
+    "isort>=5,<6",  # Standardized import sorting
+    "twine>=3.3,<5.0",  # Used to make releases to PyPI
+    "tox>=3.20,<4",  # Python test environment manager
+]
+
+docs = [
+    "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
+    "sphinx>=4,<6",  # The default Python documentation redering engine
+    "sphinx-autoapi>=1.8,<3",  # Generates documentation from docstrings
+    "sphinx-issues>=1.2,<4.0",  # Allows references to GitHub issues
+    "sphinx-rtd-dark-mode>=1.2,<2",  # Allow user to toggle light/dark mode
+    "sphinx-rtd-theme>=1,<2",  # Standard Sphinx theme for Read The Docs
+]
+
+tests = [
+    "coverage>=7,<7.7",  # Lets us track what code is being tested
+    "doc8>=1.1,<1.2",  # Ensures clean documentation formatting
+    "pre-commit>=3,<3.8",  # Allow us to run pre-commit hooks in testing
+    "pydocstyle>=6,<6.4",  # Style guidelines for Python documentation
+    "pytest>=8,<8.3",  # Our testing framework
+    "pytest-asyncio>=0.20,<0.24",  # Test async functions
+    "pytest-console-scripts>=1.1,<1.5",  # Allow automatic testing of scripts
+    "pytest-cov>=5,<5.1",  # Pytest plugin for working with coverage
+    "pytest-mock>=3.0,<3.15",  # Pytest plugin for mocking function calls and objects
+    "ruff>=0.4,<0.6",
+]
+
+[project.scripts]
+pudl_usage_metrics = "pudl_usage_metrics.cli:main"
+
+[build-system]
+requires = [
+    "setuptools>=66",
+]
+build-backend = "setuptools.build_meta"
+
+[tool.doc8]
+max-line-length = 88
+ignore-path = ["docs/_build"]
+
+[tool.pytest.ini_options]
+testpaths = "./"
+filterwarnings = [
+    "ignore:distutils Version classes are deprecated:DeprecationWarning",
+    "ignore:Creating a LegacyVersion:DeprecationWarning:pkg_resources[.*]",
+]
+addopts = "--verbose"
+log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
+log_date_format = "%Y-%m-%d %H:%M:%S"
+log_cli = "true"
+log_cli_level = "INFO"
+doctest_optionflags = [
+    "NORMALIZE_WHITESPACE",
+    "IGNORE_EXCEPTION_DETAIL",
+    "ELLIPSIS",
+]
+
+[tool.ruff]
+# Assume Python 3.12
+target-version = "py312"
+line-length = 88
+indent-width = 4
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint]
+select = [
+    "A", # flake8-builtins
+    # "ARG", # unused arguments
+    # "B",  # flake8-bugbear
+    "C",   # Limit cyclomatic complexity using mccabe
+    "D",   # pydocstyle errors
+    "E",   # pycodestyle errors
+    "EXE", # executable file issues
+    # "ERA", # eradicate: find commented out code
+    "F",   # pyflakes
+    "I",   # isort
+    "ISC", # implicit string concatenation
+    "N",   # pep8-naming
+    "NPY", # NumPy specific checks
+    "PD",  # pandas checks
+    "PGH", # pygrep-hooks
+    # "PL",  # pylint
+    # "PT",  # pytest style
+    "PTH", # use pathlib
+    "Q",   # flake8-quotes
+    "RET", # check return values
+    "RSE", # unnecessary parenthises on raised exceptions
+    "S",   # flake8-bandit
+    "SIM", # flake8-simplify
+    # "T",   # print statements found
+    "UP", # pyupgrade (use modern python syntax)
+    "W",  # pycodestyle warnings
+]
+
+ignore = [
+    "D401",   # Require imperative mood in docstrings.
+    "D417",
+    "E501",   # Overlong lines.
+    "E203",   # Space before ':' (black recommends to ignore)
+    "PD003",  # Use of isna rather than isnull
+    "PD004",  # Use of notna rather than notnull
+    "PD008",  # Use of df.at[] rather than df.loc[]
+    "PD010",  # Use of df.stack()
+    "PD013",  # Use of df.unstack()
+    "PD015",  # Use of pd.merge() rather than df.merge()
+    "PD901",  # df as variable name
+    "RET504", # Ignore unnecessary assignment before return
+    "S101",   # Use of assert
+]
+
+# Don't automatically concatenate strings -- sometimes we forget a comma!
+unfixable = ["ISC"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]    # Ignore unused imports
+"tests/*" = ["D"]
+
+[tool.ruff.lint.pep8-naming]
+# Allow Pydantic's `@validator` decorator to trigger class method treatment.
+classmethod-decorators = ["pydantic.validator", "pydantic.root_validator"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ferc_xbrl_extractor"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.flake8-quotes]
+docstring-quotes = "double"
+inline-quotes = "double"
+multiline-quotes = "double"
