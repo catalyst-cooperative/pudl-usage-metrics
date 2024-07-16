@@ -5,7 +5,6 @@ from pathlib import Path
 import pandas as pd
 import sqlalchemy as sa
 from dagster import Field, resource
-
 from usage_metrics.models import usage_metrics_metadata
 
 SQLITE_PATH = Path(__file__).parents[3] / "data/usage_metrics.db"
@@ -15,8 +14,7 @@ class SQLiteManager:
     """Manage connection with SQLite Database."""
 
     def __init__(self, clobber: bool = False, db_path: Path = SQLITE_PATH) -> None:
-        """
-        Initialize SQLiteManager object.
+        """Initialize SQLiteManager object.
 
         Args:
             clobber: Clobber and recreate the database if True.
@@ -33,8 +31,7 @@ class SQLiteManager:
         self.clobber = clobber
 
     def get_engine(self) -> sa.engine.Engine:
-        """
-        Get SQLAlchemy engine to interact with the db.
+        """Get SQLAlchemy engine to interact with the db.
 
         Returns:
             engine: SQLAlchemy engine for the sqlite db.
@@ -42,8 +39,7 @@ class SQLiteManager:
         return self.engine
 
     def append_df_to_table(self, df: pd.DataFrame, table_name: str) -> None:
-        """
-        Append a dataframe to a table in the db.
+        """Append a dataframe to a table in the db.
 
         Args:
             df: The dataframe to append.

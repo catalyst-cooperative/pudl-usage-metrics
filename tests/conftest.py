@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-
 from usage_metrics.resources.sqlite import SQLiteManager
 
 

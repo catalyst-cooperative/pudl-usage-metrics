@@ -13,8 +13,7 @@ from usage_metrics.ops.datasette import geocode_ips
 
 
 def create_rename_mapping(raw_logs: pd.DataFrame) -> dict:
-    """
-    Create rename column mappings from raw intake logs.
+    """Create rename column mappings from raw intake logs.
 
     Args:
         raw_logs: Dataframe of raw Intake logs.
@@ -42,8 +41,7 @@ def create_rename_mapping(raw_logs: pd.DataFrame) -> dict:
 
 @op(out={"raw_logs": Out(is_required=False)})
 def extract(context) -> pd.DataFrame:
-    """
-    Extract intake logs from Google Cloud Storage.
+    """Extract intake logs from Google Cloud Storage.
 
     Returns:
         raw_logs: Dataframe of intake logs.

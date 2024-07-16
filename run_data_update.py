@@ -1,5 +1,4 @@
-"""
-Run the most recent partition for every job in the gcp_usage_metrics dagster repository.
+"""Run the most recent partition for every job in the gcp_usage_metrics dagster repository.
 
 This script runs daily in the load-metrics Github Action.
 
@@ -9,11 +8,10 @@ schedules and job launching.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import coloredlogs
 from dagster import RepositoryDefinition
-
 from usage_metrics import repository
 from usage_metrics.resources.postgres import postgres_manager
 
@@ -24,7 +22,7 @@ def main():
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
     coloredlogs.install(fmt=log_format, level="INFO", logger=usage_metrics_logger)
 
-    today = datetime.now(tz=timezone.utc).date()
+    today = datetime.now(tz=UTC).date()
 
     # Collect GCP jobs
     gcp_jobs = []

@@ -1,7 +1,6 @@
 """Test usage metrics dagster jobs."""
 
 import pandas as pd
-
 from usage_metrics.jobs.intake import process_intake_logs_locally
 
 
