@@ -56,8 +56,9 @@ def main():
         # The start_date is inclusive and the end_date is exclusive.
         if time_window.end.date() == today:
             usage_metrics_logger.info(
-                f"""Processing partition: ({time_window.start.date()},
-                {time_window.end.date()}) for {job.name}."""
+                f"""Processing partition:
+                ({time_window.start.date()}, {time_window.end.date()})
+                for {job.name}."""
             )
 
             job.execute_in_process(partition_key=most_recent_partition.name)
