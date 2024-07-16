@@ -53,7 +53,7 @@ jobs:
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
         run: |
-          mamba run -n pudl-usage-metrics pytest
+          conda run -n pudl-usage-metrics pytest
 
       - name: Upload test coverage report to CodeCov
         uses: codecov/codecov-action@v3
