@@ -1,4 +1,5 @@
 """Test usage metrics dagster jobs."""
+
 import pandas as pd
 import pytest
 import sqlalchemy as sa

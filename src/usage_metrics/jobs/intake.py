@@ -1,4 +1,5 @@
 """Intake logs ETL dagster jobs."""
+
 from datetime import datetime
 
 from dagster import daily_partitioned_config, graph, in_process_executor

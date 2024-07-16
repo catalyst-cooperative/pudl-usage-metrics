@@ -7,6 +7,7 @@ Note: Eventually this script should be deprecated in
 favor of having a long running dagster instance handle
 schedules and job launching.
 """
+
 import logging
 from datetime import datetime, timezone
 
@@ -30,7 +31,7 @@ def main():
 
     for attr_name in dir(repository):
         attr = getattr(repository, attr_name)
-        if type(attr) == RepositoryDefinition:
+        if isinstance(attr, RepositoryDefinition):
             for job in attr.get_all_jobs():
                 if job.resource_defs["database_manager"] == postgres_manager:
                     gcp_jobs.append(job)
