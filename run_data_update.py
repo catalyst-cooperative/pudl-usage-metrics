@@ -31,7 +31,7 @@ def main():
 
     for attr_name in dir(repository):
         attr = getattr(repository, attr_name)
-        if type(attr) == RepositoryDefinition:
+        if isinstance(attr, RepositoryDefinition):
             for job in attr.get_all_jobs():
                 if job.resource_defs["database_manager"] == postgres_manager:
                     gcp_jobs.append(job)
