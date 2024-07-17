@@ -68,7 +68,7 @@ setup(
             "flake8-use-fstring>=1,<2",  # Highlight use of old-style string formatting
             "mccabe>=0.6,<0.8",  # Checks that code isn't overly complicated
             "pep8-naming>=0.12,<0.14",  # Require PEP8 compliant variable names
-            "pre-commit>=2.9,<3",  # Allow us to run pre-commit hooks in testing
+            "pre-commit>=2.9,<4",  # Allow us to run pre-commit hooks in testing
             "pydocstyle>=5.1,<7",  # Style guidelines for Python documentation
             "pytest>=6.2,<8",  # Our testing framework
             "pytest-console-scripts>=1.1,<2",  # Allow automatic testing of scripts
