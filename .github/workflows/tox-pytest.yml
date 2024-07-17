@@ -56,7 +56,7 @@ jobs:
           conda run -n pudl-usage-metrics pytest
 
       - name: Upload test coverage report to CodeCov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
 
   ci-notify:
     runs-on: ubuntu-latest

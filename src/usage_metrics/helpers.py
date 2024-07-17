@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -97,7 +97,7 @@ def unpack_json_series(series: pd.Series) -> pd.DataFrame:
 
 
 def str_to_datetime(
-    date: str, fmt: str = "%Y-%m-%d", tzinfo: timezone = UTC
+    date: str, fmt: str = "%Y-%m-%d", tzinfo: timezone = timezone.utc
 ) -> datetime:
     """Convert a string to a date."""
     return datetime.strptime(date, fmt).replace(tzinfo=tzinfo)
