@@ -2,10 +2,10 @@
 name = "pudl_usage_metrics"
 version = "0.1.0"
 authors = [{name = "PUDL", email = "pudl@catalyst.coop"}]
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.12,<3.13"
 
 dependencies = [
-    "pandas>=1.4,<2.3",
+    "pandas>=2.2,<2.3",
     "sqlalchemy>=2",
     "dagster>=1.7",
     "pandas-gbq>=0.23.1",
@@ -54,13 +54,12 @@ docs = [
 tests = [
     "coverage>=5.3,<8",  # Lets us track what code is being tested
     "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
-    "pre-commit>=2.9,<4",  # Allow us to run pre-commit hooks in testing
+    "pre-commit>=3.7,<4",  # Allow us to run pre-commit hooks in testing
     "pydocstyle>=5.1,<7",  # Style guidelines for Python documentation
-    "pytest>=6.2,<8",  # Our testing framework
     "pytest-asyncio>=0.20,<0.24",  # Test async functions
-    "pytest-console-scripts>=1.1,<2",  # Allow automatic testing of scripts
-    "pytest-cov>=2.10,<4.01",  # Pytest plugin for working with coverage
-    "pytest-mock>=3.0,<3.15",  # Pytest plugin for mocking function calls and objects
+    "pytest-console-scripts>=1.4.1,<2",  # Allow automatic testing of scripts
+    "pytest-cov>=5.0.0",  # Pytest plugin for working with coverage
+    "pytest-mock>=3.14,<3.15",  # Pytest plugin for mocking function calls and objects
     "ruff>=0.4,<0.6",
 ]
 
