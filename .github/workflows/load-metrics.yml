@@ -30,7 +30,7 @@ jobs:
           create_credentials_file: true
 
       - name: Set up conda environment for testing
-        uses: conda-incubator/setup-miniconda@v2.2.0
+        uses: conda-incubator/setup-miniconda@v3.0.4
         with:
           miniforge-variant: Mambaforge
           miniforge-version: latest
