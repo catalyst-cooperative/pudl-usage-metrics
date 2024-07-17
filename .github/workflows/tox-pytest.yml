@@ -47,7 +47,7 @@ jobs:
           service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
           create_credentials_file: true
 
-      - name: Run PyTest
+      - name: Run tox
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
