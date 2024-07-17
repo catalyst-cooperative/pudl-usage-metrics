@@ -28,7 +28,7 @@ jobs:
             channel_priority: strict
 
       - name: Log conda environnment information
-      - run: |
+        run: |
           conda info
           conda list
           conda config --show-sources
