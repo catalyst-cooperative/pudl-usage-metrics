@@ -27,8 +27,8 @@ jobs:
             - defaults
             channel_priority: strict
 
-      - shell: bash -l {0}
-        run: |
+      - name: Log conda environnment information
+      - run: |
           conda info
           conda list
           conda config --show-sources
@@ -44,7 +44,7 @@ jobs:
           service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
           create_credentials_file: true
 
-      - name: Run pytest
+      - name: Run PyTest
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
@@ -53,7 +53,7 @@ jobs:
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
         run: |
-          mamba run -n pudl-usage-metrics pytest
+          tox
 
       - name: Upload test coverage report to CodeCov
         uses: codecov/codecov-action@v4
