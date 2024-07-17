@@ -2,7 +2,7 @@
 name = "pudl_usage_metrics"
 version = "0.1.0"
 authors = [{name = "PUDL", email = "pudl@catalyst.coop"}]
-requires-python = ">=3.8,<3.11"
+requires-python = ">=3.10,<3.13"
 
 dependencies = [
     "pandas>=1.4,<2.3",
@@ -30,7 +30,7 @@ classifiers = [
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.12",
 ]
 
 
@@ -38,28 +38,28 @@ classifiers = [
 dev = [
     "black>=22,<23",  # A deterministic code formatter
     "isort>=5,<6",  # Standardized import sorting
-    "twine>=3.3,<5.0",  # Used to make releases to PyPI
+    "twine>=3.3,<6.0",  # Used to make releases to PyPI
     "tox>=3.20,<4",  # Python test environment manager
 ]
 
 docs = [
     "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
     "sphinx>=4,<6",  # The default Python documentation redering engine
-    "sphinx-autoapi>=1.8,<3",  # Generates documentation from docstrings
-    "sphinx-issues>=1.2,<4.0",  # Allows references to GitHub issues
+    "sphinx-autoapi>=1.8,<4",  # Generates documentation from docstrings
+    "sphinx-issues>=1.2,<5.0",  # Allows references to GitHub issues
     "sphinx-rtd-dark-mode>=1.2,<2",  # Allow user to toggle light/dark mode
     "sphinx-rtd-theme>=1,<2",  # Standard Sphinx theme for Read The Docs
 ]
 
 tests = [
-    "coverage>=7,<7.7",  # Lets us track what code is being tested
-    "doc8>=1.1,<1.2",  # Ensures clean documentation formatting
-    "pre-commit>=3,<3.8",  # Allow us to run pre-commit hooks in testing
-    "pydocstyle>=6,<6.4",  # Style guidelines for Python documentation
-    "pytest>=8,<8.3",  # Our testing framework
+    "coverage>=5.3,<8",  # Lets us track what code is being tested
+    "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
+    "pre-commit>=2.9,<4",  # Allow us to run pre-commit hooks in testing
+    "pydocstyle>=5.1,<7",  # Style guidelines for Python documentation
+    "pytest>=6.2,<8",  # Our testing framework
     "pytest-asyncio>=0.20,<0.24",  # Test async functions
-    "pytest-console-scripts>=1.1,<1.5",  # Allow automatic testing of scripts
-    "pytest-cov>=5,<5.1",  # Pytest plugin for working with coverage
+    "pytest-console-scripts>=1.1,<2",  # Allow automatic testing of scripts
+    "pytest-cov>=2.10,<4.01",  # Pytest plugin for working with coverage
     "pytest-mock>=3.0,<3.15",  # Pytest plugin for mocking function calls and objects
     "ruff>=0.4,<0.6",
 ]
