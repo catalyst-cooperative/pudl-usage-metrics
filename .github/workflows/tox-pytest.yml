@@ -48,6 +48,14 @@ jobs:
           service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
           create_credentials_file: true
 
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+        with:
+          version: ">= 363.0.0"
+
+      - name: "Print GCloud config"
+        run: "gcloud info"
+
       - name: Run tox
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
