@@ -70,7 +70,7 @@ setup(
             "pep8-naming>=0.12,<0.14",  # Require PEP8 compliant variable names
             "pre-commit>=2.9,<4",  # Allow us to run pre-commit hooks in testing
             "pydocstyle>=5.1,<7",  # Style guidelines for Python documentation
-            "pytest>=6.2,<8",  # Our testing framework
+            "pytest>=6.2,<9",  # Our testing framework
             "pytest-console-scripts>=1.1,<2",  # Allow automatic testing of scripts
             "pytest-cov>=2.10,<4.0",  # Pytest plugin for working with coverage
             "tox>=3.20,<4",  # Python test environment manager
