@@ -5,11 +5,14 @@ on: [push, pull_request]
 jobs:
   ci-test:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
     strategy:
       fail-fast: false
+    permissions:
+      contents: "read"
+      id-token: "write"
+    defaults:
+      run:
+        shell: bash -l {0}
 
     steps:
       - uses: actions/checkout@v4
@@ -17,33 +20,43 @@ jobs:
           fetch-depth: 2
 
       - name: Set up conda environment for testing
-        uses: conda-incubator/setup-miniconda@v3.0.4
+        uses: mamba-org/setup-micromamba@v1
         with:
-          miniforge-variant: Mambaforge
-          miniforge-version: latest
-          use-mamba: true
-          mamba-version: "*"
-          channels: conda-forge,defaults
-          channel-priority: true
-          python-version: "3.10"
-          activate-environment: pudl-usage-metrics
           environment-file: environment.yml
-      - shell: bash -l {0}
+          cache-environment: true
+          cache-environment-key: environment-${{ hashFiles('pyproject.toml') }}
+          condarc: |
+            channels:
+            - conda-forge
+            - defaults
+            channel_priority: strict
+
+      - name: Log conda environnment information
         run: |
-          mamba info
-          mamba list
+          conda info
+          conda list
           conda config --show-sources
           conda config --show
           printenv | sort
 
       - name: Authenticate gcloud
+        id: gcloud-auth
+        continue-on-error: true
         uses: "google-github-actions/auth@v2"
         with:
           workload_identity_provider: "projects/345950277072/locations/global/workloadIdentityPools/gh-actions-pool/providers/gh-actions-provider"
           service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
           create_credentials_file: true
 
-      - name: Run pytest
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+        with:
+          version: ">= 363.0.0"
+
+      - name: "Print GCloud config"
+        run: "gcloud info"
+
+      - name: Run tox
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
@@ -52,7 +65,7 @@ jobs:
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
         run: |
-          mamba run -n pudl-usage-metrics pytest
+          tox
 
       - name: Upload test coverage report to CodeCov
         uses: codecov/codecov-action@v4

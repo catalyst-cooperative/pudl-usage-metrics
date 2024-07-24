@@ -29,8 +29,7 @@ DATA_PATHS = ["/pudl", "/ferc1", "pudl.db", "ferc1.db", ".json", ".csv"]
 
 @op(out={"raw_logs": Out(is_required=False)})
 def extract(context) -> pd.DataFrame:
-    """
-    Extract Datasette logs from BigQuery instance.
+    """Extract Datasette logs from BigQuery instance.
 
     Returns:
         raw_logs: Uncleaned extracted datasette logs.
@@ -42,11 +41,31 @@ def extract(context) -> pd.DataFrame:
     start_date = context.op_config["start_date"]
     end_date = context.op_config["end_date"]
 
-    raw_logs = pandas_gbq.read_gbq(
+    sql = (
         "SELECT * FROM `datasette_logs.run_googleapis_com_requests`"
-        f" WHERE DATE(timestamp) >= '{start_date}' AND DATE(timestamp) < '{end_date}'",
-        project_id=project_id,
-        credentials=credentials,
+        " WHERE DATE(timestamp) >= '@start_date' AND DATE(timestamp) < '@end_date'"
+    )
+
+    query_config = {
+        "query": {
+            "parameterMode": "NAMED",
+            "queryParameters": [
+                {
+                    "name": "start_date",
+                    "parameterType": {"type": "STRING"},
+                    "parameterValue": {"value": str(start_date)},
+                },
+                {
+                    "name": "end_date",
+                    "parameterType": {"type": "STRING"},
+                    "parameterValue": {"value": str(end_date)},
+                },
+            ],
+        }
+    }
+
+    raw_logs = pandas_gbq.read_gbq(
+        sql, project_id=project_id, credentials=credentials, configuration=query_config
     )
     context.log.info(raw_logs.timestamp.describe())
     context.log.info(raw_logs.shape)
@@ -69,8 +88,7 @@ def extract(context) -> pd.DataFrame:
 
 @op()
 def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
-    """
-    Unpack http_request dict keys into separate fields and remove duplicate logs.
+    """Unpack http_request dict keys into separate fields and remove duplicate logs.
 
     The http_request column contains a dictionary with useful data like
     remote_ip. This op unpacks the dictionary keys into separate columns.
@@ -79,6 +97,7 @@ def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
 
     Args:
         raw_logs: Uncleaned extracted datasette logs.
+
     Return:
         unpacked_logs: Logs with http_request data unpacked into columns.
     """
@@ -118,8 +137,7 @@ def unpack_httprequests(raw_logs: pd.DataFrame) -> pd.DataFrame:
 
 @op()
 def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Parse the request url into component parts.
+    """Parse the request url into component parts.
 
     Datasette request_urls contain information like data source
     (pudl, ferc) and which tables people are accessing. This op
@@ -128,6 +146,7 @@ def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
 
     Args:
         df: datasette logs with unpacked http_request fields.
+
     Returns:
         parsed_logs: logs with new fields for each url component.
     """
@@ -156,14 +175,14 @@ def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
 
 @op(retry_policy=RetryPolicy(max_retries=5))
 def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Geocode the ip addresses using ipinfo API.
+    """Geocode the ip addresses using ipinfo API.
 
     This op geocodes the users ip address to get useful
     information like ip location and organization.
 
     Args:
         df: dataframe with a remote_ip column.
+
     Returns:
         geocoded_logs: dataframe with ip location info columns.
     """
@@ -203,8 +222,7 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
 
 @op(required_resource_keys={"database_manager"})
 def load(context, clean_datasette_logs: pd.DataFrame) -> None:
-    """
-    Filter the useful data request logs.
+    """Filter the useful data request logs.
 
     Most requests are for js and css assets, we are more interested in
     which paths folks are requesting. This asset contains requests for

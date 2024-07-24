@@ -13,8 +13,7 @@ from usage_metrics.ops.datasette import geocode_ips
 
 
 def create_rename_mapping(raw_logs: pd.DataFrame) -> dict:
-    """
-    Create rename column mappings from raw intake logs.
+    """Create rename column mappings from raw intake logs.
 
     Args:
         raw_logs: Dataframe of raw Intake logs.
@@ -42,8 +41,7 @@ def create_rename_mapping(raw_logs: pd.DataFrame) -> dict:
 
 @op(out={"raw_logs": Out(is_required=False)})
 def extract(context) -> pd.DataFrame:
-    """
-    Extract intake logs from Google Cloud Storage.
+    """Extract intake logs from Google Cloud Storage.
 
     Returns:
         raw_logs: Dataframe of intake logs.
@@ -64,10 +62,13 @@ def extract(context) -> pd.DataFrame:
     # GCP also saves storage logs every day.
     # We are only interested in processing the usage logs.
     for blob in tqdm(bucket.list_blobs()):
-        if "usage" in blob.name:
+        if (
+            ("usage" in blob.name)
+            and (blob.time_created >= start_date)
+            and (blob.time_created < end_date)
+        ):
             # Get the batch of logs for the given partition.
-            if blob.time_created >= start_date and blob.time_created < end_date:
-                logs.append(pd.read_csv(BytesIO(blob.download_as_bytes())))
+            logs.append(pd.read_csv(BytesIO(blob.download_as_bytes())))
 
     # Skip downstream steps if there are no logs to process.
     if not logs:

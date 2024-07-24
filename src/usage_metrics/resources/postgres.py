@@ -5,7 +5,6 @@ import os
 import pandas as pd
 import sqlalchemy as sa
 from dagster import Field, resource
-
 from usage_metrics.models import usage_metrics_metadata
 
 
@@ -21,8 +20,7 @@ class PostgresManager:
         port: str,
         clobber: bool = False,
     ) -> None:
-        """
-        Initialize PostgresManager object.
+        """Initialize PostgresManager object.
 
         Args:
             clobber: Clobber and recreate the database if True.
@@ -34,8 +32,7 @@ class PostgresManager:
         usage_metrics_metadata.create_all(self.engine)
 
     def get_engine(self) -> sa.engine.Engine:
-        """
-        Get SQLAlchemy engine to interact with the db.
+        """Get SQLAlchemy engine to interact with the db.
 
         Returns:
             engine: SQLAlchemy engine for the sqlite db.
@@ -43,15 +40,14 @@ class PostgresManager:
         return self.engine
 
     def append_df_to_table(self, df: pd.DataFrame, table_name: str) -> None:
-        """
-        Append a dataframe to a table in the db.
+        """Append a dataframe to a table in the db.
 
         Args:
             df: The dataframe to append.
             table_name: the name of the database table to append to.
         """
         assert (
-            table_name in usage_metrics_metadata.tables.keys()
+            table_name in usage_metrics_metadata.tables
         ), f"""{table_name} does not have a database schema defined.
             Create a schema one in usage_metrics.models."""
 

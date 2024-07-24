@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -20,14 +20,14 @@ REQUEST_TIMEOUT = 10
 
 @ip_address_cache.cache
 def geocode_ip(ip_address: str) -> dict:
-    """
-    Geocode an ip address using ipinfo API.
+    """Geocode an ip address using ipinfo API.
 
     This function uses joblib to cache api calls so we only have to
     call the api once for a given ip address. We get 50k free api calls.
 
     Args:
         ip_address: An ip address.
+
     Return:
         details: Ip location and org information.
     """
@@ -44,11 +44,11 @@ def geocode_ip(ip_address: str) -> dict:
 
 
 def parse_request_url(url: str) -> dict:
-    """
-    Create dictionary of request components.
+    """Create dictionary of request components.
 
     Args:
         url: A generic url.
+
     Returns:
         The parsed URL components.
     """
@@ -62,11 +62,11 @@ def parse_request_url(url: str) -> dict:
 
 
 def convert_camel_case_columns_to_snake_case(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Convert CamelCase columns of a dataframe to snake_case.
+    """Convert CamelCase columns of a dataframe to snake_case.
 
     Args:
         df: A dataframe with CamelCase columns.
+
     Returns:
         df: A dataframe with snake_case columns.
     """
@@ -75,13 +75,13 @@ def convert_camel_case_columns_to_snake_case(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def unpack_json_series(series: pd.Series) -> pd.DataFrame:
-    """
-    Unpack a series containing json records to a DataFrame.
+    """Unpack a series containing json records to a DataFrame.
 
     Expects no more than one json record per series element.
 
     Args:
         series: A pandas series on json records.
+
     Returns:
         unpacked_df: A dataframe where columns are the fields of the json records.
     """
@@ -97,7 +97,7 @@ def unpack_json_series(series: pd.Series) -> pd.DataFrame:
 
 
 def str_to_datetime(
-    date: str, fmt: str = "%Y-%m-%d", tzinfo: timezone = timezone.utc
+    date: str, fmt: str = "%Y-%m-%d", tzinfo: timezone = UTC
 ) -> datetime:
     """Convert a string to a date."""
     return datetime.strptime(date, fmt).replace(tzinfo=tzinfo)
