@@ -165,9 +165,9 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
         geocoded_logs: logs with ip location info columns.
     """
     # Geocode the remote ip addresses
-    context.log.info("Geocoding ip addresses.")
     # Instead of geocoding every log, geocode the distinct ips
-    unique_ips = pd.Series(df.remote_ip.unique())
+    unique_ips = pd.Series(df.remote_ip.unique()).dropna()
+    context.log.info(f"Geocoding {len(unique_ips)} ip addresses.")
     geocoded_ips = unique_ips.apply(lambda ip: geocode_ip(ip))
     geocoded_ips = pd.DataFrame.from_dict(geocoded_ips.to_dict(), orient="index")
     geocoded_ip_column_map = {

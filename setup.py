@@ -26,11 +26,14 @@ setup(
     # In order for the dependabot to update versions, they must be listed here.
     # Use the format package_name>=x,<y", Included packages are just examples:
     install_requires=[
+        "google-cloud-storage>=2.14",
+        "tqdm>=4.66",
         "pandas>=1.4,<1.5",
         "sqlalchemy>=1.4,<2",
         "dagster~=0.15.0",
         "dagit~=0.15.0",
         "dagster-pandera~=0.15.0",
+        "pendulum<3.0",
         "pandas-gbq~=0.17.0",
         "pydata-google-auth>=1.3,<1.5",
         "jupyterlab>=3.2.8,<3.5.0",
