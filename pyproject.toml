@@ -47,7 +47,7 @@ docs = [
     "sphinx-autoapi>=1.8,<4",  # Generates documentation from docstrings
     "sphinx-issues>=1.2,<5.0",  # Allows references to GitHub issues
     "sphinx-rtd-dark-mode>=1.2,<2",  # Allow user to toggle light/dark mode
-    "sphinx-rtd-theme>=1,<2",  # Standard Sphinx theme for Read The Docs
+    "sphinx-rtd-theme>=1,<3",  # Standard Sphinx theme for Read The Docs
 ]
 
 tests = [
