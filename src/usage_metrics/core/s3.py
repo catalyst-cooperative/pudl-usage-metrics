@@ -1,7 +1,12 @@
 """Transform data from S3 logs."""
 
 import pandas as pd
-from dagster import AssetExecutionContext, Definitions, asset
+from dagster import (
+    AssetExecutionContext,
+    WeeklyPartitionsDefinition,
+    asset,
+)
+
 from usage_metrics.ops.datasette import geocode_ips  # MOVE TO HELPER FUNCTION
 
 FIELD_NAMES = [
@@ -34,7 +39,7 @@ FIELD_NAMES = [
 ]
 
 
-@asset
+@asset(partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"))
 def transform_s3_logs(
     context: AssetExecutionContext,
     extract_s3_logs: pd.DataFrame,
@@ -50,11 +55,16 @@ def transform_s3_logs(
     # Name columns
     extract_s3_logs.columns = FIELD_NAMES
 
+    # Drop S3 lifecycle transitions
+    extract_s3_logs = extract_s3_logs.loc[
+        extract_s3_logs.operation != "S3.TRANSITION_INT.OBJECT"
+    ]  # TODO: Do we just want to keep GET requests, or is there any value to keeping everything for now?
+
     # Geocode IPS
     extract_s3_logs["remote_ip"] = extract_s3_logs["remote_ip"].mask(
         extract_s3_logs["remote_ip"].eq("-"), pd.NA
     )  # Mask null IPs
-    geocoded_df = geocode_ips(context, extract_s3_logs)
+    geocoded_df = geocode_ips(extract_s3_logs)
 
     # Convert string to datetime using Pandas
     format_string = "[%d/%b/%Y:%H:%M:%S %z]"
@@ -73,7 +83,4 @@ def transform_s3_logs(
     for field in numeric_fields:
         geocoded_df[field] = pd.to_numeric(geocoded_df[field], errors="coerce")
 
-
-defs = Definitions(
-    assets=[transform_s3_logs],
-)
+    return geocoded_df

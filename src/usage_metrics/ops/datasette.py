@@ -174,7 +174,7 @@ def parse_urls(context, df: pd.DataFrame) -> pd.DataFrame:
 
 
 @op(retry_policy=RetryPolicy(max_retries=5))
-def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
+def geocode_ips(df: pd.DataFrame) -> pd.DataFrame:
     """Geocode the ip addresses using ipinfo API.
 
     This op geocodes the users ip address to get useful
@@ -186,8 +186,6 @@ def geocode_ips(context, df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         geocoded_logs: dataframe with ip location info columns.
     """
-    # Geocode the remote ip addresses
-    context.log.info("Geocoding ip addresses.")
     # Instead of geocoding every log, geocode the distinct ips
     unique_ips = pd.Series(df.remote_ip.unique())
     geocoded_ips = unique_ips.apply(lambda ip: geocode_ip(ip))
