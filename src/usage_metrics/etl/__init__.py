@@ -25,12 +25,10 @@ from usage_metrics.resources.sqlite import SQLiteManager
 
 raw_module_groups = {
     "raw_s3": [usage_metrics.raw.s3],
-    "raw_kaggle": [usage_metrics.raw.kaggle],
 }
 
 core_module_groups = {
     "core_s3": [usage_metrics.core.s3],
-    "core_kaggle": [usage_metrics.core.kaggle],
 }
 
 out_module_groups = {}
@@ -143,13 +141,8 @@ defs: Definitions = Definitions(
         ),
         define_asset_job(
             name="s3_etl",
-            description="This job ETLs S3 usage logs only.",
+            description="This job ETLs logs for S3 usage logs only.",
             selection=AssetSelection.groups("raw_s3", "core_s3"),
-        ),
-        define_asset_job(
-            name="kaggle_etl",
-            description="This job ETLs Kaggle usage logs only.",
-            selection=AssetSelection.groups("raw_kaggle", "core_kaggle"),
         ),
     ],
 )
