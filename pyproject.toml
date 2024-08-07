@@ -7,7 +7,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "pandas>=2.2,<2.3",
     "sqlalchemy>=2",
-    "dagster>=1.7.15, <1.8",
+    "dagster>=1.7.15, <1.7.17",
     "dagster-webserver>=1.7.15,<1.8",
     "pandas-gbq>=0.23.1",
     "pydata-google-auth>=1.8.2",
@@ -15,7 +15,7 @@ dependencies = [
     "psycopg2>=2.9.9",
     "ipinfo>=5.0.1",
     "joblib>=1.4.2",
-    "matplotlib>=3.9.1",
+    "matplotlib>=3.9.0",
     "pg8000>=1.31.1",
     "cloud-sql-python-connector[pg8000]>=1.11.0",
     "google-cloud-storage>=2.17",
@@ -44,7 +44,7 @@ dev = [
 
 docs = [
     "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
-    "sphinx>=4,<8",  # The default Python documentation redering engine
+    "sphinx>=4,<9",  # The default Python documentation redering engine
     "sphinx-autoapi>=1.8,<4",  # Generates documentation from docstrings
     "sphinx-issues>=1.2,<5.0",  # Allows references to GitHub issues
     "sphinx-rtd-dark-mode>=1.2,<2",  # Allow user to toggle light/dark mode
