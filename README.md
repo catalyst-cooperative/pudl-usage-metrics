@@ -73,43 +73,26 @@ In one terminal window start the dagster-daemon by running these commands:
 
 ```
 conda activate pudl-usage-metrics
-dagster-daemon run
+dagster-webserver -m usage_metrics.etl
 ```
 
-The [dagster-daemon](https://docs.dagster.io/deployment/dagster-daemon) is a long-running service required for schedules, sensors and run queueing. The usage metrics ETL requires the daemon because the data is processed in partitions. Dagster kicks off individual runs for each [partition](https://docs.dagster.io/concepts/partitions-schedules-sensors/partitions) which are sent to a queue managed by the dagster-daemon.
+The [dagster-webserver](https://docs.dagster.io/concepts/webserver/ui) is a long-running service required for schedules, sensors and run queueing. The usage metrics ETL requires the daemon because the data is processed in partitions. Dagster kicks off individual runs for each [partition](https://docs.dagster.io/concepts/partitions-schedules-sensors/partitions) which are sent to a queue managed by the dagster-daemon.
 
-### Dagit
-
-In another terminal window, start the [dagit UI](https://docs.dagster.io/concepts/dagit/dagit) by running these commands:
+This command simultaneously starts the dagit UI. This will launch dagit at [`http://localhost:3000/`](http://localhost:3000/). If you have another service running on port 3000 you can change the port by running:
 
 ```
-conda activate pudl-usage-metrics
-dagit
+dagster-webserver -m usage_metrics.etl -p {another_cool_port}
 ```
 
-This will launch dagit at [`http://localhost:3000/`](http://localhost:3000/). If you have another service running on port 3000 you can change the port by running:
-
-```
-dagit -p {another_cool_port}
-```
-
-Dagit allows you to kick off [`backfills`](https://docs.dagster.io/concepts/partitions-schedules-sensors/backfills) and run partitions with specific configuration.
+Dagster allows you to kick off [`backfills`](https://docs.dagster.io/concepts/partitions-schedules-sensors/backfills) and run partitions with specific configuration.
 
 ## Run the ETL
 
-There is a module in the `usage_metrics/jobs` sub package for each datasource (e.g datasette logs, github metrics…) Each job module contains one graph of ops that extracts, transforms and loads the data. Two jobs are created for each graph, one job loads data to a local sqlite database for development and the other job loads data to a Google Cloud SQL Postgres database for a Preset dashboard to access.
+There is a job in the `usage_metrics/etl` sub package for each datasource (e.g datasette logs, github metrics…). Each job module contains one graph of ops that extracts, transforms and loads the data. Two jobs are created for each graph, one job loads data to a local sqlite database for development and the other job loads data to a Google Cloud SQL Postgres database for a Preset dashboard to access.
 
 You can run the ETL via the dagit UI or the [dagster CLI](https://docs.dagster.io/_apidocs/cli).
 
-### CLI
-
-To run a complete backfill for a job, run:
-
-```
-dagster job backfill --all {YOUR_JOB_NAME}
-```
-
-### Dagit UI
+### Backfills
 
 To run a a complete backfill from the Dagit UI go to the job's partitions tab. Then click on the "Launch Backfill" button in the upper left corner of the window. This should bring up a new window with a list of partitions. Click "Select All" and then click the "Submit" button. This will submit a run for each partition. You can follow the runs on the ["Runs" tab](http://localhost:3000/instance/runs).
 
@@ -151,4 +134,4 @@ The ETL uses [ipinfo](https://ipinfo.io/) for geocoding the user ip addresses wh
 
 ## Add new data sources
 
-To add a new data source to the dagster repo, add new modules to the `usage_metrics/jobs/` and `usage_metrics/ops/` directories and create jobs that use the `SQLite` and `PostgresManager`. Then, create a new dagster repository in the repository module that contains the dataset jobs. Once the dataset has been tested locally, run a complete backfill for the job that uses the `PostgresManager` to populate the Cloud SQL database.
+To add a new data source to the dagster repo, add new modules to the `raw` and `core` and `out` directories and add these modules to the corresponding jobs. Once the dataset has been tested locally, run a complete backfill for the job that uses the `PostgresManager` to populate the Cloud SQL database.

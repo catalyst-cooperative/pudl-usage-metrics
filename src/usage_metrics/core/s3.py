@@ -58,7 +58,7 @@ def transform_s3_logs(
     # Drop S3 lifecycle transitions
     extract_s3_logs = extract_s3_logs.loc[
         extract_s3_logs.operation != "S3.TRANSITION_INT.OBJECT"
-    ]  # TODO: Do we just want to keep GET requests, or is there any value to keeping everything for now?
+    ]
 
     # Geocode IPS
     extract_s3_logs["remote_ip"] = extract_s3_logs["remote_ip"].mask(

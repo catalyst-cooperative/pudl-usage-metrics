@@ -35,10 +35,7 @@ def download_s3_logs_from_gcs(
     for blob in tqdm(blobs):
         if not Path.exists(Path(LOCAL_DIR, blob.name)):
             blob.download_to_filename(Path(LOCAL_DIR, blob.name))
-        else:
-            logging.info(f"File {blob.name} already exists locally. Skipping download.")
         file_paths.append(Path(LOCAL_DIR, blob.name))
-        logger.info(file_paths)
     return file_paths
 
 
@@ -50,7 +47,7 @@ def extract_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
 
     weekly_dfs = []
     file_paths = download_s3_logs_from_gcs(
-        tuple(week_date_range.strftime("%Y-%m-%d"))
+        tuple(week_date_range.strftime("%Y-%m-%d")),
     )  # Get all logs in a day
     for path in file_paths:
         weekly_dfs.append(pd.read_csv(path, delimiter=" ", header=None))
