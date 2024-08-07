@@ -2,6 +2,7 @@
 
 import importlib.resources
 import itertools
+import os
 import warnings
 
 from dagster import (
@@ -20,8 +21,8 @@ from dagster import (
 from dagster._core.definitions.cacheable_assets import CacheableAssetsDefinition
 
 import usage_metrics
-from usage_metrics.resources.postgres import PostgresManager
-from usage_metrics.resources.sqlite import SQLiteManager
+from usage_metrics.resources.postgres import postgres_manager
+from usage_metrics.resources.sqlite import sqlite_manager
 
 raw_module_groups = {
     "raw_s3": [usage_metrics.raw.s3],
@@ -31,7 +32,9 @@ core_module_groups = {
     "core_s3": [usage_metrics.core.s3],
 }
 
-out_module_groups = {}
+out_module_groups = {
+    "out_s3": [usage_metrics.out.s3],
+}
 
 all_asset_modules = raw_module_groups | core_module_groups | out_module_groups
 default_assets = list(
@@ -52,40 +55,6 @@ default_asset_checks = list(
         for modules in all_asset_modules.values()
     )
 )
-
-
-# def asset_check_from_schema(
-#     asset_key: AssetKey,
-#     package: pudl.metadata.classes.Package,
-# ) -> AssetChecksDefinition | None:
-#     """Create a dagster asset check based on the resource schema, if defined."""
-#     resource_id = asset_key.to_user_string()
-#     try:
-#         resource = package.get_resource(resource_id)
-#     except ValueError:
-#         return None
-#     pandera_schema = resource.schema.to_pandera()
-
-#     @asset_check(asset=asset_key, blocking=True)
-#     def pandera_schema_check(asset_value) -> AssetCheckResult:
-#         try:
-#             pandera_schema.validate(asset_value, lazy=True)
-#         except pr.errors.SchemaErrors as schema_errors:
-#             return AssetCheckResult(
-#                 passed=False,
-#                 metadata={
-#                     "errors": [
-#                         {
-#                             "failure_cases": str(err.failure_cases),
-#                             "data": str(err.data),
-#                         }
-#                         for err in schema_errors.schema_errors
-#                     ],
-#                 },
-#             )
-#         return AssetCheckResult(passed=True)
-
-#     return pandera_schema_check
 
 
 def _get_keys_from_assets(
@@ -114,26 +83,16 @@ def _get_keys_from_assets(
 _asset_keys = itertools.chain.from_iterable(
     _get_keys_from_assets(asset_def) for asset_def in default_assets
 )
-# default_asset_checks += [
-#     check
-#     for check in (
-#         asset_check_from_schema(asset_key, _package)
-#         for asset_key in _asset_keys
-#         if asset_key.to_user_string() != "core_epacems__hourly_emissions"
-#     )
-#     if check is not None
-# ]
 
-default_resources = {
-    "sqlite_io_manager": SQLiteManager,
-    "postgres_io_manager": PostgresManager,
-}
-
+# resources_by_env = { # STILL TO DO!
+#     "prod": {"io_manager": postgres_manager},
+#     "local": {"io_manager": sqlite_manager},
+# }
 
 defs: Definitions = Definitions(
     assets=default_assets,
     # asset_checks=default_asset_checks,
-    resources=default_resources,
+    # resources=resources_by_env[os.getenv("ENV", "local")], #TODO: How to handle this?
     jobs=[
         define_asset_job(
             name="all_logs_etl",
@@ -142,7 +101,7 @@ defs: Definitions = Definitions(
         define_asset_job(
             name="s3_etl",
             description="This job ETLs logs for S3 usage logs only.",
-            selection=AssetSelection.groups("raw_s3", "core_s3"),
+            selection=AssetSelection.groups("raw_s3", "core_s3", "out_s3"),
         ),
     ],
 )

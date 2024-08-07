@@ -4,5 +4,6 @@ from usage_metrics.repository import datasette_logs, intake_logs
 
 from . import (
     core,
+    out,
     raw,
 )

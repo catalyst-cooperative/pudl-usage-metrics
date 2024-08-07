@@ -14,7 +14,10 @@ REQUESTERS_IGNORE = [
 ]
 
 
-@asset(partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"))
+@asset(
+    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    required_resource_keys={"io_manager"},
+)
 def output_s3_logs(
     context: AssetExecutionContext,
     transform_s3_logs: pd.DataFrame,
@@ -35,7 +38,7 @@ def output_s3_logs(
 
     # Add columns for tables and versions
     out[["version", "table"]] = out["key"].str.split("/", expand=True)
-    out["version"] = out["version"].replace("-", pd.NA)
+    out["version"] = out["version"].replace(["-", ""], pd.NA)
 
     # Drop columns
     out = out.drop(
