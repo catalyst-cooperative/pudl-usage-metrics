@@ -67,13 +67,23 @@ The scripts that run are configured in the .pre-commit-config.yaml file.
 
 Now the environment is all set up and we can start up dagster!
 
+## Set some global Dagster configs
+
+In your ``DAGSTER_HOME`` folder, add a ``dagster.yaml`` file or edit your existing one to contain the following code:
+```
+run_queue:
+  max_concurrent_runs: 1
+```
+
+When running backfills, this prevents you from kicking off 80 concurrent runs that will at worst crash your drive and best create SQL database errors.
+
 ### Dagster Daemon
 
-In one terminal window start the dagster-daemon by running these commands:
+In one terminal window start the dagster-daemon and UI by running these commands:
 
 ```
 conda activate pudl-usage-metrics
-dagster-webserver -m usage_metrics.etl
+dagster dev -m usage_metrics.etl
 ```
 
 The [dagster-webserver](https://docs.dagster.io/concepts/webserver/ui) is a long-running service required for schedules, sensors and run queueing. The usage metrics ETL requires the daemon because the data is processed in partitions. Dagster kicks off individual runs for each [partition](https://docs.dagster.io/concepts/partitions-schedules-sensors/partitions) which are sent to a queue managed by the dagster-daemon.
@@ -81,7 +91,7 @@ The [dagster-webserver](https://docs.dagster.io/concepts/webserver/ui) is a long
 This command simultaneously starts the dagit UI. This will launch dagit at [`http://localhost:3000/`](http://localhost:3000/). If you have another service running on port 3000 you can change the port by running:
 
 ```
-dagster-webserver -m usage_metrics.etl -p {another_cool_port}
+dagster dev -m usage_metrics.etl -p {another_cool_port}
 ```
 
 Dagster allows you to kick off [`backfills`](https://docs.dagster.io/concepts/partitions-schedules-sensors/backfills) and run partitions with specific configuration.

@@ -18,9 +18,9 @@ REQUESTERS_IGNORE = [
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="database_manager",
 )
-def output_s3_logs(
+def out_s3_logs(
     context: AssetExecutionContext,
-    transform_s3_logs: pd.DataFrame,
+    core_s3_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Output daily S3 logs.
 
@@ -28,9 +28,9 @@ def output_s3_logs(
     columns.
     """
     # Only keep GET requests
-    out = transform_s3_logs.loc[
-        (transform_s3_logs.operation == "REST.GET.BUCKET")
-        | (transform_s3_logs.operation == "REST.GET.OBJECT")
+    out = core_s3_logs.loc[
+        (core_s3_logs.operation == "REST.GET.BUCKET")
+        | (core_s3_logs.operation == "REST.GET.OBJECT")
     ]
 
     # Drop PUDL intake, AWS Registry of Open Data Checker, and PUDL logs sync
@@ -54,5 +54,6 @@ def output_s3_logs(
             "remote_ip_isEU",
         ]
     )
+    out = out.reset_index()
 
     return out

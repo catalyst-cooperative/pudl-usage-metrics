@@ -40,31 +40,32 @@ FIELD_NAMES = [
 
 
 @asset(partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"))
-def transform_s3_logs(
+def core_s3_logs(
     context: AssetExecutionContext,
-    extract_s3_logs: pd.DataFrame,
+    raw_s3_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Transform daily S3 logs.
 
     Add column headers, geocode values,
     """
+    # Drop entirely duplicate rows
+    raw_s3_logs = raw_s3_logs.drop_duplicates()
+
     # Combine time and timezone columns
-    extract_s3_logs[2] = extract_s3_logs[2] + " " + extract_s3_logs[3]
-    extract_s3_logs = extract_s3_logs.drop(columns=[3])
+    raw_s3_logs[2] = raw_s3_logs[2] + " " + raw_s3_logs[3]
+    raw_s3_logs = raw_s3_logs.drop(columns=[3])
 
     # Name columns
-    extract_s3_logs.columns = FIELD_NAMES
+    raw_s3_logs.columns = FIELD_NAMES
 
     # Drop S3 lifecycle transitions
-    extract_s3_logs = extract_s3_logs.loc[
-        extract_s3_logs.operation != "S3.TRANSITION_INT.OBJECT"
-    ]
+    raw_s3_logs = raw_s3_logs.loc[raw_s3_logs.operation != "S3.TRANSITION_INT.OBJECT"]
 
     # Geocode IPS
-    extract_s3_logs["remote_ip"] = extract_s3_logs["remote_ip"].mask(
-        extract_s3_logs["remote_ip"].eq("-"), pd.NA
+    raw_s3_logs["remote_ip"] = raw_s3_logs["remote_ip"].mask(
+        raw_s3_logs["remote_ip"].eq("-"), pd.NA
     )  # Mask null IPs
-    geocoded_df = geocode_ips(extract_s3_logs)
+    geocoded_df = geocode_ips(raw_s3_logs)
 
     # Convert string to datetime using Pandas
     format_string = "[%d/%b/%Y:%H:%M:%S %z]"
@@ -82,5 +83,8 @@ def transform_s3_logs(
     ]
     for field in numeric_fields:
         geocoded_df[field] = pd.to_numeric(geocoded_df[field], errors="coerce")
+
+    geocoded_df = geocoded_df.set_index("request_id")
+    assert geocoded_df.index.is_unique
 
     return geocoded_df
