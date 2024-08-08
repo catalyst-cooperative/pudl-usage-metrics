@@ -3,7 +3,7 @@
 from pathlib import Path
 
 import pytest
-from usage_metrics.resources.sqlite import SQLiteManager
+from usage_metrics.resources.sqlite import SQLiteIOManager
 
 
 @pytest.fixture(scope="session")
@@ -15,7 +15,7 @@ def sqlite_db_path(tmpdir_factory):
 @pytest.fixture(scope="session")
 def sqlite_engine(sqlite_db_path):
     """Create a SQL Alchemy engine for sqlite fixture."""
-    return SQLiteManager(db_path=sqlite_db_path).get_engine()
+    return SQLiteIOManager(db_path=sqlite_db_path).engine
 
 
 @pytest.fixture(scope="session")
