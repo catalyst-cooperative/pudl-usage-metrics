@@ -33,7 +33,7 @@ def download_s3_logs_from_gcs(
         if not Path.exists(path_to_file):
             blob.download_to_filename(path_to_file)
             if Path.stat(path_to_file).st_size == 0:
-                # Sometimes GCS downloads empty files. If this happens, retry.
+                # Handle download interruptions. #TODO: Less janky way to do this?
                 blob.download_to_filename(Path(LOCAL_DIR, blob.name))
 
         file_paths.append(Path(LOCAL_DIR, blob.name))
