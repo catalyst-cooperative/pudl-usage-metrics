@@ -92,7 +92,7 @@ _asset_keys = itertools.chain.from_iterable(
 defs: Definitions = Definitions(
     assets=default_assets,
     # asset_checks=default_asset_checks,
-    # resources=resources_by_env[os.getenv("ENV", "local")], #TODO: How to handle this?
+    resources={"database_manager": sqlite_manager},  # TODO: How to handle this?
     jobs=[
         define_asset_job(
             name="all_logs_etl",

@@ -1,6 +1,5 @@
 """Extract data from S3 logs."""
 
-import logging
 from pathlib import Path
 
 import pandas as pd
@@ -13,12 +12,9 @@ from google.cloud import storage
 from tqdm import tqdm
 
 BUCKET_URI = "pudl-s3-logs.catalyst.coop"
-
 LOCAL_DIR = "data/pudl_s3_logs/"
 # if not Path.exists(Path(LOCAL_DIR)):
 #     Path.mkdir(LOCAL_DIR)
-
-logger = logging.getLogger()  # NOT CURRENTLY WORKING, DEBUG!
 
 
 def download_s3_logs_from_gcs(

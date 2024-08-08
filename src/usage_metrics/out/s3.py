@@ -16,7 +16,7 @@ REQUESTERS_IGNORE = [
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    required_resource_keys={"io_manager"},
+    io_manager_key="database_manager",
 )
 def output_s3_logs(
     context: AssetExecutionContext,
