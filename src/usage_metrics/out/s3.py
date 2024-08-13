@@ -17,6 +17,7 @@ REQUESTERS_IGNORE = [
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="database_manager",
+    tags={"source": "s3"},
 )
 def out_s3_logs(
     context: AssetExecutionContext,
@@ -47,13 +48,7 @@ def out_s3_logs(
             "requester",
             "operation",
             "bucket",
-            "remote_ip_country_flag",
-            "remote_ip_country_flag_url",
-            "remote_ip_country_currency",
-            "remote_ip_continent",
-            "remote_ip_isEU",
         ]
     )
-    out = out.reset_index()
 
     return out

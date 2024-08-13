@@ -93,7 +93,23 @@ class SQLiteIOManager(IOManager):
             context: dagster keyword that provides access output information like asset
                 name.
         """
-        raise NotImplementedError
+        table_name = get_table_name_from_context(context)
+        engine = self.engine
+
+        with engine.begin() as con:
+            try:
+                df = pd.read_sql_table(table_name, con)
+            except ValueError as err:
+                raise ValueError(
+                    f"{table_name} not found. Make sure the table is modelled in"
+                    "usage_metrics.models.py and regenerate the database."
+                ) from err
+            if df.empty:
+                raise AssertionError(
+                    f"The {table_name} table is empty. Materialize "
+                    f"the {table_name} asset so it is available in the database."
+                )
+            return df
 
 
 @io_manager(

@@ -65,6 +65,53 @@ datasette_request_logs = Table(
     Column("remote_ip_full_location", String),
 )
 
+core_s3_logs = Table(
+    "core_s3_logs",
+    usage_metrics_metadata,
+    Column("request_id", String, primary_key=True, comment="A unique ID for each log."),
+    # Query information
+    Column("time", DateTime),
+    Column("request_uri", String),
+    Column("operation", String),
+    Column("bucket", String),
+    Column("bucket_owner", String),
+    Column("requester", String),
+    Column("http_status", Integer),
+    Column("bytes_sent", Integer),
+    # IP location
+    Column("remote_ip", String),
+    Column("remote_ip_city", String),
+    Column("remote_ip_loc", String),
+    Column("remote_ip_org", String),
+    Column("remote_ip_hostname", String),
+    Column("remote_ip_country_name", String),
+    Column("remote_ip_asn", String),
+    Column("remote_ip_country", String),
+    Column("remote_ip_timezone", String),
+    Column("remote_ip_latitude", Float),
+    Column("remote_ip_longitude", Float),
+    Column("remote_ip_postal", String),
+    Column("remote_ip_region", String),
+    Column("remote_ip_full_location", String),
+    # Other reported context
+    Column("access_point_arn", String),
+    Column("acl_required", String),
+    Column("authentication_type", String),
+    Column("cipher_suite", String),
+    Column("error_code", String),
+    Column("host_header", String),
+    Column("host_id", String),
+    Column("key", String),
+    Column("object_size", Float),
+    Column("referer", String),
+    Column("signature_version", String),
+    Column("tls_version", String),
+    Column("total_time", Integer),
+    Column("turn_around_time", Float),
+    Column("user_agent", String),
+    Column("version_id", String),
+)
+
 out_s3_logs = Table(
     "out_s3_logs",
     usage_metrics_metadata,
@@ -88,8 +135,7 @@ out_s3_logs = Table(
     Column("remote_ip_postal", String),
     Column("remote_ip_region", String),
     Column("remote_ip_full_location", String),
-    # TODO: What of the rest of this do we actually care about?
-    # Drop the rest.
+    # Other reported context
     Column("access_point_arn", String),
     Column("acl_required", String),
     Column("authentication_type", String),

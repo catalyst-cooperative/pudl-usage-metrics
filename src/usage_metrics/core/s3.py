@@ -7,7 +7,7 @@ from dagster import (
     asset,
 )
 
-from usage_metrics.ops.datasette import geocode_ips  # MOVE TO HELPER FUNCTION
+from usage_metrics.helpers import geocode_ips
 
 FIELD_NAMES = [
     "bucket_owner",
@@ -39,7 +39,11 @@ FIELD_NAMES = [
 ]
 
 
-@asset(partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"))
+@asset(
+    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="database_manager",
+    tags={"source": "s3"},
+)
 def core_s3_logs(
     context: AssetExecutionContext,
     raw_s3_logs: pd.DataFrame,
@@ -87,4 +91,15 @@ def core_s3_logs(
     geocoded_df = geocoded_df.set_index("request_id")
     assert geocoded_df.index.is_unique
 
-    return geocoded_df
+    # Drop unnecessary geocoding columns
+    geocoded_df = geocoded_df.drop(
+        columns=[
+            "remote_ip_country_flag",
+            "remote_ip_country_flag_url",
+            "remote_ip_country_currency",
+            "remote_ip_continent",
+            "remote_ip_isEU",
+        ]
+    )
+
+    return geocoded_df.reset_index()

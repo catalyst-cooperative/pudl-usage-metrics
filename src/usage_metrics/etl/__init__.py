@@ -95,13 +95,14 @@ defs: Definitions = Definitions(
     resources={"database_manager": sqlite_manager},  # TODO: How to handle this?
     jobs=[
         define_asset_job(
-            name="all_logs_etl",
-            description="This job ETLs logs for all metrics sources.",
+            name="all_metrics_etl",
+            description="This job ETLs all metrics sources.",
         ),
         define_asset_job(
-            name="s3_etl",
+            name="s3_metrics_etl",
             description="This job ETLs logs for S3 usage logs only.",
-            selection=AssetSelection.groups("raw_s3", "core_s3", "out_s3"),
+            selection="*",
+            tags={"source": "s3"},
         ),
     ],
 )

@@ -40,7 +40,10 @@ def download_s3_logs_from_gcs(
     return file_paths
 
 
-@asset(partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"))
+@asset(
+    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    tags={"source": "s3"},
+)
 def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
     """Extract S3 logs from sub-daily files and return one daily DataFrame."""
     week_start_date_str = context.partition_key

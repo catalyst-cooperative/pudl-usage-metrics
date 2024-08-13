@@ -8,8 +8,7 @@ from dagster import AssetMaterialization, Out, Output, graph, op
 from google.cloud import storage
 from tqdm import tqdm
 
-from usage_metrics.helpers import str_to_datetime
-from usage_metrics.ops.datasette import geocode_ips
+from usage_metrics.helpers import geocode_ips, str_to_datetime
 
 
 def create_rename_mapping(raw_logs: pd.DataFrame) -> dict:
