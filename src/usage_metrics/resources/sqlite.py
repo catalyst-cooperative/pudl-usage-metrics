@@ -81,10 +81,7 @@ class SQLiteIOManager(IOManager):
             table_name = get_table_name_from_context(context)
             self.append_df_to_table(obj, table_name)
         else:
-            raise Exception(
-                "SQLiteIOManager only supports pandas DataFrames and strings of SQL "
-                "queries."
-            )
+            raise Exception("SQLiteIOManager only supports pandas DataFrames.")
 
     def load_input(self, context: InputContext) -> pd.DataFrame:
         """Load a dataframe from a sqlite database.

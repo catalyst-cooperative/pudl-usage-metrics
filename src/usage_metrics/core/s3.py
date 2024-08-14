@@ -9,35 +9,6 @@ from dagster import (
 
 from usage_metrics.helpers import geocode_ips
 
-FIELD_NAMES = [
-    "bucket_owner",
-    "bucket",
-    "time",
-    "remote_ip",
-    "requester",
-    "request_id",
-    "operation",
-    "key",
-    "request_uri",
-    "http_status",
-    "error_code",
-    "bytes_sent",
-    "object_size",
-    "total_time",
-    "turn_around_time",
-    "referer",
-    "user_agent",
-    "version_id",
-    "host_id",
-    "signature_version",
-    "cipher_suite",
-    "authentication_type",
-    "host_header",
-    "tls_version",
-    "access_point_arn",
-    "acl_required",
-]
-
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
@@ -52,15 +23,43 @@ def core_s3_logs(
 
     Add column headers, geocode values,
     """
+    # Name columns
+    raw_s3_logs.columns = [
+        "bucket_owner",
+        "bucket",
+        "time",
+        "timezone",
+        "remote_ip",
+        "requester",
+        "request_id",
+        "operation",
+        "key",
+        "request_uri",
+        "http_status",
+        "error_code",
+        "bytes_sent",
+        "object_size",
+        "total_time",
+        "turn_around_time",
+        "referer",
+        "user_agent",
+        "version_id",
+        "host_id",
+        "signature_version",
+        "cipher_suite",
+        "authentication_type",
+        "host_header",
+        "tls_version",
+        "access_point_arn",
+        "acl_required",
+    ]
+
     # Drop entirely duplicate rows
     raw_s3_logs = raw_s3_logs.drop_duplicates()
 
     # Combine time and timezone columns
-    raw_s3_logs[2] = raw_s3_logs[2] + " " + raw_s3_logs[3]
-    raw_s3_logs = raw_s3_logs.drop(columns=[3])
-
-    # Name columns
-    raw_s3_logs.columns = FIELD_NAMES
+    raw_s3_logs.time = raw_s3_logs.time + " " + raw_s3_logs.timezone
+    raw_s3_logs = raw_s3_logs.drop(columns=["timezone"])
 
     # Drop S3 lifecycle transitions
     raw_s3_logs = raw_s3_logs.loc[raw_s3_logs.operation != "S3.TRANSITION_INT.OBJECT"]
