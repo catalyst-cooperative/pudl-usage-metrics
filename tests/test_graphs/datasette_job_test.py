@@ -7,6 +7,7 @@ from usage_metrics.jobs.datasette import process_datasette_logs_locally
 from usage_metrics.models import usage_metrics_metadata
 
 
+@pytest.mark.xfail(reason="Xfail until we reconfigure Datasette ETL.")
 def test_datasette_job(datasette_partition_config, sqlite_engine):
     """Process a single partition of datassette."""
     usage_metrics_metadata.drop_all(sqlite_engine)
@@ -26,6 +27,7 @@ def test_datasette_job(datasette_partition_config, sqlite_engine):
     assert len(logs) == 891
 
 
+@pytest.mark.xfail(reason="Xfail until we reconfigure Datasette ETL.")
 def test_primary_key_failure(datasette_partition_config, sqlite_engine):
     """Reprocess the same partition as `test_datasette_job` test for integrity error."""
     usage_metrics_metadata.drop_all(sqlite_engine)

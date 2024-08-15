@@ -53,9 +53,6 @@ jobs:
         with:
           version: ">= 363.0.0"
 
-      - name: "Print GCloud config"
-        run: "gcloud info"
-
       - name: Run tox
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}

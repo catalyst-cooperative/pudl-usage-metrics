@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 import ipinfo
 import pandas as pd
+from dagster import RetryPolicy, op
 from joblib import Memory
 
 cache_dir = Path(__file__).parents[2] / "cache"
@@ -41,6 +42,51 @@ def geocode_ip(ip_address: str) -> dict:
 
     details = handler.getDetails(ip_address)
     return details.all
+
+
+@op(retry_policy=RetryPolicy(max_retries=5))
+def geocode_ips(df: pd.DataFrame) -> pd.DataFrame:
+    """Geocode the ip addresses using ipinfo API.
+
+    This op geocodes the users ip address to get useful
+    information like ip location and organization.
+
+    Args:
+        df: dataframe with a remote_ip column.
+
+    Returns:
+        geocoded_logs: dataframe with ip location info columns.
+    """
+    # Instead of geocoding every log, geocode the distinct ips
+    unique_ips = pd.Series(df.remote_ip.unique())
+    geocoded_ips = unique_ips.apply(lambda ip: geocode_ip(ip))
+    geocoded_ips = pd.DataFrame.from_dict(geocoded_ips.to_dict(), orient="index")
+    geocoded_ip_column_map = {
+        col: "remote_ip_" + col for col in geocoded_ips.columns if col != "ip"
+    }
+    geocoded_ip_column_map["ip"] = "remote_ip"
+    geocoded_ips = geocoded_ips.rename(columns=geocoded_ip_column_map)
+
+    # Split the org and org ASN into different columns
+    geocoded_ips["remote_ip_asn"] = geocoded_ips.remote_ip_org.str.split(" ").str[0]
+    geocoded_ips["remote_ip_org"] = (
+        geocoded_ips.remote_ip_org.str.split(" ").str[1:].str.join(sep=" ")
+    )
+
+    # Create a verbose ip location field
+    geocoded_ips["remote_ip_full_location"] = (
+        geocoded_ips.remote_ip_city
+        + ", "
+        + geocoded_ips.remote_ip_region
+        + ", "
+        + geocoded_ips.remote_ip_country
+    )
+
+    # Add the component fields back to the logs
+    # TODO: Could create a separate db table for ip information.
+    # I'm not sure if IP addresses always geocode to the same information.
+    geocoded_logs = df.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
+    return geocoded_logs
 
 
 def parse_request_url(url: str) -> dict:

@@ -6,6 +6,7 @@ import pandas as pd
 from dagster import daily_partitioned_config, graph, in_process_executor
 
 import usage_metrics.ops.datasette as da
+from usage_metrics.helpers import geocode_ips
 from usage_metrics.resources.postgres import postgres_manager
 from usage_metrics.resources.sqlite import sqlite_manager
 
@@ -30,7 +31,7 @@ def transform(raw_logs: pd.DataFrame) -> pd.DataFrame:
     """Transform datasette logs."""
     df = da.unpack_httprequests(raw_logs)
     df = da.parse_urls(df)
-    return da.geocode_ips(df)
+    return geocode_ips(df)
 
 
 @graph
