@@ -2,6 +2,7 @@
 
 import pandas as pd
 import pytest
+
 from usage_metrics.jobs.intake import process_intake_logs_locally
 
 

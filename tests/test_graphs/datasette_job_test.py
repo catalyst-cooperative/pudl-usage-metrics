@@ -3,6 +3,7 @@
 import pandas as pd
 import pytest
 import sqlalchemy as sa
+
 from usage_metrics.jobs.datasette import process_datasette_logs_locally
 from usage_metrics.models import usage_metrics_metadata
 
