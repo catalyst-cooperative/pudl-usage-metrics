@@ -2,6 +2,7 @@
 
 import pandas as pd
 import pytest
+
 from usage_metrics.helpers import (
     convert_camel_case_columns_to_snake_case,
     geocode_ip,

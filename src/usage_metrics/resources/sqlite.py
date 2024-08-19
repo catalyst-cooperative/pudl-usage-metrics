@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 import sqlalchemy as sa
 from dagster import Field, InputContext, IOManager, OutputContext, io_manager
+
 from usage_metrics.models import usage_metrics_metadata
 
 SQLITE_PATH = Path(__file__).parents[3] / "data/usage_metrics.db"

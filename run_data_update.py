@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 
 import coloredlogs
 from dagster import RepositoryDefinition
+
 from usage_metrics import repository
 from usage_metrics.resources.postgres import postgres_manager
 
