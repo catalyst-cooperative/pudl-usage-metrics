@@ -67,8 +67,7 @@ class SQLiteIOManager(IOManager):
     def handle_output(self, context: OutputContext, obj: pd.DataFrame | str):
         """Handle an op or asset output.
 
-        If the output is a dataframe, write it to the database. If it is a string
-        execute it as a SQL query.
+        If the output is a dataframe, write it to the database.
 
         Args:
             context: dagster keyword that provides access output information like asset

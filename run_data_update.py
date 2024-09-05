@@ -11,10 +11,9 @@ import logging
 from datetime import UTC, datetime
 
 import coloredlogs
-from dagster import RepositoryDefinition
+from dagster import build_schedule_from_partitioned_job
 
-from usage_metrics import repository
-from usage_metrics.resources.postgres import postgres_manager
+from usage_metrics.etl import defs
 
 
 def main():
@@ -25,47 +24,44 @@ def main():
 
     today = datetime.now(tz=UTC).date()
 
-    # Collect GCP jobs
-    gcp_jobs = []
+    all_etl = defs.get_job_def(name="all_metrics_etl")
 
-    for attr_name in dir(repository):
-        attr = getattr(repository, attr_name)
-        if isinstance(attr, RepositoryDefinition):
-            for job in attr.get_all_jobs():
-                if job.resource_defs["database_manager"] == postgres_manager:
-                    gcp_jobs.append(job)
+    # Create schedule
+    asset_partitioned_schedule = build_schedule_from_partitioned_job(all_etl)
 
     # Run the jobs
-    for job in gcp_jobs:
-        partition_set = job.get_partition_set_def()
-        most_recent_partition = max(
-            partition_set.get_partitions(), key=lambda x: x.value.start
-        )
-        time_window = most_recent_partition.value
-        usage_metrics_logger.info(time_window)
+    usage_metrics_logger.info(asset_partitioned_schedule.description)
+    # usage_metrics_logger.info(all_etl.execute_in_process(partition_key = "2024-07-21"))
 
-        # Raise an error if the time window is less than a day
-        time_window_diff = (time_window.end - time_window.start).in_days()
-        if time_window_diff != 1:
-            raise RuntimeError(
-                f"""The {job.name} job's partition is less than a day.
-                                    Choose a less frequent partition definition."""
-            )
+    # partition_set = job.get_partition_set_def()
+    # most_recent_partition = max(
+    #     partition_set.get_partitions(), key=lambda x: x.value.start
+    # )
+    # time_window = most_recent_partition.value
+    # usage_metrics_logger.info(time_window)
 
-        # Run the most recent partition if the end_date is today.
-        # The start_date is inclusive and the end_date is exclusive.
-        if time_window.end.date() == today:
-            usage_metrics_logger.info(
-                f"""Processing partition:
-                ({time_window.start.date()}, {time_window.end.date()})
-                for {job.name}."""
-            )
+    # # Raise an error if the time window is less than a day
+    # time_window_diff = (time_window.end - time_window.start).in_days()
+    # if time_window_diff != 1:
+    #     raise RuntimeError(
+    #         f"""The {job.name} job's partition is less than a day.
+    #                             Choose a less frequent partition definition."""
+    #     )
 
-            job.execute_in_process(partition_key=most_recent_partition.name)
-        else:
-            usage_metrics_logger.info(
-                f"No scheduled partition for {job.name} yesterday, skipping."
-            )
+    # # Run the most recent partition if the end_date is today.
+    # # The start_date is inclusive and the end_date is exclusive.
+    # if time_window.end.date() == today:
+    #     usage_metrics_logger.info(
+    #         f"""Processing partition:
+    #         ({time_window.start.date()}, {time_window.end.date()})
+    #         for {job.name}."""
+    #     )
+
+    #     job.execute_in_process(partition_key=most_recent_partition.name)
+    # else:
+    #     usage_metrics_logger.info(
+    #         f"No scheduled partition for {job.name} yesterday, skipping."
+    #     )
 
 
 if __name__ == "__main__":

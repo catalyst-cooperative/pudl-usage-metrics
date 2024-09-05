@@ -4,12 +4,19 @@ import os
 
 import pandas as pd
 import sqlalchemy as sa
-from dagster import Field, resource
+from dagster import Field, InputContext, IOManager, OutputContext, io_manager
 
 from usage_metrics.models import usage_metrics_metadata
 
 
-class PostgresManager:
+def get_table_name_from_context(context: OutputContext) -> str:
+    """Retrieves the table name from the context object."""
+    if context.has_asset_key:
+        return context.asset_key.to_python_identifier()
+    return context.get_identifier()
+
+
+class PostgresIOManager(IOManager):
     """Manage connection with a Postgres Database."""
 
     def __init__(
@@ -66,8 +73,52 @@ class PostgresManager:
                 index=False,
             )
 
+    def handle_output(self, context: OutputContext, obj: pd.DataFrame | str):
+        """Handle an op or asset output.
 
-@resource(
+        If the output is a dataframe, write it to the database.
+
+        Args:
+            context: dagster keyword that provides access output information like asset
+                name.
+            obj: a sql query or dataframe to add to the database.
+
+        Raises:
+            Exception: if an asset or op returns an unsupported datatype.
+        """
+        if isinstance(obj, pd.DataFrame):
+            table_name = get_table_name_from_context(context)
+            self.append_df_to_table(obj, table_name)
+        else:
+            raise Exception("PostgresIOManager only supports pandas DataFrames.")
+
+    def load_input(self, context: InputContext) -> pd.DataFrame:
+        """Load a dataframe from a postgres database.
+
+        Args:
+            context: dagster keyword that provides access output information like asset
+                name.
+        """
+        table_name = get_table_name_from_context(context)
+        engine = self.engine
+
+        with engine.begin() as con:
+            try:
+                df = pd.read_sql_table(table_name, con)
+            except ValueError as err:
+                raise ValueError(
+                    f"{table_name} not found. Make sure the table is modelled in"
+                    "usage_metrics.models.py and regenerate the database."
+                ) from err
+            if df.empty:
+                raise AssertionError(
+                    f"The {table_name} table is empty. Materialize "
+                    f"the {table_name} asset so it is available in the database."
+                )
+            return df
+
+
+@io_manager(
     config_schema={
         "clobber": Field(
             bool,
@@ -101,7 +152,7 @@ class PostgresManager:
         ),
     }
 )
-def postgres_manager(init_context) -> PostgresManager:
+def postgres_manager(init_context) -> PostgresIOManager:
     """Create a PostgresManager dagster resource."""
     clobber = init_context.resource_config["clobber"]
     user = init_context.resource_config["postgres_user"]
@@ -109,7 +160,7 @@ def postgres_manager(init_context) -> PostgresManager:
     db = init_context.resource_config["postgres_db"]
     ip = init_context.resource_config["postgres_ip"]
     port = init_context.resource_config["postgres_port"]
-    return PostgresManager(
+    return PostgresIOManager(
         clobber=clobber,
         user=user,
         password=password,

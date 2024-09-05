@@ -13,6 +13,7 @@ from dagster import (
     AssetSelection,
     Definitions,
     SourceAsset,
+    WeeklyPartitionsDefinition,
     asset_check,
     define_asset_job,
     load_asset_checks_from_modules,
@@ -21,7 +22,7 @@ from dagster import (
 from dagster._core.definitions.cacheable_assets import CacheableAssetsDefinition
 
 import usage_metrics
-from usage_metrics.resources.duckdb import duckdb_pandas_io_manager
+from usage_metrics.resources.postgres import postgres_manager
 from usage_metrics.resources.sqlite import sqlite_manager
 
 raw_module_groups = {
@@ -85,26 +86,26 @@ _asset_keys = itertools.chain.from_iterable(
 )
 
 # resources_by_env = { # STILL TO DO!
-#     "prod": {"io_manager": duckdb_pandas_io_manager},
+#     "prod": {"io_manager": postgres_manager},
 #     "local": {"io_manager": sqlite_manager},
 # }
 
 defs: Definitions = Definitions(
     assets=default_assets,
     # asset_checks=default_asset_checks,
-    resources={
-        "database_manager": duckdb_pandas_io_manager
-    },  # TODO: How to handle this?
+    resources={"database_manager": sqlite_manager},  # TODO: How to handle this?
     jobs=[
         define_asset_job(
             name="all_metrics_etl",
             description="This job ETLs all metrics sources.",
+            partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
         ),
         define_asset_job(
             name="s3_metrics_etl",
             description="This job ETLs logs for S3 usage logs only.",
             selection="*",
             tags={"source": "s3"},
+            partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
         ),
     ],
 )
