@@ -85,27 +85,25 @@ _asset_keys = itertools.chain.from_iterable(
     _get_keys_from_assets(asset_def) for asset_def in default_assets
 )
 
-# resources_by_env = { # STILL TO DO!
-#     "prod": {"io_manager": postgres_manager},
-#     "local": {"io_manager": sqlite_manager},
-# }
+resources_by_env = {  # STILL TO DO!
+    "prod": {"database_manager": postgres_manager},
+    "local": {"database_manager": sqlite_manager},
+}
 
 defs: Definitions = Definitions(
     assets=default_assets,
     # asset_checks=default_asset_checks,
-    resources={"database_manager": sqlite_manager},  # TODO: How to handle this?
+    resources=resources_by_env["prod"],  # TODO: How to handle this?
     jobs=[
         define_asset_job(
             name="all_metrics_etl",
             description="This job ETLs all metrics sources.",
-            partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
         ),
         define_asset_job(
             name="s3_metrics_etl",
             description="This job ETLs logs for S3 usage logs only.",
             selection="*",
             tags={"source": "s3"},
-            partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
         ),
     ],
 )

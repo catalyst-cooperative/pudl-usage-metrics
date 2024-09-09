@@ -33,7 +33,9 @@ target_metadata = usage_metrics_metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-db_location = str(SQLiteIOManager().engine.url)  # TO FIX!!
+db_location = str(
+    SQLiteIOManager().engine.url
+)  # NOTE: Is there any reason we'd want it to point at the CloudSQL db ever?
 logger.info(f"alembic config.sqlalchemy.url: {db_location}")
 config.set_main_option("sqlalchemy.url", db_location)
 
