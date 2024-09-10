@@ -1,4 +1,4 @@
-name: save-github-metrics
+name: save-daily-metrics
 on:
   workflow_dispatch:
   schedule:
@@ -55,7 +55,13 @@ jobs:
         env:
           API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
         run: |
-          mamba run -n pudl-usage-metrics python run_data_update.py
+          mamba run -n pudl-usage-metrics python src/usage_metrics/scripts/save_github_metrics.py
+
+      - name: Save Kaggle Metrics
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        run: |
+          mamba run -n pudl-usage-metrics python src/usage_metrics/scripts/save_kaggle_metrics.py
 
       - name: Inform the Codemonkeys
         uses: 8398a7/action-slack@v3

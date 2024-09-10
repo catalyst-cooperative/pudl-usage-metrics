@@ -15,7 +15,7 @@ REPO = "pudl"
 BUCKET_NAME = "kaggle-metrics"
 
 logger = logging.getLogger()
-logger.basicConfig(level="INFO")
+logging.basicConfig(level="INFO")
 
 
 def get_kaggle_logs() -> str:

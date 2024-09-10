@@ -12,7 +12,7 @@ from google.cloud import storage
 from requests.exceptions import HTTPError
 
 logger = logging.getLogger()
-logger.basicConfig(level="INFO")
+logging.basicConfig(level="INFO")
 
 
 @dataclass
