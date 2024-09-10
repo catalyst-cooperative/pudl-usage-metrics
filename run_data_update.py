@@ -8,6 +8,7 @@ schedules and job launching.
 """
 
 import logging
+import os
 
 import coloredlogs
 
@@ -28,6 +29,9 @@ def main():
     # Run the jobs
     usage_metrics_logger.info(
         f"""Processing data from the week of {most_recent_partition} for {job.name}."""
+    )
+    usage_metrics_logger.info(
+        f"""Saving to {os.getenv("METRICS_PROD_ENV", "local")} database."""
     )
 
     job.execute_in_process(partition_key=most_recent_partition)
