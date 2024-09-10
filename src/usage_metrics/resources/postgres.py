@@ -21,31 +21,20 @@ class PostgresIOManager(IOManager):
 
     def __init__(
         self,
-        user: str,
-        password: str,
-        db: str,
-        ip: str,
-        port: str,
-        clobber: bool = True,
+        user: str = os.environ["POSTGRES_USER"],
+        password: str = os.environ["POSTGRES_PASSWORD"],
+        db: str = os.environ["POSTGRES_DB"],
+        ip: str = os.environ["POSTGRES_IP"],
+        port: str = os.environ["POSTGRES_PORT"],
     ) -> None:
         """Initialize PostgresManager object.
 
         Args:
             clobber: Clobber and recreate the database if True.
         """
-        self.clobber = clobber
         self.engine = sa.create_engine(
             f"postgresql://{user}:{password}@{ip}:{port}/{db}"
         )
-        usage_metrics_metadata.create_all(self.engine)
-
-    def get_engine(self) -> sa.engine.Engine:
-        """Get SQLAlchemy engine to interact with the db.
-
-        Returns:
-            engine: SQLAlchemy engine for the sqlite db.
-        """
-        return self.engine
 
     def append_df_to_table(self, df: pd.DataFrame, table_name: str) -> None:
         """Append a dataframe to a table in the db.
@@ -60,9 +49,6 @@ class PostgresIOManager(IOManager):
             Create a schema one in usage_metrics.models."""
         table_obj = usage_metrics_metadata.tables[table_name]
 
-        if self.clobber:
-            usage_metrics_metadata.drop_all(self.engine, tables=[table_obj])
-
         # TODO: could also get the insert_ids already in the database
         # and only append the new data.
         with self.engine.begin() as conn:
@@ -74,7 +60,7 @@ class PostgresIOManager(IOManager):
                 dtype={c.name: c.type for c in table_obj.columns},
             )
 
-    def handle_output(self, context: OutputContext, obj: pd.DataFrame | str):
+    def handle_output(self, context: OutputContext, obj: pd.DataFrame):
         """Handle an op or asset output.
 
         If the output is a dataframe, write it to the database.
@@ -82,7 +68,7 @@ class PostgresIOManager(IOManager):
         Args:
             context: dagster keyword that provides access output information like asset
                 name.
-            obj: a sql query or dataframe to add to the database.
+            obj: a dataframe to add to the database.
 
         Raises:
             Exception: if an asset or op returns an unsupported datatype.
@@ -121,11 +107,6 @@ class PostgresIOManager(IOManager):
 
 @io_manager(
     config_schema={
-        "clobber": Field(
-            bool,
-            description="Clobber and recreate the database if True.",
-            default_value=False,
-        ),
         "postgres_user": Field(
             str,
             description="Postgres connection string user.",
@@ -155,14 +136,12 @@ class PostgresIOManager(IOManager):
 )
 def postgres_manager(init_context) -> PostgresIOManager:
     """Create a PostgresManager dagster resource."""
-    clobber = init_context.resource_config["clobber"]
     user = init_context.resource_config["postgres_user"]
     password = init_context.resource_config["postgres_password"]
     db = init_context.resource_config["postgres_db"]
     ip = init_context.resource_config["postgres_ip"]
     port = init_context.resource_config["postgres_port"]
     return PostgresIOManager(
-        clobber=clobber,
         user=user,
         password=password,
         db=db,

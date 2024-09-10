@@ -1,13 +1,15 @@
 """Environment configuration for alembic."""
 
 import logging
+import os
 from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from usage_metrics.models import usage_metrics_metadata
-from usage_metrics.resources.sqlite import SQLiteIOManager  # TO DO: Set up paths!!
+from usage_metrics.resources.postgres import PostgresIOManager  # TO DO: Set up paths!!
+from usage_metrics.resources.sqlite import SQLiteIOManager
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -32,11 +34,15 @@ target_metadata = usage_metrics_metadata
 # can be acquired:
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
+dev_envr = os.getenv("METRICS_PROD_ENV", "local")
+engines = {"prod": PostgresIOManager().engine, "local": SQLiteIOManager().engine}
 
-db_location = str(
-    SQLiteIOManager().engine.url
-)  # NOTE: Is there any reason we'd want it to point at the CloudSQL db ever?
-logger.info(f"alembic config.sqlalchemy.url: {db_location}")
+logger.info(f"Configuring database for {dev_envr} database")
+
+# Get URL from engine based on METRICS_PROD_ENV environment variable and handle escaping %ages
+db_location = (
+    engines[dev_envr].url.render_as_string(hide_password=False).replace("%", "%%")
+)
 config.set_main_option("sqlalchemy.url", db_location)
 
 

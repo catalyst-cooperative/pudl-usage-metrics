@@ -2,6 +2,7 @@
 
 import importlib.resources
 import itertools
+import logging
 import os
 import warnings
 
@@ -24,6 +25,8 @@ from dagster._core.definitions.cacheable_assets import CacheableAssetsDefinition
 import usage_metrics
 from usage_metrics.resources.postgres import postgres_manager
 from usage_metrics.resources.sqlite import sqlite_manager
+
+logger = logging.getLogger(__name__)
 
 raw_module_groups = {
     "raw_s3": [usage_metrics.raw.s3],
@@ -90,10 +93,12 @@ resources_by_env = {  # STILL TO DO!
     "local": {"database_manager": sqlite_manager},
 }
 
+resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
+
 defs: Definitions = Definitions(
     assets=default_assets,
     # asset_checks=default_asset_checks,
-    resources=resources_by_env["local"],  # TODO: How to handle this?
+    resources=resources,  # TODO: How to handle this?
     jobs=[
         define_asset_job(
             name="all_metrics_etl",

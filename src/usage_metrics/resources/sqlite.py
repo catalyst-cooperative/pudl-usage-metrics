@@ -34,7 +34,6 @@ class SQLiteIOManager(IOManager):
             db_path.parent.mkdir(exist_ok=True)
             db_path.touch()
 
-        usage_metrics_metadata.create_all(engine)
         self.engine = engine
         self.clobber = clobber
 

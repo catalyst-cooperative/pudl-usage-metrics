@@ -1,5 +1,7 @@
 """Transform data from S3 logs."""
 
+import os
+
 import pandas as pd
 from dagster import (
     AssetExecutionContext,
@@ -104,5 +106,7 @@ def core_s3_logs(
             "remote_ip_isEU",
         ]
     )
+
+    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
 
     return geocoded_df.reset_index()

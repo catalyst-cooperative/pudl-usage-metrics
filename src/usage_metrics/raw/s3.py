@@ -16,6 +16,8 @@ from tqdm import tqdm
 BUCKET_URI = "pudl-s3-logs.catalyst.coop"
 PATH_EXT = "data/pudl_s3_logs/"
 
+s3_weekly_partitions = WeeklyPartitionsDefinition(start_date="2023-08-16")
+
 
 def download_s3_logs_from_gcs(
     context: AssetExecutionContext, partition_dates: tuple[str], download_dir: Path
@@ -41,7 +43,7 @@ def download_s3_logs_from_gcs(
 
 
 @asset(
-    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    partitions_def=s3_weekly_partitions,
     tags={"source": "s3"},
 )
 def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
