@@ -87,6 +87,10 @@ def core_s3_logs(
     for field in numeric_fields:
         geocoded_df[field] = pd.to_numeric(geocoded_df[field], errors="coerce")
 
+    # Convert bytes to megabytes
+    geocoded_df["bytes_sent"] = geocoded_df["bytes_sent"] / 1000000
+    geocoded_df = geocoded_df.rename(columns={"bytes_sent": "megabytes_sent"})
+
     geocoded_df = geocoded_df.set_index("request_id")
     assert geocoded_df.index.is_unique
 

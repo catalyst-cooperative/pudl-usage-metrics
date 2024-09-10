@@ -49,9 +49,9 @@ class SQLiteIOManager(IOManager):
             table_name in usage_metrics_metadata.tables
         ), f"""{table_name} does not have a database schema defined.
             Create a schema one in usage_metrics.models."""
+        table_obj = usage_metrics_metadata.tables[table_name]
 
         if self.clobber:
-            table_obj = usage_metrics_metadata.tables[table_name]
             usage_metrics_metadata.drop_all(self.engine, tables=[table_obj])
 
         # TODO: could also get the insert_ids already in the database
@@ -62,6 +62,7 @@ class SQLiteIOManager(IOManager):
                 con=conn,
                 if_exists="append",
                 index=False,
+                dtype={c.name: c.type for c in table_obj.columns},
             )
 
     def handle_output(self, context: OutputContext, obj: pd.DataFrame | str):

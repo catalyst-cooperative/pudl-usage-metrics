@@ -77,7 +77,7 @@ core_s3_logs = Table(
     Column("bucket_owner", String),
     Column("requester", String),
     Column("http_status", Integer),
-    Column("bytes_sent", BigInteger),
+    Column("megabytes_sent", Float),
     # IP location
     Column("remote_ip", String),
     Column("remote_ip_city", String),
@@ -139,7 +139,7 @@ out_s3_logs = Table(
     Column("access_point_arn", String),
     Column("acl_required", String),
     Column("authentication_type", String),
-    Column("bytes_sent", BigInteger),
+    Column("megabytes_sent", Float),
     Column("cipher_suite", String),
     Column("error_code", String),
     Column("host_header", String),
