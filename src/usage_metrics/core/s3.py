@@ -25,6 +25,7 @@ def core_s3_logs(
 
     Add column headers, geocode values,
     """
+    context.log.info(f"Processing data for the week of {context.partition_key}")
     # Name columns
     raw_s3_logs.columns = [
         "bucket_owner",

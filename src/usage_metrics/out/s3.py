@@ -28,6 +28,8 @@ def out_s3_logs(
     Filter to GET requests, drop Catalyst and AWS traffic, and add version/table
     columns.
     """
+    context.log.info(f"Processing data for the week of {context.partition_key}")
+
     # Only keep GET requests
     out = core_s3_logs.loc[
         (core_s3_logs.operation == "REST.GET.BUCKET")
