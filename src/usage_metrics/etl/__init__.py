@@ -93,7 +93,7 @@ resources_by_env = {  # STILL TO DO!
 defs: Definitions = Definitions(
     assets=default_assets,
     # asset_checks=default_asset_checks,
-    resources=resources_by_env["prod"],  # TODO: How to handle this?
+    resources=resources_by_env["local"],  # TODO: How to handle this?
     jobs=[
         define_asset_job(
             name="all_metrics_etl",

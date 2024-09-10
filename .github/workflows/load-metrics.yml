@@ -2,8 +2,8 @@ name: load-metrics
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "14 0 * * *" # Every day at 12:14 AM UTC
+  schedule:
+    - cron: "14 7 * * 1" # Every Monday at 7:14 AM UTC
 
 env:
   PRESET_IP1: 44.193.153.196
