@@ -1,0 +1,78 @@
+name: save-github-metrics
+on:
+  workflow_dispatch:
+  schedule:
+    # Run every Tuesday at 8:00 PM UTC (Tuesday 12:00 PM AK)
+    # https://crontab.guru/#0_20_*_*_2
+    - cron: "0 20 * * 2"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Set up conda environment for testing
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: environment.yml
+          cache-environment: true
+          cache-environment-key: environment-${{ hashFiles('pyproject.toml') }}
+          condarc: |
+            channels:
+            - conda-forge
+            - defaults
+            channel_priority: strict
+
+      - name: Log conda environnment information
+        run: |
+          conda info
+          conda list
+          conda config --show-sources
+          conda config --show
+          printenv | sort
+
+      - name: Authenticate gcloud
+        id: gcloud-auth
+        continue-on-error: true
+        uses: "google-github-actions/auth@v2"
+        with:
+          workload_identity_provider: "projects/345950277072/locations/global/workloadIdentityPools/gh-actions-pool/providers/gh-actions-provider"
+          service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
+          create_credentials_file: true
+
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+        with:
+          version: ">= 363.0.0"
+
+      - name: Save Github Metrics
+        env:
+          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+        run: |
+          mamba run -n pudl-usage-metrics python run_data_update.py
+
+      - name: Inform the Codemonkeys
+        uses: 8398a7/action-slack@v3
+        with:
+          status: custom
+          fields: workflow,job,commit,repo,ref,author,took
+          custom_payload: |
+            {
+              username: 'action-slack',
+              icon_emoji: ':octocat:',
+              attachments: [{
+                color: '${{ job.status }}' === 'success' ? 'good' : '${{ job.status }}' === 'failure' ? 'danger' : 'warning',
+                text: `${process.env.AS_WORKFLOW}\n${process.env.AS_JOB} (${process.env.AS_COMMIT}) of ${process.env.AS_REPO}@${process.env.AS_REF} by ${process.env.AS_AUTHOR} ${{ job.status }} in ${process.env.AS_TOOK}`,
+              }]
+            }
+        env:
+          GITHUB_TOKEN: ${{ github.token }} # required
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # required
+          MATRIX_CONTEXT: ${{ toJson(matrix) }} # required
+        if: always() # Pick up events even if the job fails or is canceled.
