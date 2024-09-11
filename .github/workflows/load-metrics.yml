@@ -9,6 +9,7 @@ env:
   PRESET_IP1: 44.193.153.196
   PRESET_IP2: 52.70.123.52
   PRESET_IP3: 54.83.88.93
+  METRICS_PROD_ENV: "prod"
 
 jobs:
   load-metrics:
@@ -57,7 +58,7 @@ jobs:
         run: |
           gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ steps.ip.outputs.ipv4 }},${{ env.PRESET_IP1 }},${{ env.PRESET_IP2 }},${{ env.PRESET_IP3 }}
 
-      - name: Run ETL
+      - name: Run ETL on the latest full week of data
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
