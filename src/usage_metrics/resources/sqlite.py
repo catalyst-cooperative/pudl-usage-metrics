@@ -100,14 +100,13 @@ class SQLiteIOManager(IOManager):
 
         with engine.begin() as con:
             try:
+                tbl = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
+                query = sa.select(tbl)
                 if context.has_partition_key:
-                    query = "SELECT * FROM ? WHERE partition_key = ?"
-                else:
-                    query = table_name
+                    query = query.where(tbl.c["partition_key"] == context.partition_key)
                 df = pd.read_sql(
-                    query,
-                    con,
-                    params=[table_name, context.partition_key],
+                    sql=query,
+                    con=con,
                     parse_dates=[
                         col.name
                         for col in table_obj.columns
