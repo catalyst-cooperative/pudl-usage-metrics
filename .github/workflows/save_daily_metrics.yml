@@ -2,9 +2,9 @@ name: save-daily-metrics
 on:
   workflow_dispatch:
   schedule:
-    # Run every Tuesday at 8:00 PM UTC (Tuesday 12:00 PM AK)
+    # Run every day at 8:00 PM UTC
     # https://crontab.guru/#0_20_*_*_2
-    - cron: "0 20 * * 2"
+    - cron: "0 20 * * *"
 
 jobs:
   build:
