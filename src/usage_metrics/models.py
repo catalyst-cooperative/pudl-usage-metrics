@@ -63,6 +63,7 @@ datasette_request_logs = Table(
     Column("remote_ip_postal", String),
     Column("remote_ip_region", String),
     Column("remote_ip_full_location", String),
+    Column("partition_key", String),
 )
 
 core_s3_logs = Table(
@@ -110,6 +111,7 @@ core_s3_logs = Table(
     Column("turn_around_time", Float),
     Column("user_agent", String),
     Column("version_id", String),
+    Column("partition_key", String),
 )
 
 out_s3_logs = Table(
@@ -155,6 +157,7 @@ out_s3_logs = Table(
     Column("turn_around_time", Float),
     Column("user_agent", String),
     Column("version_id", String),
+    Column("partition_key", String),
 )
 
 intake_logs = Table(
@@ -191,4 +194,5 @@ intake_logs = Table(
     Column("remote_ip_postal", String),
     Column("remote_ip_region", String),
     Column("remote_ip_full_location", String),
+    Column("partition_key", String),
 )

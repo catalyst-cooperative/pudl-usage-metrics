@@ -30,7 +30,7 @@ conda activate pudl-usage-metrics
 
 The ETL uses [ipinfo](https://ipinfo.io/) to geocode ip addresses. You need to obtain an ipinfo API token and store it in the `IPINFO_TOKEN` environment variable.
 
-If you want to take advantage of caching raw logs, rather than redownloading them for each run, you can set the optional ``DATA_DIR`` environment variable. If this is not set, the script will save files to a temporary directory by default. This is highly recommended to avoid unnecessary egress charges.
+If you want to take advantage of caching raw logs, rather than redownloading them for each run, you can set the optional ``DATA_DIR`` environment variable. If this is not set, the script will save files to a temporary directory by default.
 
 Dagster stores run logs and caches in a directory stored in the `DAGSTER_HOME` environment variable. The `usage_metrics/dagster_home/dagster.yaml` file contains configuration for the dagster instance. **Note:** The `usage_metrics/dagster_home/storage` directory could grow to become a couple GBs because all op outputs for every run are stored there. You can read more about the dagster_home directory in the [dagster docs](https://docs.dagster.io/deployment/dagster-instance#default-local-behavior).
 
@@ -109,17 +109,36 @@ You can run the ETL via the dagit UI or the [dagster CLI](https://docs.dagster.i
 
 To run a a complete backfill from the Dagit UI go to the job's partitions tab. Then click on the "Launch Backfill" button in the upper left corner of the window. This should bring up a new window with a list of partitions. Click "Select All" and then click the "Submit" button. This will submit a run for each partition. You can follow the runs on the ["Runs" tab](http://localhost:3000/instance/runs).
 
-### Databases
+### Local vs. production development
 
-#### SQLite
+The choice between local development (written to an SQLite database) and production development (written to a Google CloudSQL Postgres database) is determined through the `METRIC_PROD_ENV` environment variable. By default, if this is not set you will develop locally. To set this variable to develop in production, run the following:
 
-Jobs in the `local_usage_metrics` dagster repository create a sqlite database called `usage_metrics.db` in the `usage_metrics/data/` directory. A primary key constraint error will be thrown if you rerun the ETL for a partition. If you want to recreate the entire database just delete the sqlite database and rerun the ETL.
+```
+conda env config vars set METRIC_PROD_ENV="prod"
+conda activate pudl-usage-metrics
+```
 
-#### Google Cloud SQL Postgres
+To revert to local development, set `METRIC_PROD_ENV="local"`.
 
-Jobs in the `gcp_usage_metrics` dagster repository append new partitions to tables in a Cloud SQL postgres database. A primary key constraint error will be thrown if you rerun the ETL for a partition. The `load-metrics` GitHub action is responsible for updating the database with new partitioned data.
+#### Schema management
+We use Alembic to manage the schemas of both local and production databases. Whenever a new column or table is added, run the following commands to create a new schema migration and then upgrade the database schema to match using the following code:
 
-If a new column is added or data is processed in a new way, you'll have to delete the table in the database and rerun a complete backfill. **Note: The Preset dashboard will be unavailable during the complete backfill.**
+```
+alembic revision --autogenerate -m "Add my cool new table"
+alembic upgrade head
+```
+
+Because of the primary key constraints, if you need to rerun a partition that has already been run before you'll need to delete the database and start over. If you're adding a new table or datasource, run a backfill just for that dataset's particular job to avoid this constraint.
+
+#### Local development (SQLite)
+
+Local development will create a sqlite database called `usage_metrics.db` in the `usage_metrics/data/` directory. A primary key constraint error will be thrown if you rerun the ETL for a partition. If you want to recreate the entire database just delete the sqlite database and rerun the ETL.
+
+#### Production development (Google Cloud SQL Postgres)
+
+Production runs will append new partitions to tables in a Cloud SQL postgres database. A primary key constraint error will be thrown if you rerun the ETL for a partition. The `load-metrics` GitHub action is responsible for updating the database with new partitioned data.
+
+If a new column is added or data is processed in a new way, you'll have to delete the table in the database and rerun a complete backfill.
 
 To run jobs in the `gcp_usage_metrics` repo, you need to whitelist your ip address for the database:
 
@@ -139,7 +158,7 @@ conda env config vars set POSTGRES_PORT={PUDL_USAGE_METRICS_DB_PORT}
 conda activate pudl-usage-metrics
 ```
 
-You can find the connection details in the
+Ask a member of Inframundo for the connection details.
 
 ### IP Geocoding with ipinfo
 
@@ -147,4 +166,4 @@ The ETL uses [ipinfo](https://ipinfo.io/) for geocoding the user ip addresses wh
 
 ## Add new data sources
 
-To add a new data source to the dagster repo, add new modules to the `raw` and `core` and `out` directories and add these modules to the corresponding jobs. Once the dataset has been tested locally, run a complete backfill for the job that uses the `PostgresManager` to populate the Cloud SQL database.
+To add a new data source to the dagster repo, add new modules to the `raw` and `core` and `out` directories and add these modules to the corresponding jobs. Once the dataset has been tested locally, run a complete backfill for the job with `METRIC_PROD_ENV="prod"` to populate the Cloud SQL database.

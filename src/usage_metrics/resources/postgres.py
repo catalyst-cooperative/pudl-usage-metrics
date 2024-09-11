@@ -74,6 +74,10 @@ class PostgresIOManager(IOManager):
             Exception: if an asset or op returns an unsupported datatype.
         """
         if isinstance(obj, pd.DataFrame):
+            # If a table has a partition key, create a partition_key column
+            # to enable subsetting a partition when reading out of SQLite.
+            if context.has_partition_key:
+                obj["partition_key"] = context.partition_key
             table_name = get_table_name_from_context(context)
             self.append_df_to_table(obj, table_name)
         else:
@@ -87,11 +91,25 @@ class PostgresIOManager(IOManager):
                 name.
         """
         table_name = get_table_name_from_context(context)
+        table_obj = usage_metrics_metadata.tables[table_name]
         engine = self.engine
 
         with engine.begin() as con:
             try:
-                df = pd.read_sql_table(table_name, con)
+                if context.has_partition_key:
+                    query = "SELECT * FROM ? WHERE partition_key = ?"
+                else:
+                    query = table_name
+                df = pd.read_sql(
+                    query,
+                    con,
+                    params=[table_name, context.partition_key],
+                    parse_dates=[
+                        col.name
+                        for col in table_obj.columns
+                        if str(col.type) == "TIMESTAMP"
+                    ],
+                )
             except ValueError as err:
                 raise ValueError(
                     f"{table_name} not found. Make sure the table is modelled in"
