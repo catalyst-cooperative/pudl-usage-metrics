@@ -12,7 +12,7 @@ KAGGLE_OWNER = "catalystcooperative"
 KAGGLE_DATASET = "pudl-project"
 OWNER = "catalyst-cooperative"
 REPO = "pudl"
-BUCKET_NAME = "kaggle-metrics"
+BUCKET_NAME = "pudl-usage-metrics-archives.catalyst.coop"
 
 logger = logging.getLogger()
 logging.basicConfig(level="INFO")
@@ -31,7 +31,7 @@ def upload_to_bucket(data):
     """Upload a gcp object."""
     storage_client = storage.Client()
     bucket = storage_client.bucket(BUCKET_NAME)
-    blob_name = f"kaggle-metrics-{date.today().strftime('%Y-%m-%d')}.json"
+    blob_name = f"kaggle/{date.today().strftime('%Y-%m-%d')}.json"
 
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)
