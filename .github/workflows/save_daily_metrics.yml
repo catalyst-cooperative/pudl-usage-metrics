@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   schedule:
     # Run every day at 8:00 PM UTC
-    # https://crontab.guru/#0_20_*_*_2
+    # https://crontab.guru/#0_20_*_*_*
     - cron: "0 20 * * *"
 
 jobs:
