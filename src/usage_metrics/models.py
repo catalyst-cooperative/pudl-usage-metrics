@@ -69,7 +69,7 @@ datasette_request_logs = Table(
 core_s3_logs = Table(
     "core_s3_logs",
     usage_metrics_metadata,
-    Column("request_id", String, primary_key=True, comment="A unique ID for each log."),
+    Column("id", String, primary_key=True, comment="A unique ID for each log."),
     # Query information
     Column("time", DateTime),
     Column("request_uri", String),
@@ -87,6 +87,7 @@ core_s3_logs = Table(
     Column("remote_ip_hostname", String),
     Column("remote_ip_country_name", String),
     Column("remote_ip_asn", String),
+    Column("remote_ip_bogon", Boolean),
     Column("remote_ip_country", String),
     Column("remote_ip_timezone", String),
     Column("remote_ip_latitude", Float),
@@ -104,6 +105,7 @@ core_s3_logs = Table(
     Column("host_id", String),
     Column("key", String),
     Column("object_size", Float),
+    Column("request_id", String),
     Column("referer", String),
     Column("signature_version", String),
     Column("tls_version", String),
@@ -117,7 +119,7 @@ core_s3_logs = Table(
 out_s3_logs = Table(
     "out_s3_logs",
     usage_metrics_metadata,
-    Column("request_id", String, primary_key=True, comment="A unique ID for each log."),
+    Column("id", String, primary_key=True, comment="A unique ID for each log."),
     # Query information
     Column("time", DateTime),
     Column("table", String),
@@ -130,6 +132,7 @@ out_s3_logs = Table(
     Column("remote_ip_hostname", String),
     Column("remote_ip_country_name", String),
     Column("remote_ip_asn", String),
+    Column("remote_ip_bogon", Boolean),
     Column("remote_ip_country", String),
     Column("remote_ip_timezone", String),
     Column("remote_ip_latitude", Float),
@@ -150,6 +153,7 @@ out_s3_logs = Table(
     Column("key", String),
     Column("object_size", Float),
     Column("referer", String),
+    Column("request_id", String),
     Column("request_uri", String),
     Column("signature_version", String),
     Column("tls_version", String),

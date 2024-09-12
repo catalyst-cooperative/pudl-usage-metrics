@@ -37,7 +37,9 @@ class SQLiteIOManager(IOManager):
         self.engine = engine
         self.clobber = clobber
 
-    def append_df_to_table(self, df: pd.DataFrame, table_name: str) -> None:
+    def append_df_to_table(
+        self, context: OutputContext, df: pd.DataFrame, table_name: str
+    ) -> None:
         """Append a dataframe to a table in the db.
 
         Args:
@@ -53,16 +55,33 @@ class SQLiteIOManager(IOManager):
         if self.clobber:
             usage_metrics_metadata.drop_all(self.engine, tables=[table_obj])
 
-        # TODO: could also get the insert_ids already in the database
-        # and only append the new data.
+        # Get primary key column(s) of dataframe, and check against
+        # already-existing data.
+        pk_cols = [
+            pk_column.name for pk_column in table_obj.primary_key.columns.values()
+        ]
+        tbl = sa.Table(table_name, sa.MetaData(), autoload_with=self.engine)
+        query = sa.select(*[tbl.c[c] for c in pk_cols])  # Only select PK cols
+
         with self.engine.begin() as conn:
-            df.to_sql(
-                name=table_name,
-                con=conn,
-                if_exists="append",
-                index=False,
-                dtype={c.name: c.type for c in table_obj.columns},
-            )
+            # Get existing primary keys
+            existing_pks = pd.read_sql(sql=query, con=conn)
+            i1 = df.set_index(pk_cols).index
+            i2 = existing_pks.set_index(pk_cols).index
+            # Only update primary keys that aren't in the database
+            df_new = df[~i1.isin(i2)]
+            if df_new.empty:
+                context.log.warn(
+                    "All records already loaded, not writing any data. Clobber the database if you want to overwrite this data."
+                )
+            else:
+                df_new.to_sql(
+                    name=table_name,
+                    con=conn,
+                    if_exists="append",
+                    index=False,
+                    dtype={c.name: c.type for c in table_obj.columns},
+                )
 
     def handle_output(self, context: OutputContext, obj: pd.DataFrame | str):
         """Handle an op or asset output.
@@ -78,12 +97,17 @@ class SQLiteIOManager(IOManager):
             Exception: if an asset or op returns an unsupported datatype.
         """
         if isinstance(obj, pd.DataFrame):
+            if obj.empty:
+                context.log.warning(
+                    f"Partition {context.partition_key} has no data, skipping."
+                )
             # If a table has a partition key, create a partition_key column
             # to enable subsetting a partition when reading out of SQLite.
-            if context.has_partition_key:
-                obj["partition_key"] = context.partition_key
-            table_name = get_table_name_from_context(context)
-            self.append_df_to_table(obj, table_name)
+            else:
+                if context.has_partition_key:
+                    obj["partition_key"] = context.partition_key
+                table_name = get_table_name_from_context(context)
+                self.append_df_to_table(context, obj, table_name)
         else:
             raise Exception("SQLiteIOManager only supports pandas DataFrames.")
 
@@ -119,10 +143,16 @@ class SQLiteIOManager(IOManager):
                     "usage_metrics.models.py and regenerate the database."
                 ) from err
             if df.empty:
-                raise AssertionError(
-                    f"The {table_name} table is empty. Materialize "
-                    f"the {table_name} asset so it is available in the database."
-                )
+                # If table is there but partition is not
+                if sa.inspect(engine).has_table(table_name):
+                    context.log.warning(
+                        f"No data available for partition {context.partition_key}"
+                    )
+                else:
+                    raise AssertionError(
+                        f"The {table_name} table is empty. Materialize "
+                        f"the {table_name} asset so it is available in the database."
+                    )
             return df
 
 

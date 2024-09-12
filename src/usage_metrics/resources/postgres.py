@@ -36,7 +36,9 @@ class PostgresIOManager(IOManager):
             f"postgresql://{user}:{password}@{ip}:{port}/{db}"
         )
 
-    def append_df_to_table(self, df: pd.DataFrame, table_name: str) -> None:
+    def append_df_to_table(
+        self, context: OutputContext, df: pd.DataFrame, table_name: str
+    ) -> None:
         """Append a dataframe to a table in the db.
 
         Args:
@@ -49,10 +51,26 @@ class PostgresIOManager(IOManager):
             Create a schema one in usage_metrics.models."""
         table_obj = usage_metrics_metadata.tables[table_name]
 
-        # TODO: could also get the insert_ids already in the database
-        # and only append the new data.
+        # Get primary key column(s) of dataframe, and check against
+        # already-existing data.
+        pk_cols = [
+            pk_column.name for pk_column in table_obj.primary_key.columns.values()
+        ]
+        tbl = sa.Table(table_name, sa.MetaData(), autoload_with=self.engine)
+        query = sa.select(*[tbl.c[c] for c in pk_cols])  # Only select PK cols
+
         with self.engine.begin() as conn:
-            df.to_sql(
+            # Get existing primary keys
+            existing_pks = pd.read_sql(sql=query, con=conn)
+            i1 = df.set_index(pk_cols).index
+            i2 = existing_pks.set_index(pk_cols).index
+            # Only update primary keys that aren't in the database
+            df_new = df[~i1.isin(i2)]
+            if df_new.empty:
+                context.log.warn(
+                    "All records already loaded to database. Clobber the database if you want to overwrite this data."
+                )
+            df_new.to_sql(
                 name=table_name,
                 con=conn,
                 if_exists="append",
@@ -76,10 +94,15 @@ class PostgresIOManager(IOManager):
         if isinstance(obj, pd.DataFrame):
             # If a table has a partition key, create a partition_key column
             # to enable subsetting a partition when reading out of SQLite.
-            if context.has_partition_key:
-                obj["partition_key"] = context.partition_key
-            table_name = get_table_name_from_context(context)
-            self.append_df_to_table(obj, table_name)
+            if obj.empty:
+                context.log.warning(
+                    f"Partition {context.partition_key} has no data, skipping."
+                )
+            else:
+                if context.has_partition_key:
+                    obj["partition_key"] = context.partition_key
+                table_name = get_table_name_from_context(context)
+                self.append_df_to_table(context, obj, table_name)
         else:
             raise Exception("PostgresIOManager only supports pandas DataFrames.")
 
@@ -115,10 +138,15 @@ class PostgresIOManager(IOManager):
                     "usage_metrics.models.py and regenerate the database."
                 ) from err
             if df.empty:
-                raise AssertionError(
-                    f"The {table_name} table is empty. Materialize "
-                    f"the {table_name} asset so it is available in the database."
-                )
+                if sa.inspect(engine).has_table(table_name):
+                    context.log.warning(
+                        f"No data available for partition {context.partition_key}"
+                    )
+                else:
+                    raise AssertionError(
+                        f"The {table_name} table is empty. Materialize "
+                        f"the {table_name} asset so it is available in the database."
+                    )
             return df
 
 

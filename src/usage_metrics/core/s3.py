@@ -26,6 +26,9 @@ def core_s3_logs(
     Add column headers, geocode values,
     """
     context.log.info(f"Processing data for the week of {context.partition_key}")
+
+    if raw_s3_logs.empty:
+        return raw_s3_logs
     # Name columns
     raw_s3_logs.columns = [
         "bucket_owner",
@@ -94,7 +97,14 @@ def core_s3_logs(
     geocoded_df["bytes_sent"] = geocoded_df["bytes_sent"] / 1000000
     geocoded_df = geocoded_df.rename(columns={"bytes_sent": "megabytes_sent"})
 
-    geocoded_df = geocoded_df.set_index("request_id")
+    # Sometimes the request_id is not unique (when data is copied between S3 buckets
+    # or for some deletion requests).
+    # Let's make an actually unique ID.
+    geocoded_df["id"] = (
+        geocoded_df.request_id + "_" + geocoded_df.operation + "_" + geocoded_df.key
+    )
+    geocoded_df = geocoded_df.set_index("id")
+
     assert geocoded_df.index.is_unique
 
     # Drop unnecessary geocoding columns

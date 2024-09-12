@@ -30,6 +30,8 @@ def out_s3_logs(
     """
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
+    if core_s3_logs.empty:
+        return core_s3_logs
     # Only keep GET requests
     out = core_s3_logs.loc[
         (core_s3_logs.operation == "REST.GET.BUCKET")
@@ -40,7 +42,7 @@ def out_s3_logs(
     out = out.loc[~out.requester.isin(REQUESTERS_IGNORE)]
 
     # Add columns for tables and versions
-    out[["version", "table"]] = out["key"].str.split("/", expand=True)
+    out[["version", "table"]] = out["key"].str.split("/", expand=True, n=1)
     out["version"] = out["version"].replace(["-", ""], pd.NA)
 
     # Drop columns

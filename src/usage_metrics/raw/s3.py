@@ -75,4 +75,6 @@ def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
                 weekly_dfs.append(pd.read_csv(path, delimiter=" ", header=None))
             except pd.errors.EmptyDataError:
                 context.log.warnings(f"{path} is an empty file, couldn't read.")
-        return pd.concat(weekly_dfs)
+        if weekly_dfs:  # If data
+            return pd.concat(weekly_dfs)
+        return pd.DataFrame()
