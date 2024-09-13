@@ -59,7 +59,8 @@ jobs:
 
       - name: Save Kaggle Metrics
         env:
-          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
           mamba run -n pudl-usage-metrics python src/usage_metrics/scripts/save_kaggle_metrics.py
 
