@@ -6,9 +6,6 @@ on:
     - cron: "14 7 * * 1" # Every Monday at 7:14 AM UTC
 
 env:
-  PRESET_IP1: 44.193.153.196
-  PRESET_IP2: 52.70.123.52
-  PRESET_IP3: 54.83.88.93
   METRICS_PROD_ENV: "prod"
 
 jobs:
@@ -30,18 +27,17 @@ jobs:
           service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
           create_credentials_file: true
 
-      - name: Set up conda environment for testing
-        uses: conda-incubator/setup-miniconda@v3.0.4
+      - name: Install Conda environment using mamba
+        uses: mamba-org/setup-micromamba@v1
         with:
-          miniforge-variant: Mambaforge
-          miniforge-version: latest
-          use-mamba: true
-          mamba-version: "*"
-          channels: conda-forge,defaults
-          channel-priority: true
-          python-version: ${{ matrix.python-version }}
-          activate-environment: pudl-usage-metrics
           environment-file: environment.yml
+          cache-environment: true
+          condarc: |
+            channels:
+            - conda-forge
+            - defaults
+            channel_priority: strict
+
       - shell: bash -l {0}
         run: |
           mamba info
@@ -52,11 +48,15 @@ jobs:
 
       - name: Get GitHub Action runner's IP Address
         id: ip
-        uses: haythem/public-ip@v1.3
+        run: ipv4=$(curl --silent --url https://api.ipify.org); echo "ipv4=$ipv4" >> $GITHUB_OUTPUT
+
+      - name: Echo IP for github runner
+        run: |
+          echo ${{ steps.ip.outputs.ipv4 }}
 
       - name: Whitelist Github Action and Superset IPs
         run: |
-          gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ steps.ip.outputs.ipv4 }},${{ env.PRESET_IP1 }},${{ env.PRESET_IP2 }},${{ env.PRESET_IP3 }}
+          gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ steps.ip.outputs.ipv4 }}
 
       - name: Run ETL on the latest full week of data
         env:
@@ -71,7 +71,7 @@ jobs:
 
       - name: Remove Github Action runner's IP
         run: |
-          gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ env.PRESET_IP1 }},${{ env.PRESET_IP2 }},${{ env.PRESET_IP3 }}
+          gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks={}
 
   ci-notify:
     runs-on: ubuntu-latest
