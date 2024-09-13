@@ -22,8 +22,7 @@ jobs:
         with:
           environment-file: environment.yml
           cache-environment: true
-          cache-environment-key: environment-${{ hashFiles('pyproject.toml') }}
-          condarc: |
+          ondarc: |
             channels:
             - conda-forge
             - defaults
@@ -51,18 +50,20 @@ jobs:
         with:
           version: ">= 363.0.0"
 
-      - name: Save Github Metrics
+      - shell: bash -l {0}
+        name: Save Github Metrics
         env:
           API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
         run: |
-          mamba run -n pudl-usage-metrics python src/usage_metrics/scripts/save_github_metrics.py
+          python src/usage_metrics/scripts/save_github_metrics.py
 
-      - name: Save Kaggle Metrics
+      - shell: bash -l {0}
+        name: Save Kaggle Metrics
         env:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
-          mamba run -n pudl-usage-metrics python src/usage_metrics/scripts/save_kaggle_metrics.py
+          python src/usage_metrics/scripts/save_kaggle_metrics.py
 
       - name: Inform the Codemonkeys
         uses: 8398a7/action-slack@v3
