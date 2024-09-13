@@ -38,14 +38,6 @@ jobs:
             - defaults
             channel_priority: strict
 
-      - shell: bash -l {0}
-        run: |
-          conda info
-          conda list
-          conda config --show-sources
-          conda config --show
-          printenv | sort
-
       - name: Get GitHub Action runner's IP Address
         id: ip
         run: ipv4=$(curl --silent --url https://api.ipify.org); echo "ipv4=$ipv4" >> $GITHUB_OUTPUT
@@ -66,8 +58,9 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+        shell: bash -l {0}
         run: |
-          conda run -n pudl-usage-metrics python run_data_update.py
+          python run_data_update.py
 
       - name: Remove Github Action runner's IP
         run: |
