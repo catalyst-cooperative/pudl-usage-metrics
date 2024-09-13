@@ -51,6 +51,7 @@ jobs:
           gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ steps.ip.outputs.ipv4 }}
 
       - name: Run ETL on the latest full week of data
+        id: load-data
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
@@ -72,6 +73,6 @@ jobs:
         uses: slackapi/slack-github-action@v1
         with:
           channel-id: "C03FHB9N0PQ"
-          slack-message: "Weekly usage metrics processing ran with status: {{ job.status }}."
+          slack-message: "Weekly usage metrics processing ran with status: ${{ job.status }}."
         env:
           SLACK_BOT_TOKEN: ${{ secrets.PUDL_DEPLOY_SLACK_TOKEN }}
