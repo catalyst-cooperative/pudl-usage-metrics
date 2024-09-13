@@ -40,8 +40,8 @@ jobs:
 
       - shell: bash -l {0}
         run: |
-          mamba info
-          mamba list
+          conda info
+          conda list
           conda config --show-sources
           conda config --show
           printenv | sort
@@ -67,7 +67,7 @@ jobs:
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
         run: |
-          mamba run -n pudl-usage-metrics python run_data_update.py
+          conda run -n pudl-usage-metrics python run_data_update.py
 
       - name: Remove Github Action runner's IP
         run: |
