@@ -32,6 +32,7 @@ warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 raw_module_groups = {
     "raw_s3": [usage_metrics.raw.s3],
+    "raw_github": [usage_metrics.raw.github],
 }
 
 core_module_groups = {
