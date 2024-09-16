@@ -1,5 +1,6 @@
 """Extract data from S3 logs."""
 
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -14,7 +15,7 @@ from google.cloud import storage
 from usage_metrics.raw.extract import GCSExtractor
 
 
-class S3Extractor(GCSExtractor):
+class KaggleExtractor(GCSExtractor):
     """Extractor for S3 logs."""
 
     def __init__(self, *args, **kwargs):
@@ -23,8 +24,8 @@ class S3Extractor(GCSExtractor):
         Args:
             ds (:class:datastore.Datastore): Initialized datastore.
         """
-        self.dataset_name = "pudl_s3_logs"
-        self.bucket_name = "pudl-s3-logs.catalyst.coop"
+        self.dataset_name = "pudl_kaggle_logs"
+        self.bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
         super().__init__(*args, **kwargs)
 
     def filter_blobs(
@@ -42,17 +43,26 @@ class S3Extractor(GCSExtractor):
         week_start_date_str = context.partition_key
         week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
         partition_dates = tuple(week_date_range.strftime("%Y-%m-%d"))
-        return [blob for blob in blobs if blob.name.startswith(partition_dates)]
+        file_name_prefixes = tuple(f"kaggle/{date}.json" for date in partition_dates)
+
+        blobs = [blob for blob in blobs if blob.name in file_name_prefixes]
+        return blobs
 
     def load_file(self, file_path: Path) -> pd.DataFrame:
-        """Read in file as dataframe."""
-        return pd.read_csv(file_path, delimiter=" ", header=None)
+        """Read in JSON file as dataframe."""
+        with Path.open(file_path, "r") as file:
+            data = json.load(file)
+            if data["hasErrorMessage"]:
+                raise AssertionError(f"Data contains error {data['errorMessage']}")
+            df = pd.json_normalize(data["info"])
+            df["metrics_date"] = data["metrics_date"]
+            return df
 
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    tags={"source": "s3"},
+    tags={"source": "kaggle"},
 )
-def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
-    """Extract S3 logs from sub-daily files and return one daily DataFrame."""
-    return S3Extractor().extract(context)
+def raw_kaggle_logs(context: AssetExecutionContext) -> pd.DataFrame:
+    """Extract Kaggle logs from sub-daily files and return one weekly DataFrame."""
+    return KaggleExtractor().extract(context)

@@ -33,10 +33,12 @@ warnings.filterwarnings("ignore", category=ExperimentalWarning)
 raw_module_groups = {
     "raw_s3": [usage_metrics.raw.s3],
     "raw_github": [usage_metrics.raw.github],
+    "raw_kaggle": [usage_metrics.raw.kaggle],
 }
 
 core_module_groups = {
     "core_s3": [usage_metrics.core.s3],
+    "core_kaggle": [usage_metrics.core.kaggle],
 }
 
 out_module_groups = {
@@ -112,6 +114,12 @@ defs: Definitions = Definitions(
             description="This job ETLs logs for S3 usage logs only.",
             selection="*",
             tags={"source": "s3"},
+        ),
+        define_asset_job(
+            name="kaggle_metrics_etl",
+            description="This job ETLs logs for Kaggle usage logs only.",
+            selection="*",
+            tags={"source": "kaggle"},
         ),
     ],
 )

@@ -164,6 +164,35 @@ out_s3_logs = Table(
     Column("partition_key", String),
 )
 
+core_kaggle_logs = Table(
+    "core_kaggle_logs",
+    usage_metrics_metadata,
+    Column(
+        "metrics_date",
+        DateTime,
+        primary_key=True,
+        comment="The unique date for each metrics snapshot.",
+    ),
+    # Metrics on Kaggle usage
+    Column("total_views", Integer),
+    Column("total_downloads", Integer),
+    Column("total_votes", Integer),
+    Column("usability_rating", Float),
+    # Metadata on dataset
+    Column("dataset_name", String),
+    Column("owner", String),
+    Column("title", String),
+    Column("subtitle", String),
+    Column("description", String),
+    Column("keywords", String),
+    Column("dataset_id", String),
+    Column("is_private", String),
+    Column("licenses", String),
+    Column("collaborators", String),
+    Column("data", String),
+    Column("partition_key", String),
+)
+
 intake_logs = Table(
     "intake_logs",
     usage_metrics_metadata,

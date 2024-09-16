@@ -1,3 +1,3 @@
 """Module contains assets that extract raw data."""
 
-from . import github, s3
+from . import github, kaggle, s3
