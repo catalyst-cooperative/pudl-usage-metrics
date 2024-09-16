@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+import time
 from dataclasses import dataclass
 from datetime import date
 
@@ -23,21 +24,7 @@ class Metric:
     folder: str
 
 
-TOKEN = os.getenv("API_TOKEN_GITHUB", "...")
-OWNER = "catalyst-cooperative"
-REPO = "pudl"
-BUCKET_NAME = "pudl-usage-metrics-archives.catalyst.coop"
-
-BIWEEKLY_METRICS = [
-    Metric("clones", "clones"),
-    Metric("popular/paths", "popular_paths"),
-    Metric("popular/referrers", "popular_referrers"),
-    Metric("views", "views"),
-]
-PERSISTENT_METRICS = [Metric("stargazers", "stargazers"), Metric("forks", "forks")]
-
-
-def get_biweekly_metrics(metric: str) -> str:
+def get_biweekly_metrics(owner: str, repo: str, token: str, metric: str) -> str:
     """Get json data for a biweekly github metric.
 
     Args:
@@ -46,9 +33,9 @@ def get_biweekly_metrics(metric: str) -> str:
     Returns:
         json (str): The metric data as json text.
     """
-    query_url = f"https://api.github.com/repos/{OWNER}/{REPO}/traffic/{metric}"
+    query_url = f"https://api.github.com/repos/{owner}/{repo}/traffic/{metric}"
     headers = {
-        "Authorization": f"token {TOKEN}",
+        "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json",
     }
 
@@ -56,7 +43,7 @@ def get_biweekly_metrics(metric: str) -> str:
     return json.dumps(response.json())
 
 
-def get_persistent_metrics(metric) -> str:
+def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> str:
     """Get githubs persistent metrics: forks and stargazers.
 
     Args:
@@ -65,15 +52,19 @@ def get_persistent_metrics(metric) -> str:
     Returns:
         json (str): A json string of metrics.
     """
-    query_url = f"https://api.github.com/repos/{OWNER}/{REPO}/{metric}"
+    query_url = f"https://api.github.com/repos/{owner}/{repo}/{metric}"
     headers = {
-        "Authorization": f"token {TOKEN}",
+        "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3.star+json",
     }
 
     metrics = []
     page = 1
-    while True:
+
+    timeout = 600  # Set 10 minute timeout
+    timeout_start = time.time()
+
+    while time.time() < timeout_start + timeout:
         params = {"page": page}
         metrics_json = make_github_request(query_url, headers, params).json()
 
@@ -103,15 +94,14 @@ def make_github_request(query: str, headers: str, params: str = None):
         raise HTTPError(
             f"HTTP error occurred: {http_err}\n\tResponse test: {response.text}"
         )
-    except Exception as err:
-        raise Exception(f"Other error occurred: {err}")
     return response
 
 
 def upload_to_bucket(data, metric):
     """Upload a gcp object."""
+    bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
     storage_client = storage.Client()
-    bucket = storage_client.bucket(BUCKET_NAME)
+    bucket = storage_client.bucket(bucket_name)
     blob_name = f"github/{metric.folder}/{date.today().strftime('%Y-%m-%d')}.json"
 
     blob = bucket.blob(blob_name)
@@ -122,12 +112,24 @@ def upload_to_bucket(data, metric):
 
 def save_metrics():
     """Save github traffic metrics to google cloud bucket."""
-    for metric in BIWEEKLY_METRICS:
-        metric_data = get_biweekly_metrics(metric.name)
+    token = os.getenv("API_TOKEN_GITHUB", "...")
+    owner = "catalyst-cooperative"
+    repo = "pudl"
+
+    biweekly_metrics = [
+        Metric("clones", "clones"),
+        Metric("popular/paths", "popular_paths"),
+        Metric("popular/referrers", "popular_referrers"),
+        Metric("views", "views"),
+    ]
+    persistent_metrics = [Metric("stargazers", "stargazers"), Metric("forks", "forks")]
+
+    for metric in biweekly_metrics:
+        metric_data = get_biweekly_metrics(owner, repo, token, metric.name)
         upload_to_bucket(metric_data, metric)
 
-    for metric in PERSISTENT_METRICS:
-        metric_data = get_persistent_metrics(metric.name)
+    for metric in persistent_metrics:
+        metric_data = get_persistent_metrics(owner, repo, token, metric.name)
         upload_to_bucket(metric_data, metric)
 
 

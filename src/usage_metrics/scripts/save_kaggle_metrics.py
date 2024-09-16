@@ -8,12 +8,6 @@ from datetime import date
 from google.cloud import storage
 from kaggle.api.kaggle_api_extended import KaggleApi
 
-KAGGLE_OWNER = "catalystcooperative"
-KAGGLE_DATASET = "pudl-project"
-OWNER = "catalyst-cooperative"
-REPO = "pudl"
-BUCKET_NAME = "pudl-usage-metrics-archives.catalyst.coop"
-
 logger = logging.getLogger()
 logging.basicConfig(level="INFO")
 
@@ -21,16 +15,20 @@ logging.basicConfig(level="INFO")
 def get_kaggle_logs() -> str:
     """Get PUDL project usage metadata from Kaggle site."""
     api = KaggleApi()
+    kaggle_owner = "catalystcooperative"
+    kaggle_dataset = "pudl-project"
 
-    metadata = api.metadata_get(KAGGLE_OWNER, KAGGLE_DATASET)
+    metadata = api.metadata_get(kaggle_owner, kaggle_dataset)
     metadata.update({"metrics_date": date.today().strftime("%Y-%m-%d")})
     return json.dumps(metadata)
 
 
 def upload_to_bucket(data):
     """Upload a gcp object."""
+    bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
+
     storage_client = storage.Client()
-    bucket = storage_client.bucket(BUCKET_NAME)
+    bucket = storage_client.bucket(bucket_name)
     blob_name = f"kaggle/{date.today().strftime('%Y-%m-%d')}.json"
 
     blob = bucket.blob(blob_name)
