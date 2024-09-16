@@ -54,7 +54,7 @@ jobs:
       - shell: bash -l {0}
         name: Save Github Metrics
         env:
-          API_TOKEN_GITHUB: ${{ secrets.GITHUB_TOKEN }}
+          API_TOKEN_GITHUB: ${{ secrets.USAGE_STATS_ACCESS_TOKEN }}
         run: |
           python src/usage_metrics/scripts/save_github_metrics.py
 
