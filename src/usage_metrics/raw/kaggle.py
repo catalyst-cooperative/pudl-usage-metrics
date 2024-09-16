@@ -1,4 +1,4 @@
-"""Extract data from S3 logs."""
+"""Extract data from Kaggle logs."""
 
 import json
 from pathlib import Path
