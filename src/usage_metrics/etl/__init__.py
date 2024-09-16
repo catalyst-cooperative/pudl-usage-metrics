@@ -28,7 +28,6 @@ from usage_metrics.resources.postgres import postgres_manager
 from usage_metrics.resources.sqlite import sqlite_manager
 
 logger = logging.getLogger(__name__)
-warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 raw_module_groups = {
     "raw_s3": [usage_metrics.raw.s3],

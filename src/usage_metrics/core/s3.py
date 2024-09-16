@@ -28,6 +28,7 @@ def core_s3_logs(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if raw_s3_logs.empty:
+        context.log.warn(f"No data found for the week of {context.partition_key}")
         return raw_s3_logs
     # Name columns
     raw_s3_logs.columns = [
