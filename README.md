@@ -34,6 +34,8 @@ If you want to take advantage of caching raw logs, rather than redownloading the
 
 Dagster stores run logs and caches in a directory stored in the `DAGSTER_HOME` environment variable. The `usage_metrics/dagster_home/dagster.yaml` file contains configuration for the dagster instance. **Note:** The `usage_metrics/dagster_home/storage` directory could grow to become a couple GBs because all op outputs for every run are stored there. You can read more about the dagster_home directory in the [dagster docs](https://docs.dagster.io/deployment/dagster-instance#default-local-behavior).
 
+To use the Kaggle API, [sign up for a Kaggle account](https://www.kaggle.com). Then go to the ['Account' tab]((https://www.kaggle.com/<username>/account)) of your user profile and select 'Create API Token'. This will trigger the download of `kaggle.json`, a file containing your API credentials. Use this file to automatically set your Kaggle API credentials locally, or manually set `KAGGLE_USER` and `KAGGLE_KEY` environment variables.
+
 To set these environment variables, run these commands:
 
 ```
@@ -41,6 +43,8 @@ conda activate pudl-usage-metrics
 conda env config vars set IPINFO_TOKEN="{your_api_key_here}"
 conda env config vars set DAGSTER_HOME="$(pwd)/dagster_home/"
 conda env config vars set DATA_DIR="$(pwd)/data/"
+conda env config vars set KAGGLE_USER="{your_kaggle_username_here}" # If setting manually
+conda env config vars set KAGGLE_KEY="{your_kaggle_api_key_here}" # If setting manually
 conda activate pudl-usage-metrics
 ```
 
