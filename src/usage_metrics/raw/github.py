@@ -172,6 +172,7 @@ def weekly_metrics_extraction_factory(
 
             for path in file_paths:
                 try:
+                    # TODO - add time of blob creation to popular paths and referrers!!!
                     weekly_dfs.append(extract_data(path=path, metric=metric))
                 except pd.errors.EmptyDataError:
                     context.log.warnings(f"{path} is an empty file, couldn't read.")
