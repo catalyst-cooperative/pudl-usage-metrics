@@ -41,9 +41,7 @@ jobs:
         continue-on-error: true
         uses: "google-github-actions/auth@v2"
         with:
-          workload_identity_provider: "projects/345950277072/locations/global/workloadIdentityPools/gh-actions-pool/providers/gh-actions-provider"
-          service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
-          create_credentials_file: true
+          credentials_json: "${{ secrets.GCP_USAGE_METRICS_ARCHIVER_KEY }}"
 
       - name: "Set up Cloud SDK"
         uses: "google-github-actions/setup-gcloud@v2"
