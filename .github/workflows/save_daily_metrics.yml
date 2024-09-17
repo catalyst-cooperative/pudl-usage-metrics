@@ -7,7 +7,7 @@ on:
     - cron: "0 20 * * *"
 
 jobs:
-  build:
+  save-daily-metrics:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -22,7 +22,7 @@ jobs:
         with:
           environment-file: environment.yml
           cache-environment: true
-          ondarc: |
+          condarc: |
             channels:
             - conda-forge
             - defaults
@@ -41,9 +41,7 @@ jobs:
         continue-on-error: true
         uses: "google-github-actions/auth@v2"
         with:
-          workload_identity_provider: "projects/345950277072/locations/global/workloadIdentityPools/gh-actions-pool/providers/gh-actions-provider"
-          service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
-          create_credentials_file: true
+          credentials_json: "${{ secrets.GCP_USAGE_METRICS_ARCHIVER_KEY }}"
 
       - name: "Set up Cloud SDK"
         uses: "google-github-actions/setup-gcloud@v2"
@@ -53,7 +51,7 @@ jobs:
       - shell: bash -l {0}
         name: Save Github Metrics
         env:
-          API_TOKEN_GITHUB: ${{ secrets.API_TOKEN_GITHUB }}
+          API_TOKEN_GITHUB: ${{ secrets.USAGE_STATS_ACCESS_TOKEN }}
         run: |
           python src/usage_metrics/scripts/save_github_metrics.py
 
