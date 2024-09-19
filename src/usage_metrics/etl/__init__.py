@@ -13,7 +13,6 @@ from dagster import (
     AssetsDefinition,
     AssetSelection,
     Definitions,
-    ExperimentalWarning,
     SourceAsset,
     WeeklyPartitionsDefinition,
     asset_check,
@@ -28,7 +27,6 @@ from usage_metrics.resources.postgres import postgres_manager
 from usage_metrics.resources.sqlite import sqlite_manager
 
 logger = logging.getLogger(__name__)
-warnings.filterwarnings("ignore", category=ExperimentalWarning)
 
 raw_module_groups = {
     "raw_s3": [usage_metrics.raw.s3],
@@ -93,7 +91,7 @@ _asset_keys = itertools.chain.from_iterable(
     _get_keys_from_assets(asset_def) for asset_def in default_assets
 )
 
-resources_by_env = {  # STILL TO DO!
+resources_by_env = {
     "prod": {"database_manager": postgres_manager},
     "local": {"database_manager": sqlite_manager},
 }
@@ -103,7 +101,7 @@ resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
 defs: Definitions = Definitions(
     assets=default_assets,
     # asset_checks=default_asset_checks,
-    resources=resources,  # TODO: How to handle this?
+    resources=resources,
     jobs=[
         define_asset_job(
             name="all_metrics_etl",

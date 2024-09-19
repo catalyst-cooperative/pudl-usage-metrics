@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import ipinfo
 import pandas as pd
-from dagster import RetryPolicy, op
+from dagster import OutputContext, RetryPolicy, op
 from joblib import Memory
 
 cache_dir = Path(__file__).parents[2] / "cache"
@@ -147,3 +147,10 @@ def str_to_datetime(
 ) -> datetime:
     """Convert a string to a date."""
     return datetime.strptime(date, fmt).replace(tzinfo=tzinfo)
+
+
+def get_table_name_from_context(context: OutputContext) -> str:
+    """Retrieves the table name from the context object."""
+    if context.has_asset_key:
+        return context.asset_key.to_python_identifier()
+    return context.get_identifier()

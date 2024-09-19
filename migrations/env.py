@@ -5,10 +5,9 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
 
 from usage_metrics.models import usage_metrics_metadata
-from usage_metrics.resources.postgres import PostgresIOManager  # TO DO: Set up paths!!
+from usage_metrics.resources.postgres import PostgresIOManager
 from usage_metrics.resources.sqlite import SQLiteIOManager
 
 # this is the Alembic Config object, which provides
@@ -39,12 +38,6 @@ engines = {"prod": PostgresIOManager().engine, "local": SQLiteIOManager().engine
 
 logger.info(f"Configuring database for {dev_envr} database")
 
-# Get URL from engine based on METRICS_PROD_ENV environment variable and handle escaping %ages
-db_location = (
-    engines[dev_envr].url.render_as_string(hide_password=False).replace("%", "%%")
-)
-config.set_main_option("sqlalchemy.url", db_location)
-
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -58,7 +51,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = engines[dev_envr].url
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -77,13 +70,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
-
-    with connectable.connect() as connection:
+    with engines[dev_envr].connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():

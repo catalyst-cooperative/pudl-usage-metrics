@@ -7,9 +7,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "pandas>=2.2,<2.3",
     "sqlalchemy>=2",
-    "dagster>=1.7.15, <1.8.3",
+    "dagster>=1.7.15, <1.8.8",
     "dagster-webserver>=1.7.15,<1.9",
-    "dagster-duckdb-pandas>=0.24,<0.25",
     "pandas-gbq>=0.23.1",
     "pydata-google-auth>=1.8.2",
     "jupyterlab>=4.2.3",
@@ -20,6 +19,7 @@ dependencies = [
     "pg8000>=1.31.1",
     "cloud-sql-python-connector[pg8000]>=1.11.0",
     "google-cloud-storage>=2.17",
+    "kaggle>=1.6.3"
     ]
 
 classifiers = [
