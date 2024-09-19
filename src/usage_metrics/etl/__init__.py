@@ -37,6 +37,7 @@ raw_module_groups = {
 core_module_groups = {
     "core_s3": [usage_metrics.core.s3],
     "core_kaggle": [usage_metrics.core.kaggle],
+    "core_github": [usage_metrics.core.github],
 }
 
 out_module_groups = {

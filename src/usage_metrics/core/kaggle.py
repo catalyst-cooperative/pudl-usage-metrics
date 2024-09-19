@@ -26,6 +26,7 @@ def core_kaggle_logs(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if raw_kaggle_logs.empty:
+        context.log.warn(f"No data found for the week of {context.partition_key}")
         return raw_kaggle_logs
 
     # Where there is a "nullable" column, drop the corresponding "has" and duplicate column from data

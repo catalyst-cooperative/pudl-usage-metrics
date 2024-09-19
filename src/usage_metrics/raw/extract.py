@@ -43,18 +43,6 @@ class GCSExtractor(ABC):
         """
         ...
 
-    def get_data_directory(self):
-        """Get download directory path."""
-        with TemporaryDirectory() as td:
-            # Determine where to save these files
-            if os.environ.get("DATA_DIR"):
-                download_dir = Path(os.environ.get("DATA_DIR"), f"{self.dataset_name}/")
-                if not Path.exists(download_dir):
-                    Path.mkdir(download_dir)
-            else:
-                download_dir = td
-            return download_dir
-
     def get_blobs_from_gcs(
         self, blobs: list[storage.Blob], download_dir: Path
     ) -> list[Path]:
@@ -85,20 +73,28 @@ class GCSExtractor(ABC):
 
         If the file already exists locally don't download it.
         """
-        # Download logs from GCS
-        download_dir = self.get_data_directory()
-        bucket = storage.Client().get_bucket(self.bucket_name)
-        blobs = bucket.list_blobs()
-        blobs = self.filter_blobs(context, blobs)
-        file_paths = self.get_blobs_from_gcs(blobs=blobs, download_dir=download_dir)
+        with TemporaryDirectory() as td:
+            # Determine where to save these files
+            if os.environ.get("DATA_DIR"):
+                download_dir = Path(os.environ.get("DATA_DIR"), f"{self.dataset_name}/")
+                if not Path.exists(download_dir):
+                    Path.mkdir(download_dir)
+            else:
+                download_dir = td
 
-        # Extract logs into a Pandas DF
-        weekly_dfs = []
-        for path in file_paths:
-            try:
-                weekly_dfs.append(self.load_file(path))
-            except pd.errors.EmptyDataError:
-                context.log.warnings(f"{path} is an empty file, couldn't read.")
-        if weekly_dfs:  # If data, return concatenated DF
-            return pd.concat(weekly_dfs)
-        return pd.DataFrame()
+            # Download logs from GCS
+            bucket = storage.Client().get_bucket(self.bucket_name)
+            blobs = bucket.list_blobs()
+            blobs = self.filter_blobs(context, blobs)
+            file_paths = self.get_blobs_from_gcs(blobs=blobs, download_dir=download_dir)
+
+            # Extract logs into a Pandas DF
+            weekly_dfs = []
+            for path in file_paths:
+                try:
+                    weekly_dfs.append(self.load_file(path))
+                except pd.errors.EmptyDataError:
+                    context.log.warnings(f"{path} is an empty file, couldn't read.")
+            if weekly_dfs:  # If data, return concatenated DF
+                return pd.concat(weekly_dfs)
+            return pd.DataFrame()

@@ -1,6 +1,7 @@
 """Extract data from Github logs."""
 
 import json
+import re
 from pathlib import Path
 from typing import Literal
 
@@ -94,17 +95,11 @@ class GithubExtractor(GCSExtractor):
             user["starred_at"] = starred_at
             trns_metric_json.append(user)
 
-        metric_df = pd.DataFrame(trns_metric_json)
-        metric_df["starred_at"] = pd.to_datetime(metric_df["starred_at"])
-        metric_df = metric_df.set_index("starred_at")
-        return metric_df
+        return pd.DataFrame(trns_metric_json)
 
     def extract_forks(self, metric_json):
         """Extract forks data from forks JSON file."""
-        metric_df = pd.DataFrame(metric_json)
-        metric_df["created_at"] = pd.to_datetime(metric_df["created_at"])
-        metric_df = metric_df.set_index("created_at")
-        return metric_df
+        return pd.DataFrame(metric_json)
 
     extract_funcs = {
         "clones": extract_clones,
@@ -121,7 +116,13 @@ class GithubExtractor(GCSExtractor):
             file_contents = metric_file.read()
         metric_json = json.loads(file_contents)
         extract_func = self.extract_funcs[self.metric]
-        gh_df = extract_func(metric_json)
+        gh_df = extract_func(self, metric_json)
+        # Add date of file as column if the extract combines multiple dataframes
+        # and contains no timestamp column
+        if self.metric in ["popular_paths", "popular_referrers"]:
+            gh_df["metrics_date"] = re.search(
+                r"\d{4}-\d{2}-\d{2}", str(file_path)
+            ).group()
         return gh_df
 
 
