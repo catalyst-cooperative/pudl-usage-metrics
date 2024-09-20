@@ -42,7 +42,7 @@ class SQLIOManager(IOManager):
         # context.has_partition_key = True. So for now, add this column only if
         # it is specified in the metadata.
 
-        if "partition_key" in table_obj.columns:
+        if context.has_partition_key:
             df["partition_key"] = context.partition_key
 
         # Get primary key column(s) of dataframe, and check against

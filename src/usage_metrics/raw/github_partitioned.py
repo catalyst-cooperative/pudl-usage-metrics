@@ -1,4 +1,8 @@
-"""Extract data from Github logs."""
+"""Extract partitioned data from Github logs.
+
+This includes data which returns a window of results (e.g., the last two weeks) when
+querying the Github API.
+"""
 
 import json
 import re
@@ -134,7 +138,7 @@ def weekly_metrics_extraction_factory(
     @asset(
         name=f"raw_github_{metric}",
         partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-        tags={"source": "github"},
+        tags={"source": "github_partitioned"},
     )
     def _raw_github_logs(context: AssetExecutionContext) -> pd.DataFrame:
         """Extract Github logs from daily files and return one weekly DataFrame."""
@@ -143,24 +147,6 @@ def weekly_metrics_extraction_factory(
     return _raw_github_logs
 
 
-def cumulative_metrics_extraction_factory(
-    metric: Literal[*CUMULATIVE_METRIC_TYPES],
-) -> AssetsDefinition:
-    """Create Dagster asset for each weekly-reported metric."""
-
-    @asset(
-        name=f"raw_github_{metric}",
-        tags={"source": "github"},
-    )
-    def _raw_github_logs(context: AssetExecutionContext) -> pd.DataFrame:
-        """Extract Github logs from daily files and return one weekly DataFrame."""
-        return GithubExtractor(metric=metric).extract(context)
-
-    return _raw_github_logs
-
-
-raw_github_assets = [
+raw_github_partitioned_assets = [
     weekly_metrics_extraction_factory(metric) for metric in WEEKLY_METRIC_TYPES
-] + [
-    cumulative_metrics_extraction_factory(metric) for metric in CUMULATIVE_METRIC_TYPES
 ]
