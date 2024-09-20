@@ -111,14 +111,17 @@ defs: Definitions = Definitions(
         define_asset_job(
             name="s3_metrics_etl",
             description="This job ETLs logs for S3 usage logs only.",
-            selection="*",
-            tags={"source": "s3"},
+            selection=AssetSelection.tag("source", "s3"),
         ),
         define_asset_job(
             name="kaggle_metrics_etl",
             description="This job ETLs logs for Kaggle usage logs only.",
-            selection="*",
-            tags={"source": "kaggle"},
+            selection=AssetSelection.tag("source", "kaggle"),
+        ),
+        define_asset_job(
+            name="github_metrics_etl",
+            description="This job ETLs logs for Github usage logs only.",
+            selection=AssetSelection.tag("source", "github"),
         ),
     ],
 )
