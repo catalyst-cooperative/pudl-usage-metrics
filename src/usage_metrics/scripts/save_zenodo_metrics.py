@@ -60,26 +60,30 @@ class CommunityMetadata(BaseModel):
 def get_zenodo_logs() -> pd.DataFrame():
     """Get all metrics for all versions of records in the Catalyst Cooperative Zenodo community."""
     community_url = "https://zenodo.org/api/communities/14454015-63f1-4f05-80fd-1a9b07593c9e/records"
+    # First, get metadata on all the datasets in the Catalyst Cooperative community
     community_records = requests.get(community_url, timeout=100)
-    catalyst_records = community_records.json()["hits"]["hits"]
-    catalyst_records = [CommunityMetadata(**record) for record in catalyst_records]
+    dataset_records = community_records.json()["hits"]["hits"]
+    dataset_records = [CommunityMetadata(**record) for record in dataset_records]
     stats_dfs = []
 
-    for record in catalyst_records:
+    for record in dataset_records:
         logger.info(f"Getting usage metrics for {record.title}")
-        # For each record in the community
+        # For each dataset in the community, get all archived versions and their
+        # corresponding metrics.
         versions_url = f"https://zenodo.org/api/records/{record.recid}/versions"
         record_versions = requests.get(versions_url, timeout=100)
         version_records = record_versions.json()["hits"]["hits"]
-        version_records = [CommunityMetadata(**record) for record in version_records]
+        version_records = [
+            CommunityMetadata(**version_record) for version_record in version_records
+        ]
         version_df = pd.DataFrame(
             [
                 dict(
-                    version_records[item].stats.__dict__,
-                    doi=version_records[item].doi,
-                    title=version_records[item].title,
+                    version_record.stats.dict(),
+                    doi=version_record.doi,
+                    title=version_record.title,
                 )
-                for item in range(len(version_records))
+                for version_record in version_records
             ]
         )
         if not version_df.empty:
