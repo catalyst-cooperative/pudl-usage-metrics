@@ -30,7 +30,7 @@ def core_github_popular_referrers(
     df = df.rename(columns={"count": "total_referrals", "uniques": "unique_referrals"})
 
     # Convert string to datetime using Pandas
-    df["metrics_date"] = pd.to_datetime(df["metrics_date"])
+    df["metrics_date"] = pd.to_datetime(df["metrics_date"]).dt.date
 
     # Check validity of PK column
     df = df.set_index(["metrics_date", "referrer"])
@@ -61,7 +61,7 @@ def core_github_popular_paths(
     df = df.rename(columns={"count": "total_views", "uniques": "unique_views"})
 
     # Convert string to datetime using Pandas
-    df["metrics_date"] = pd.to_datetime(df["metrics_date"])
+    df["metrics_date"] = pd.to_datetime(df["metrics_date"]).dt.date
 
     # Check validity of PK column
     df = df.set_index(["metrics_date", "path"])
@@ -103,17 +103,16 @@ def core_github_clones(
 
     # Drop any repeated timestamps between snapshots
     df = df.drop_duplicates("metrics_date")
-    df["metrics_date"] = pd.to_datetime(df["metrics_date"])
+    # Get date from timestamp, as this is always 00:00:00.000000
+    df["metrics_date"] = pd.to_datetime(df["metrics_date"]).dt.date
 
     # Only keep records within the week covered by the partition key to avoid duplicated
     # values between partitions
     week_start_date_str = context.partition_key
     week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
     df = df.loc[
-        df.metrics_date.between(
-            week_date_range.min().strftime("%Y-%m-%d"),
-            week_date_range.max().strftime("%Y-%m-%d"),
-        )
+        (df.metrics_date >= week_date_range.min().date())
+        & (df.metrics_date <= week_date_range.max().date())
     ]
 
     # Check validity of PK column
@@ -156,7 +155,8 @@ def core_github_views(
 
     # Drop any repeated timestamps between snapshots
     df = df.drop_duplicates("metrics_date")
-    df["metrics_date"] = pd.to_datetime(df["metrics_date"])
+    # Get date from timestamp, as this is always 00:00:00.000000
+    df["metrics_date"] = pd.to_datetime(df["metrics_date"]).dt.date
 
     # Only keep records within the week covered by the partition key to avoid duplicated
     # values between partitions
@@ -164,8 +164,8 @@ def core_github_views(
     week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
     df = df.loc[
         df.metrics_date.between(
-            week_date_range.min().strftime("%Y-%m-%d"),
-            week_date_range.max().strftime("%Y-%m-%d"),
+            week_date_range.min().date(),
+            week_date_range.max().date(),
         )
     ]
 

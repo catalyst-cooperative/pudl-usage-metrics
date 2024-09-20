@@ -4,6 +4,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     Column,
+    Date,
     DateTime,
     Float,
     Integer,
@@ -198,7 +199,7 @@ core_github_popular_referrers = Table(
     usage_metrics_metadata,
     Column(
         "metrics_date",
-        DateTime,
+        Date,
         primary_key=True,
         comment="The date for each metrics snapshot.",
     ),
@@ -213,7 +214,7 @@ core_github_popular_paths = Table(
     usage_metrics_metadata,
     Column(
         "metrics_date",
-        DateTime,
+        Date,
         primary_key=True,
         comment="The date for each metrics snapshot.",
     ),
@@ -234,7 +235,7 @@ core_github_clones = Table(
     usage_metrics_metadata,
     Column(
         "metrics_date",
-        DateTime,
+        Date,
         primary_key=True,
         comment="The date for each metrics snapshot.",
     ),
@@ -248,7 +249,7 @@ core_github_views = Table(
     usage_metrics_metadata,
     Column(
         "metrics_date",
-        DateTime,
+        Date,
         primary_key=True,
         comment="The date for each metrics snapshot.",
     ),
