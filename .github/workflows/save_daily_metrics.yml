@@ -50,6 +50,7 @@ jobs:
 
       - shell: bash -l {0}
         name: Save Github Metrics
+        id: github
         env:
           API_TOKEN_GITHUB: ${{ secrets.USAGE_STATS_ACCESS_TOKEN }}
         run: |
@@ -57,11 +58,22 @@ jobs:
 
       - shell: bash -l {0}
         name: Save Kaggle Metrics
+        id: kaggle
+        # Run even if prior metric saving fails
+        if: "!cancelled()"
         env:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
           python src/usage_metrics/scripts/save_kaggle_metrics.py
+
+      - shell: bash -l {0}
+        name: Save Zenodo Metrics
+        id: zenodo
+        # Run even if prior metric saving fails
+        if: "!cancelled()"
+        run: |
+          python src/usage_metrics/scripts/save_zenodo_metrics.py
 
       - name: Inform the Codemonkeys
         uses: 8398a7/action-slack@v3
