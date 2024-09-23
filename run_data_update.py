@@ -21,6 +21,9 @@ def main():
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
     coloredlogs.install(fmt=log_format, level="INFO", logger=usage_metrics_logger)
 
+    usage_metrics_logger.info(
+        f"""Saving to {os.getenv("METRICS_PROD_ENV", "local")} database."""
+    )
     # Run the partitioned metrics
     job = defs.get_job_def(name="all_partitioned_metrics_etl")
 
@@ -29,15 +32,15 @@ def main():
 
     # Run the jobs
     usage_metrics_logger.info(
-        f"""Processing data from the week of {most_recent_partition} for {job.name}."""
-    )
-    usage_metrics_logger.info(
-        f"""Saving to {os.getenv("METRICS_PROD_ENV", "local")} database."""
+        f"""{job.name}: Processing partitioned data from the week of {most_recent_partition}."""
     )
 
     job.execute_in_process(partition_key=most_recent_partition)
 
     # Run the non-partitioned metrics
+    usage_metrics_logger.info(
+        f"""{job.name}: Processing the most recent non-partitioned data."""
+    )
     job = defs.get_job_def(name="all_nonpartitioned_metrics_etl")
     job.execute_in_process()
 
