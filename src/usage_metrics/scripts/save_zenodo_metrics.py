@@ -33,6 +33,16 @@ class ZenodoStats(BaseModel):
     version_views: int
 
 
+class ZenodoMetadata(BaseModel):
+    """Pydantic model representing relevant Zenodo metadata.
+
+    See https://developers.zenodo.org/#representation.
+    """
+
+    version: str | None = None
+    publication_date: datetime = None
+
+
 class CommunityMetadata(BaseModel):
     """Pydantic model representing Zenodo deposition metadata from the communities endpoint.
 
@@ -49,6 +59,7 @@ class CommunityMetadata(BaseModel):
     title: str
     updated: datetime = None
     stats: ZenodoStats
+    metadata: ZenodoMetadata
 
     @classmethod
     def check_empty_string(cls, doi: str):  # noqa: N805
@@ -83,6 +94,7 @@ def get_zenodo_logs() -> pd.DataFrame():
                     doi=version_record.doi,
                     title=version_record.title,
                 )
+                | version_record.metadata.dict()
                 for version_record in version_records
             ]
         )
