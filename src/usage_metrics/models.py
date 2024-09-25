@@ -328,6 +328,84 @@ core_github_stargazers = Table(
     Column("site_admin", Boolean),
 )
 
+core_zenodo_logs = Table(
+    "core_zenodo_logs",
+    usage_metrics_metadata,
+    Column(
+        "metrics_date",
+        Date,
+        primary_key=True,
+        comment="The date when the metadata was reported.",
+    ),
+    Column(
+        "version_doi",
+        String,
+        primary_key=True,
+        comment="The DOI of the Zenodo version.",
+    ),
+    Column(
+        "dataset_downloads",
+        Integer,
+        comment="The total number of downloads for the entire dataset. A total download is a user (human or machine) downloading a file from a record, excluding double-clicks and robots. If a record has multiple files and you download all files, each file counts as one download.",
+    ),
+    Column(
+        "dataset_unique_downloads",
+        Integer,
+        comment="The total number of unique downloads for the entire dataset. A unique download is defined as one or more file downloads from files of a single record by a user within a 1-hour time-window. This means that if one or more files of the same record were downloaded multiple times by the same user within the same time-window, it is considered to be one unique download.",
+    ),
+    Column(
+        "dataset_views",
+        Integer,
+        comment="The total number of views for the entire dataset. A total view is a user (human or machine) visiting a record, excluding double-clicks and robots.",
+    ),
+    Column(
+        "dataset_unique_views",
+        Integer,
+        comment="The total number of unique downloads for the entire dataset. A unique view is defined as one or more visits by a user within a 1-hour time-window. This means that if the same record was accessed multiple times by the same user within the same time-window, Zenodo considers it as one unique view.",
+    ),
+    Column(
+        "version_downloads",
+        Integer,
+        comment="The total number of downloads for the version. A total download is a user (human or machine) downloading a file from a record, excluding double-clicks and robots. If a record has multiple files and you download all files, each file counts as one download.",
+    ),
+    Column(
+        "version_unique_downloads",
+        Integer,
+        comment="The total number of unique downloads for the version. A unique download is defined as one or more file downloads from files of a single record by a user within a 1-hour time-window. This means that if one or more files of the same record were downloaded multiple times by the same user within the same time-window, it is considered to be one unique download.",
+    ),
+    Column(
+        "version_views",
+        Integer,
+        comment="The total number of views for the version. A total view is a user (human or machine) visiting a record, excluding double-clicks and robots.",
+    ),
+    Column(
+        "version_unique_views",
+        Integer,
+        comment="The total number of unique downloads for the version. A unique view is defined as one or more visits by a user within a 1-hour time-window. This means that if the same record was accessed multiple times by the same user within the same time-window, Zenodo considers it as one unique view.",
+    ),
+    Column(
+        "version_title",
+        String,
+        comment="The name of the version in Zenodo.",
+    ),
+    Column(
+        "version",
+        String,
+        comment="The version (e.g. 10.0.0) of the dataset record.",
+    ),
+    Column(
+        "publication_date",
+        Date,
+        comment="The date that the version was published.",
+    ),
+    Column(
+        "dataset_slug",
+        String,
+        comment="The shorthand for the dataset being archived. Matches the pudl_archiver repository dataset slugs when the dataset is archived by the PUDL archiver.",
+    ),
+    Column("partition_key", String),
+)
+
 intake_logs = Table(
     "intake_logs",
     usage_metrics_metadata,

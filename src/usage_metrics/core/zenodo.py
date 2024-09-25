@@ -12,7 +12,7 @@ from dagster import (
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    # io_manager_key="database_manager",
+    io_manager_key="database_manager",
     tags={"source": "zenodo"},
 )
 def core_zenodo_logs(
@@ -33,13 +33,19 @@ def core_zenodo_logs(
             "views": "dataset_views",
             "unique_views": "dataset_unique_views",
             "doi": "version_doi",
-            "title": "dataset_title",
+            "title": "version_title",
         }
     )
 
+    # We added new columns to the more recent archived data, so make sure older df's
+    # have these columns or create them if they don't exist.
+    cols = ["version", "publication_date"]
+    df = df.reindex(df.columns.union(cols, sort=False), axis=1)
+
     # Convert string to date using Pandas
-    df["metrics_date"] = pd.to_datetime(df["metrics_date"])
-    df["metrics_date"] = df["metrics_date"].dt.date
+    for col in ["metrics_date", "publication_date"]:
+        df[col] = pd.to_datetime(df[col])
+        df[col] = df[col].dt.date
 
     # Check validity of PK column
     df = df.set_index(["metrics_date", "version_doi"])
@@ -79,23 +85,23 @@ def core_zenodo_logs(
         }
         | {
             col: "pudl"
-            for col in df.dataset_title.unique()
+            for col in df.version_title.unique()
             if "catalyst-cooperative/pudl" in col or "PUDL Data Release" in col
         }
         | {
             col: "ferc_xbrl_extractor"
-            for col in df.dataset_title.unique()
+            for col in df.version_title.unique()
             if "catalyst-cooperative/ferc-xbrl-extractor" in col
         }
     )
 
     missed_mapping = df[
-        ~df.dataset_title.isin(dataset_slugs.keys())
-    ].dataset_title.unique()
+        ~df.version_title.isin(dataset_slugs.keys())
+    ].version_title.unique()
     assert not missed_mapping, f"Missed mapping slugs for {missed_mapping}"
 
     # Assert we haven't missed any of the titles
-    df["dataset_slug"] = df["dataset_title"].map(dataset_slugs)
+    df["dataset_slug"] = df["version_title"].map(dataset_slugs)
     assert not df["dataset_slug"].isnull().to_numpy().any()
 
     context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
