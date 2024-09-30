@@ -22,14 +22,14 @@ from usage_metrics.raw.github_partitioned import (
 def cumulative_metrics_extraction_factory(
     metric: Literal[*CUMULATIVE_METRIC_TYPES],
 ) -> AssetsDefinition:
-    """Create Dagster asset for each weekly-reported metric."""
+    """Create Dagster asset for each cumulatively-reported metric."""
 
     @asset(
         name=f"raw_github_{metric}",
         tags={"source": "github_nonpartitioned"},
     )
     def _raw_github_logs(context: AssetExecutionContext) -> pd.DataFrame:
-        """Extract Github logs from daily files and return one weekly DataFrame."""
+        """Extract Github logs from the most recent files and return a DataFrame."""
         return GithubExtractor(metric=metric).extract(context)
 
     return _raw_github_logs

@@ -16,7 +16,7 @@ from usage_metrics.raw.extract import GCSExtractor
 
 
 class KaggleExtractor(GCSExtractor):
-    """Extractor for S3 logs."""
+    """Extractor for Kaggle logs."""
 
     def __init__(self, *args, **kwargs):
         """Initialize the module.
@@ -53,6 +53,7 @@ class KaggleExtractor(GCSExtractor):
         with Path.open(file_path, "r") as file:
             data = json.load(file)
             if data["hasErrorMessage"]:
+                # Catch error message contained in Kaggle API JSON response
                 raise AssertionError(f"Data contains error {data['errorMessage']}")
             df = pd.json_normalize(data["info"])
             df["metrics_date"] = data["metrics_date"]
@@ -64,5 +65,5 @@ class KaggleExtractor(GCSExtractor):
     tags={"source": "kaggle"},
 )
 def raw_kaggle_logs(context: AssetExecutionContext) -> pd.DataFrame:
-    """Extract Kaggle logs from sub-daily files and return one weekly DataFrame."""
+    """Extract Kaggle logs from daily files and return one weekly DataFrame."""
     return KaggleExtractor().extract(context)

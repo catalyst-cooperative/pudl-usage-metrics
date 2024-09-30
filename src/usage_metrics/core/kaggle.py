@@ -19,9 +19,15 @@ def core_kaggle_logs(
     context: AssetExecutionContext,
     raw_kaggle_logs: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Transform daily S3 logs.
+    """Transform daily Kaggle logs.
 
-    Add column headers, geocode values,
+    Add column headers. The Kaggle data contains a series of columns with the suffix
+    "{column_name}Nullable" and a series of columns with the prefix
+    "has{column_name}". The "Nullable" columns contain the data observed in the
+    corresponding columns, but with NAs where the value is not reported. The "has"
+    columns are booleans indicating whether or not the data is NA. Given that a column,
+    its "has' and "Nullable" report overlapping information, we keep the "Nullable"
+    columns and drop the other two.
     """
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
