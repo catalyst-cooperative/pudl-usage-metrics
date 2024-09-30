@@ -89,12 +89,12 @@ class GCSExtractor(ABC):
             file_paths = self.get_blobs_from_gcs(blobs=blobs, download_dir=download_dir)
 
             # Extract logs into a Pandas DF
-            weekly_dfs = []
+            dict_dfs = []
             for path in file_paths:
                 try:
-                    weekly_dfs.append(self.load_file(path))
+                    dict_dfs.append(self.load_file(path))
                 except pd.errors.EmptyDataError:
                     context.log.warnings(f"{path} is an empty file, couldn't read.")
-            if weekly_dfs:  # If data, return concatenated DF
-                return pd.concat(weekly_dfs)
+            if dict_dfs:  # If data, return concatenated DF
+                return pd.concat(dict_dfs)
             return pd.DataFrame()
