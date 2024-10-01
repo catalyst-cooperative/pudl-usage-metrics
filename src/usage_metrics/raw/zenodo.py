@@ -1,4 +1,8 @@
-"""Extract data from Zenodo logs, where each JSON file has metadata on all records in a version."""
+"""Extract data from Zenodo logs from archived JSON files in GCS.
+
+Each JSON file has metadata on all records in a version. These files are saved by
+scripts/save_zenodo_metrics.py.
+"""
 
 import json
 import re
