@@ -30,17 +30,33 @@ logger = logging.getLogger(__name__)
 
 raw_module_groups = {
     "raw_s3": [usage_metrics.raw.s3],
+    "raw_github_partitioned": [usage_metrics.raw.github_partitioned],
+    "raw_kaggle": [usage_metrics.raw.kaggle],
 }
 
 core_module_groups = {
     "core_s3": [usage_metrics.core.s3],
+    "core_kaggle": [usage_metrics.core.kaggle],
+    "core_github_partitioned": [usage_metrics.core.github_partitioned],
 }
 
 out_module_groups = {
     "out_s3": [usage_metrics.out.s3],
 }
 
-all_asset_modules = raw_module_groups | core_module_groups | out_module_groups
+non_partitioned_module_groups = {
+    "non_partitioned": [
+        usage_metrics.raw.github_nonpartitioned,
+        usage_metrics.core.github_nonpartitioned,
+    ],
+}
+
+all_asset_modules = (
+    raw_module_groups
+    | core_module_groups
+    | out_module_groups
+    | non_partitioned_module_groups
+)
 default_assets = list(
     itertools.chain.from_iterable(
         load_assets_from_modules(
@@ -101,14 +117,34 @@ defs: Definitions = Definitions(
     resources=resources,
     jobs=[
         define_asset_job(
-            name="all_metrics_etl",
-            description="This job ETLs all metrics sources.",
+            name="all_partitioned_metrics_etl",
+            description="This job ETLs all partitioned metrics sources.",
+            selection=AssetSelection.all() - AssetSelection.groups("non_partitioned"),
+        ),
+        define_asset_job(
+            name="all_nonpartitioned_metrics_etl",
+            description="This job ETLs all non-partitioned metrics sources.",
+            selection=AssetSelection.groups("non_partitioned"),
         ),
         define_asset_job(
             name="s3_metrics_etl",
             description="This job ETLs logs for S3 usage logs only.",
-            selection="*",
-            tags={"source": "s3"},
+            selection=AssetSelection.tag("source", "s3"),
+        ),
+        define_asset_job(
+            name="kaggle_metrics_etl",
+            description="This job ETLs logs for Kaggle usage logs only.",
+            selection=AssetSelection.tag("source", "kaggle"),
+        ),
+        define_asset_job(
+            name="github_partitioned_metrics_etl",
+            description="This job ETLs logs for Github partitioned usage logs only.",
+            selection=AssetSelection.tag("source", "github_partitioned"),
+        ),
+        define_asset_job(
+            name="github_nonpartitioned_metrics_etl",
+            description="This job ETLs logs for Github non-partitioned usage logs only.",
+            selection=AssetSelection.tag("source", "github_nonpartitioned"),
         ),
     ],
 )

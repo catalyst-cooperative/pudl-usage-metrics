@@ -37,6 +37,14 @@ class SQLIOManager(IOManager):
             Create a schema one in usage_metrics.models."""
         table_obj = usage_metrics_metadata.tables[table_name]
 
+        # We can't filter on context.has_partition_key, since a non-partitioned asset
+        # run from a job containing partitioned assets will have
+        # context.has_partition_key = True. So for now, add this column only if
+        # it is specified in the metadata.
+
+        if context.has_partition_key:
+            df["partition_key"] = context.partition_key
+
         # Get primary key column(s) of dataframe, and check against
         # already-existing data.
         pk_cols = [
@@ -46,6 +54,11 @@ class SQLIOManager(IOManager):
         query = sa.select(*[tbl.c[c] for c in pk_cols])  # Only select PK cols
 
         with self.engine.begin() as conn:
+            # TODO: Right now this method does not work consistently for datetime
+            # columns, as the datetimes parsed by SQLite and Pandas are not identical in
+            # format. Currently, rerunning a partition will raise an error for tables
+            # with datetimes as primary keys.
+
             # Get existing primary keys
             existing_pks = pd.read_sql(sql=query, con=conn)
             i1 = df.set_index(pk_cols).index
@@ -86,8 +99,6 @@ class SQLIOManager(IOManager):
             # If a table has a partition key, create a partition_key column
             # to enable subsetting a partition when reading out of SQLite.
             else:
-                if context.has_partition_key:
-                    obj["partition_key"] = context.partition_key
                 table_name = get_table_name_from_context(context)
                 self.append_df_to_table(context, obj, table_name)
         else:
@@ -111,7 +122,16 @@ class SQLIOManager(IOManager):
                 tbl = sa.Table(table_name, sa.MetaData(), autoload_with=engine)
                 query = sa.select(tbl)
                 if context.has_partition_key:
-                    query = query.where(tbl.c["partition_key"] == context.partition_key)
+                    if "partition_key" in table_obj.columns:
+                        query = query.where(
+                            tbl.c["partition_key"] == context.partition_key
+                        )
+                    # If you're trying to read in a non-partitioned table,
+                    # raise an assertion error that's more targeted than just a key error
+                    else:
+                        raise AssertionError(
+                            f"You're trying to read in a partition of {context.asset_key}, but this table isn't partitioned!"
+                        )
                 df = pd.read_sql(
                     sql=query,
                     con=con,

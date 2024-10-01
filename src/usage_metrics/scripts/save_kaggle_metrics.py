@@ -12,7 +12,7 @@ logger = logging.getLogger()
 logging.basicConfig(level="INFO")
 
 
-def get_kaggle_logs() -> str:
+def get_kaggle_dataset_metadata() -> str:
     """Get PUDL project usage metadata from Kaggle site."""
     api = KaggleApi()
     kaggle_owner = "catalystcooperative"
@@ -39,8 +39,8 @@ def upload_to_bucket(data):
 
 def save_metrics():
     """Save github traffic metrics to google cloud bucket."""
-    kaggle_metrics = get_kaggle_logs()
-    upload_to_bucket(kaggle_metrics)
+    kaggle_dataset_metrics = get_kaggle_dataset_metadata()
+    upload_to_bucket(kaggle_dataset_metrics)
 
 
 if __name__ == "__main__":
