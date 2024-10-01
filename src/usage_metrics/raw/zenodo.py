@@ -1,6 +1,8 @@
-"""Extract data from Zenodo logs."""
+"""Extract data from Zenodo logs, where each JSON file has metadata on all records in a version."""
 
+import json
 import re
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -11,8 +13,35 @@ from dagster import (
 )
 from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
+from pydantic import BaseModel
 
 from usage_metrics.raw.extract import GCSExtractor
+
+
+class ZenodoStats(BaseModel):
+    """Pydantic model representing Zenodo usage stats.
+
+    See https://developers.zenodo.org/#representation.
+    """
+
+    downloads: int
+    unique_downloads: int
+    views: int
+    unique_views: int
+    version_downloads: int
+    version_unique_downloads: int
+    version_unique_views: int
+    version_views: int
+
+
+class ZenodoMetadata(BaseModel):
+    """Pydantic model representing relevant Zenodo metadata.
+
+    See https://developers.zenodo.org/#representation.
+    """
+
+    version: str | None = None
+    publication_date: datetime = None
 
 
 class ZenodoExtractor(GCSExtractor):
@@ -43,14 +72,24 @@ class ZenodoExtractor(GCSExtractor):
         week_start_date_str = context.partition_key
         week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
         partition_dates = tuple(week_date_range.strftime("%Y-%m-%d"))
-        file_name_prefixes = tuple(f"zenodo/{date}.csv" for date in partition_dates)
 
-        blobs = [blob for blob in blobs if blob.name in file_name_prefixes]
+        # Construct regex query for zenodo/YYYYMMDD-VERSIONID.json
+        # (ignoring older CSV archives)
+        # and only search for files in date range
+        file_name_prefixes = tuple(f"zenodo/{date}-" for date in partition_dates)
+        blobs = [
+            blob
+            for blob in blobs
+            if re.search(r"zenodo\/\d{4}-\d{2}-\d{2}-\d+\.json$", blob.name)
+            and blob.name in file_name_prefixes
+        ]
         return blobs
 
     def load_file(self, file_path: Path) -> pd.DataFrame:
         """Read in file as dataframe."""
-        df = pd.read_csv(file_path)
+        with Path.open(file_path) as data_file:
+            data_json = json.load(data_file)
+        df = pd.json_normalize(data_json["hits"]["hits"])
         # Add in date of metrics column from file name
         df["metrics_date"] = re.search(r"\d{4}-\d{2}-\d{2}", str(file_path)).group()
         return df

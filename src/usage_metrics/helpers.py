@@ -5,10 +5,12 @@ from __future__ import annotations
 import os
 from datetime import UTC, datetime, timezone
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.parse import urlparse
 
 import ipinfo
 import pandas as pd
+import requests
 from dagster import OutputContext, RetryPolicy, op
 from joblib import Memory
 
@@ -154,3 +156,28 @@ def get_table_name_from_context(context: OutputContext) -> str:
     if context.has_asset_key:
         return context.asset_key.to_python_identifier()
     return context.get_identifier()
+
+
+def make_request(
+    url: str, headers: str | None = None, params: str | None = None, timeout: int = 100
+) -> requests.models.Response:
+    """Makes a request to the github api.
+
+    Args:
+        query (str): A github api request url.
+        headers (str): Header to include in the request.
+        params (str): Params of request.
+        timeout (int): Timeout of request (in seconds).
+
+    Returns:
+        response (requests.models.Response): the request response.
+    """
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=timeout)
+
+        response.raise_for_status()
+    except HTTPError as http_err:
+        raise HTTPError(
+            f"HTTP error occurred: {http_err}\n\tResponse text: {response.text}"
+        )
+    return response

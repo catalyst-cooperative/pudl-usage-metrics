@@ -26,29 +26,92 @@ def core_zenodo_logs(
         context.log.warn(f"No data found for the week of {context.partition_key}")
         return raw_zenodo_logs
 
-    df = raw_zenodo_logs.rename(
+    # Drop columns
+    df = raw_zenodo_logs.drop(
+        columns=[
+            "files",
+            "owners",
+            "revision",
+            "metadata.access_right",
+            "metadata.creators",
+            "metadata.language",
+            "metadata.resource_type.title",
+            "metadata.resource_type.type",
+            "metadata.license.id",
+            "links.self_html",
+            "links.doi",
+            "links.self_doi",
+            "links.self_doi_html",
+            "links.parent",
+            "links.parent_html",
+            "links.parent_doi",
+            "links.parent_doi_html",
+            "links.self_iiif_manifest",
+            "links.self_iiif_sequence",
+            "links.files",
+            "links.media_files",
+            "links.archive",
+            "links.archive_media",
+            "links.latest",
+            "links.latest_html",
+            "links.versions",
+            "links.draft",
+            "links.reserve_doi",
+            "links.access_links",
+            "links.access_grants",
+            "links.access_users",
+            "links.access_request",
+            "links.access",
+            "links.communities",
+            "links.communities-suggestions",
+            "links.requests",
+        ]
+    )
+
+    df = df.rename(
         columns={
-            "downloads": "dataset_downloads",
-            "unique_downloads": "dataset_unique_downloads",
-            "views": "dataset_views",
-            "unique_views": "dataset_unique_views",
+            "created": "version_creation_date",  # Datetime
+            "modified": "version_last_modified_date",  # Datetime
+            "updated": "version_last_updated_date",  # Datetime
+            "metadata.publication_date": "version_publication_date",  # Date
+            "id": "version_id",
+            "recid": "version_record_id",
+            "conceptrecid": "concept_record_id",
             "doi": "version_doi",
+            "conceptdoi": "concept_record_doi",
+            "doi_url": "version_doi_url",
             "title": "version_title",
+            "status": "version_status",
+            "state": "version_state",
+            "submitted": "version_submitted",
+            "metadata.description": "version_description",
+            "metadata.version": "version",
+            "stats.downloads": "dataset_downloads",
+            "stats.unique_downloads": "dataset_unique_downloads",
+            "stats.views": "dataset_views",
+            "stats.unique_views": "dataset_unique_views",
+            "stats.version_downloads": "version_downloads",
+            "stats.version_unique_downloads": "version_unique_downloads",
+            "stats.version_views": "version_views",
+            "stats.version_unique_views": "version_unique_views",
         }
     )
 
-    # We added new columns to the more recent archived data, so make sure older df's
-    # have these columns or create them if they don't exist.
-    cols = ["version", "publication_date"]
-    df = df.reindex(df.columns.union(cols, sort=False), axis=1)
-
     # Convert string to date using Pandas
-    for col in ["metrics_date", "publication_date"]:
+    for col in ["metrics_date", "version_publication_date"]:
         df[col] = pd.to_datetime(df[col])
         df[col] = df[col].dt.date
 
+    # Convert string to datetime using Pandas
+    for col in [
+        "version_creation_date",
+        "version_last_modified_date",
+        "version_last_updated_date",
+    ]:
+        df[col] = pd.to_datetime(df[col])
+
     # Check validity of PK column
-    df = df.set_index(["metrics_date", "version_doi"])
+    df = df.set_index(["metrics_date", "version_id"])
     assert df.index.is_unique
 
     # Add a column with the dataset slug

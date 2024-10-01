@@ -338,10 +338,14 @@ core_zenodo_logs = Table(
         comment="The date when the metadata was reported.",
     ),
     Column(
-        "version_doi",
+        "version",
         String,
-        primary_key=True,
-        comment="The DOI of the Zenodo version.",
+        comment="The version (e.g. 10.0.0) of the dataset record.",
+    ),
+    Column(
+        "dataset_slug",
+        String,
+        comment="The shorthand for the dataset being archived. Matches the pudl_archiver repository dataset slugs when the dataset is archived by the PUDL archiver.",
     ),
     Column(
         "dataset_downloads",
@@ -389,19 +393,75 @@ core_zenodo_logs = Table(
         comment="The name of the version in Zenodo.",
     ),
     Column(
-        "version",
-        String,
-        comment="The version (e.g. 10.0.0) of the dataset record.",
+        "version_id",
+        Integer,
+        primary_key=True,
+        comment="The unique ID of the Zenodo version. This is identical to the version DOI.",
     ),
     Column(
-        "publication_date",
+        "version_record_id",
+        Integer,
+        comment="The record ID of the Zenodo version. This is identical to the version ID.",
+    ),
+    Column(
+        "concept_record_id",
+        Integer,
+        comment="The concept record ID. This is shared between all versions of a record.",
+    ),
+    Column(
+        "version_creation_date",
+        DateTime,
+        comment="The datetime the record was created.",
+    ),
+    Column(
+        "version_last_modified_date",
+        DateTime,
+        comment="The datetime the record was last modified.",
+    ),
+    Column(
+        "version_last_updated_date",
+        DateTime,
+        comment="The datetime the record was last updated.",
+    ),
+    Column(
+        "version_publication_date",
         Date,
         comment="The date that the version was published.",
     ),
     Column(
-        "dataset_slug",
+        "version_doi",
         String,
-        comment="The shorthand for the dataset being archived. Matches the pudl_archiver repository dataset slugs when the dataset is archived by the PUDL archiver.",
+        comment="The DOI of the Zenodo version.",
+    ),
+    Column(
+        "concept_record_doi",
+        String,
+        comment="The DOI of the Zenodo concept record.",
+    ),
+    Column(
+        "version_doi_url",
+        String,
+        comment="The DOI link of the Zenodo version.",
+    ),
+    Column(
+        "version_status",
+        String,
+        comment="The status of the Zenodo version.",
+    ),
+    Column(
+        "version_state",
+        String,
+        comment="The state of the Zenodo version.",
+    ),
+    Column(
+        "version_submitted",
+        Boolean,
+        comment="Is the version submitted?",
+    ),
+    Column(
+        "version_description",
+        Boolean,
+        comment="The description of the version.",
     ),
     Column("partition_key", String),
 )

@@ -8,9 +8,9 @@ import time
 from dataclasses import dataclass
 from datetime import date
 
-import requests
 from google.cloud import storage
-from requests.exceptions import HTTPError
+
+from usage_metrics.helpers import make_request
 
 logger = logging.getLogger()
 logging.basicConfig(level="INFO")
@@ -33,13 +33,13 @@ def get_biweekly_metrics(owner: str, repo: str, token: str, metric: str) -> str:
     Returns:
         json (str): The metric data as json text.
     """
-    query_url = f"https://api.github.com/repos/{owner}/{repo}/traffic/{metric}"
+    url = f"https://api.github.com/repos/{owner}/{repo}/traffic/{metric}"
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json",
     }
 
-    response = make_github_request(query_url, headers)
+    response = make_request(url=url, headers=headers)
     return json.dumps(response.json())
 
 
@@ -52,7 +52,7 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
     Returns:
         json (str): A json string of metrics.
     """
-    query_url = f"https://api.github.com/repos/{owner}/{repo}/{metric}"
+    url = f"https://api.github.com/repos/{owner}/{repo}/{metric}"
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3.star+json",
@@ -66,35 +66,13 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
 
     while time.time() < timeout_start + timeout:
         params = {"page": page}
-        metrics_json = make_github_request(query_url, headers, params).json()
+        metrics_json = make_request(url=url, headers=headers, params=params).json()
 
         if len(metrics_json) <= 0:
             break
         metrics += metrics_json
         page += 1
     return json.dumps(metrics)
-
-
-def make_github_request(query: str, headers: str, params: str = None):
-    """Makes a request to the github api.
-
-    Args:
-        query (str): A github api request url.
-        headers (str): Header to include in the request.
-        params (str): Params of request.
-
-    Returns:
-        response (requests.models.Response): the request response.
-    """
-    try:
-        response = requests.get(query, headers=headers, params=params, timeout=100)
-
-        response.raise_for_status()
-    except HTTPError as http_err:
-        raise HTTPError(
-            f"HTTP error occurred: {http_err}\n\tResponse test: {response.text}"
-        )
-    return response
 
 
 def upload_to_bucket(data, metric):
