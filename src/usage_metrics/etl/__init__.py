@@ -32,12 +32,14 @@ raw_module_groups = {
     "raw_s3": [usage_metrics.raw.s3],
     "raw_github_partitioned": [usage_metrics.raw.github_partitioned],
     "raw_kaggle": [usage_metrics.raw.kaggle],
+    "raw_zenodo": [usage_metrics.raw.zenodo],
 }
 
 core_module_groups = {
     "core_s3": [usage_metrics.core.s3],
     "core_kaggle": [usage_metrics.core.kaggle],
     "core_github_partitioned": [usage_metrics.core.github_partitioned],
+    "core_zenodo": [usage_metrics.core.zenodo],
 }
 
 out_module_groups = {
@@ -145,6 +147,11 @@ defs: Definitions = Definitions(
             name="github_nonpartitioned_metrics_etl",
             description="This job ETLs logs for Github non-partitioned usage logs only.",
             selection=AssetSelection.tag("source", "github_nonpartitioned"),
+        ),
+        define_asset_job(
+            name="zenodo_metrics_etl",
+            description="This job ETLs logs for Zenodo archives only.",
+            selection=AssetSelection.tag("source", "zenodo"),
         ),
     ],
 )
