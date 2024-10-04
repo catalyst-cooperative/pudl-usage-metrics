@@ -161,10 +161,10 @@ def get_table_name_from_context(context: OutputContext) -> str:
 def make_request(
     url: str, headers: str | None = None, params: str | None = None, timeout: int = 100
 ) -> requests.models.Response:
-    """Makes a request to the github api.
+    """Makes a request with some error handling.
 
     Args:
-        query (str): A github api request url.
+        query (str): A request url.
         headers (str): Header to include in the request.
         params (str): Params of request.
         timeout (int): Timeout of request (in seconds).

@@ -43,8 +43,12 @@ class CommunityMetadata(BaseModel):
             return
 
 
-def get_zenodo_logs() -> pd.DataFrame():
-    """Download JSONs of metrics for all versions in the Catalyst Cooperative Zenodo community."""
+def save_zenodo_logs() -> pd.DataFrame():
+    """Get JSONs of Zenodo metrics for all Catalyst records and upload to GCS.
+
+    Get metrics for all versions in the Catalyst Cooperative Zenodo community locally,
+    and then upload to the sources.catalyst.coop GCS bucket.
+    """
     bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
     client = storage.Client()
     bucket = client.get_bucket(bucket_name)
@@ -69,17 +73,12 @@ def get_zenodo_logs() -> pd.DataFrame():
 def upload_to_bucket(
     bucket: storage.Client.bucket, blob_name: str, data: pd.DataFrame
 ) -> None:
-    """Upload a gcp object."""
+    """Upload a GCP object to a selected bucket."""
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)
 
     logger.info(f"Uploaded {blob_name} to GCS bucket.")
 
 
-def save_metrics():
-    """Save Zenodo traffic metrics to google cloud bucket."""
-    get_zenodo_logs()
-
-
 if __name__ == "__main__":
-    sys.exit(save_metrics())
+    sys.exit(save_zenodo_logs())
