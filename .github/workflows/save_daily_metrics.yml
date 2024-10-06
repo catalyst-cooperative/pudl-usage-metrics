@@ -18,14 +18,13 @@ jobs:
           fetch-depth: 2
 
       - name: Set up conda environment for testing
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: environment.yml
           cache-environment: true
           condarc: |
             channels:
             - conda-forge
-            - defaults
             channel_priority: strict
 
       - name: Log conda environnment information

@@ -1,7 +1,6 @@
 name: pudl-usage-metrics
 channels:
   - conda-forge
-  - defaults
 dependencies:
   # Used to set up the environment
   - pip>=21,<25
