@@ -35,7 +35,6 @@ jobs:
           condarc: |
             channels:
             - conda-forge
-            - defaults
             channel_priority: strict
 
       - name: Get GitHub Action runner's IP Address

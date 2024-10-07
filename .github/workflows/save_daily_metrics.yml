@@ -25,7 +25,6 @@ jobs:
           condarc: |
             channels:
             - conda-forge
-            - defaults
             channel_priority: strict
 
       - name: Log conda environnment information
