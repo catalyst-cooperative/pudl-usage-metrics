@@ -8,9 +8,8 @@ import time
 from dataclasses import dataclass
 from datetime import date
 
+import requests
 from google.cloud import storage
-
-from usage_metrics.helpers import make_request
 
 logger = logging.getLogger()
 logging.basicConfig(level="INFO")
@@ -39,7 +38,7 @@ def get_biweekly_metrics(owner: str, repo: str, token: str, metric: str) -> str:
         "Accept": "application/vnd.github.v3+json",
     }
 
-    response = make_request(url=url, headers=headers)
+    response = requests.get(url, headers=headers, timeout=100)
     return json.dumps(response.json())
 
 
@@ -66,7 +65,9 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
 
     while time.time() < timeout_start + timeout:
         params = {"page": page}
-        metrics_json = make_request(url=url, headers=headers, params=params).json()
+        metrics_json = requests.get(
+            url=url, headers=headers, params=params, timeout=100
+        ).json()
 
         if len(metrics_json) <= 0:
             break
