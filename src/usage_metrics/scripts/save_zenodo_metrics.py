@@ -7,10 +7,9 @@ from datetime import date, datetime
 from typing import Annotated
 
 import pandas as pd
+import requests
 from google.cloud import storage
 from pydantic import BaseModel, StringConstraints
-
-from usage_metrics.helpers import make_request
 
 Doi = Annotated[str, StringConstraints(pattern=r"10\.5281/zenodo\.\d+")]
 SandboxDoi = Annotated[str, StringConstraints(pattern=r"10\.5072/zenodo\.\d+")]
@@ -55,7 +54,7 @@ def save_zenodo_logs() -> pd.DataFrame():
 
     community_url = "https://zenodo.org/api/communities/14454015-63f1-4f05-80fd-1a9b07593c9e/records"
     # First, get metadata on all the datasets in the Catalyst Cooperative community
-    community_records = make_request(url=community_url)
+    community_records = requests.get(url=community_url, timeout=100)
     dataset_records = community_records.json()["hits"]["hits"]
     dataset_records = [CommunityMetadata(**record) for record in dataset_records]
 
@@ -64,7 +63,7 @@ def save_zenodo_logs() -> pd.DataFrame():
         # For each dataset in the community, get all archived versions and their
         # corresponding metrics.
         versions_url = f"https://zenodo.org/api/records/{record.recid}/versions"
-        record_versions = make_request(url=versions_url).json()
+        record_versions = requests.get(url=versions_url, timeout=100).json()
         versions_metadata = json.dumps(record_versions)
         blob_name = f"zenodo/{date.today().strftime('%Y-%m-%d')}-{record.recid}.json"
         upload_to_bucket(bucket=bucket, blob_name=blob_name, data=versions_metadata)
