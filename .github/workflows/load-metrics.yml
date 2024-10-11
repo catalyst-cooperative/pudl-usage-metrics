@@ -45,7 +45,13 @@ jobs:
         run: |
           echo ${{ steps.ip.outputs.ipv4 }}
 
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+        with:
+          version: ">= 363.0.0"
+
       - name: Whitelist Github Action and Superset IPs
+        shell: bash -l {0}
         run: |
           gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ steps.ip.outputs.ipv4 }}
 
