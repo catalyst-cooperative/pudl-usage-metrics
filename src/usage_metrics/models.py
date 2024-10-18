@@ -460,7 +460,7 @@ core_zenodo_logs = Table(
     ),
     Column(
         "version_description",
-        Boolean,
+        String,
         comment="The description of the version.",
     ),
     Column("partition_key", String),
