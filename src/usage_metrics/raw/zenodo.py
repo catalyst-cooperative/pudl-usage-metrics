@@ -80,12 +80,11 @@ class ZenodoExtractor(GCSExtractor):
         # Construct regex query for zenodo/YYYYMMDD-VERSIONID.json
         # (ignoring older CSV archives)
         # and only search for files in date range
-        file_name_prefixes = tuple(f"zenodo/{date}-" for date in partition_dates)
         blobs = [
             blob
             for blob in blobs
             if re.search(r"zenodo\/\d{4}-\d{2}-\d{2}-\d+\.json$", blob.name)
-            and blob.name in file_name_prefixes
+            and any(partition_date in blob.name for partition_date in partition_dates)
         ]
         return blobs
 
