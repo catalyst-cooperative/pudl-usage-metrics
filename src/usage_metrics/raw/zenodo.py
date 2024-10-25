@@ -80,11 +80,14 @@ class ZenodoExtractor(GCSExtractor):
         # Construct regex query for zenodo/YYYYMMDD-VERSIONID.json
         # (ignoring older CSV archives)
         # and only search for files in date range
+        file_name_prefixes = tuple(f"zenodo/{date}-" for date in partition_dates)
+        pattern = re.compile(r"\d{4}-\d{2}-\d{2}-\d+\.json$")
+
         blobs = [
             blob
             for blob in blobs
-            if re.search(r"zenodo\/\d{4}-\d{2}-\d{2}-\d+\.json$", blob.name)
-            and any(partition_date in blob.name for partition_date in partition_dates)
+            if pattern.search(str(blob.name))
+            and blob.name.startswith(file_name_prefixes)
         ]
         return blobs
 
@@ -92,6 +95,7 @@ class ZenodoExtractor(GCSExtractor):
         """Read in file as dataframe."""
         with Path.open(file_path) as data_file:
             data_json = json.load(data_file)
+
         df = pd.json_normalize(data_json["hits"]["hits"])
         # Add in date of metrics column from file name
         df["metrics_date"] = re.search(r"\d{4}-\d{2}-\d{2}", str(file_path)).group()

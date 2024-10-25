@@ -26,49 +26,8 @@ def core_zenodo_logs(
         context.log.warn(f"No data found for the week of {context.partition_key}")
         return raw_zenodo_logs
 
-    # Drop columns
-    df = raw_zenodo_logs.drop(
-        columns=[
-            "files",
-            "owners",
-            "revision",
-            "metadata.access_right",
-            "metadata.creators",
-            "metadata.language",
-            "metadata.resource_type.title",
-            "metadata.resource_type.type",
-            "metadata.license.id",
-            "links.self_html",
-            "links.doi",
-            "links.self_doi",
-            "links.self_doi_html",
-            "links.parent",
-            "links.parent_html",
-            "links.parent_doi",
-            "links.parent_doi_html",
-            "links.self_iiif_manifest",
-            "links.self_iiif_sequence",
-            "links.files",
-            "links.media_files",
-            "links.archive",
-            "links.archive_media",
-            "links.latest",
-            "links.latest_html",
-            "links.versions",
-            "links.draft",
-            "links.reserve_doi",
-            "links.access_links",
-            "links.access_grants",
-            "links.access_users",
-            "links.access_request",
-            "links.access",
-            "links.communities",
-            "links.communities-suggestions",
-            "links.requests",
-        ]
-    )
-
-    df = df.rename(
+    # Rename columns
+    df = raw_zenodo_logs.rename(
         columns={
             "created": "version_creation_date",  # Datetime
             "modified": "version_last_modified_date",  # Datetime
@@ -96,6 +55,11 @@ def core_zenodo_logs(
             "stats.version_unique_views": "version_unique_views",
         }
     )
+    # Drop columns
+    df = df.drop(columns=["files", "owners", "revision"]).drop(
+        columns=[col for col in df.columns if col.startswith(("metadata.", "links."))]
+    )
+    # Column names vary by Zenodo archive type, so we drop any remaining metadata and link columns
 
     # Convert string to date using Pandas
     for col in ["metrics_date", "version_publication_date"]:
@@ -145,6 +109,10 @@ def core_zenodo_logs(
             "Public Utility Data Liberation Project (PUDL) Data Release": "pudl",
             "The Public Utility Data Liberation (PUDL) Project": "pudl",
             "Workplace Democracy, Open Data, and Open Source": "csv_conf_presentation",
+            "Vibrant Clean Energy Resource Adequacy Renewable Energy (RARE) Power Dataset": "vcerare",
+            "The Public Utility Data Liberation Project: Providing Open Data for a Clean Energy Transition": "naps2024",
+            "Removing data barriers for decarbonization with the Public Utility Data Liberation Project": "naps2024",
+            "Vibrant Clean Energy Renewable Generation Profiles": "vcerare",
         }
         | {
             col: "pudl"
@@ -158,10 +126,8 @@ def core_zenodo_logs(
         }
     )
 
-    missed_mapping = df[
-        ~df.version_title.isin(dataset_slugs.keys())
-    ].version_title.unique()
-    assert not missed_mapping, f"Missed mapping slugs for {missed_mapping}"
+    missed_mapping = df[~df.version_title.isin(dataset_slugs.keys())].version_title
+    assert missed_mapping.empty, f"Missed mapping slugs for {missed_mapping.unique()}"
 
     # Assert we haven't missed any of the titles
     df["dataset_slug"] = df["version_title"].map(dataset_slugs)
