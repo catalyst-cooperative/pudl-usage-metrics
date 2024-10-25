@@ -12,7 +12,7 @@ from dagster import (
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
+    # io_manager_key="database_manager",
     tags={"source": "zenodo"},
 )
 def core_zenodo_logs(
@@ -79,58 +79,45 @@ def core_zenodo_logs(
     assert df.index.is_unique
 
     # Add a column with the dataset slug
-    dataset_slugs = (
-        {
-            "Open Data for an Open Energy Transition": "ipi_presentation",
-            "PUDL Raw EIA Annual Energy Outlook (AEO)": "eiaaeo",
-            "PUDL Raw EIA Bulk Electricity API Data": "eia_bulk_elec",
-            "PUDL Raw EIA Form 191 -- Monthly Underground Natural Gas Storage Report": "eia191",
-            "PUDL Raw EIA Form 860": "eia860",
-            "PUDL Raw EIA Form 860 -- Annual Electric Generator Report": "eia860",
-            "PUDL Raw EIA Form 860M": "eia860m",
-            "PUDL Raw EIA Form 861": "eia861",
-            "PUDL Raw EIA Form 923": "eia923",
-            "PUDL Raw EIA Form 923 -- Power Plant Operations Report": "eia923",
-            "PUDL Raw EIA Form 930 -- Hourly and Daily Balancing Authority Operations Report": "eia930",
-            "PUDL Raw EIA Thermoelectric Cooling Water": "eiawater",
-            "PUDL Raw EPA CAMD to EIA Data Crosswalk": "epacamd_eia",
-            "PUDL Raw EPA CEMS unitid to EIA Plant Crosswalk": "epacamd_eia",
-            "PUDL Raw EPA Hourly Continuous Emission Monitoring System (CEMS)": "epacems",
-            "PUDL Raw FERC Form 1": "ferc1",
-            "PUDL Raw FERC Form 2": "ferc2",
-            "PUDL Raw FERC Form 6": "ferc6",
-            "PUDL Raw FERC Form 60": "ferc60",
-            "PUDL Raw FERC Form 714": "ferc714",
-            "PUDL Raw GridPath Resource Adequacy Toolkit Data": "gridpathatk",
-            "PUDL Raw GridPath Resource Adequacy Toolkit Renewable Generation Profiles": "gridpathatk",
-            "PUDL Raw Mine Safety and Health Administration (MSHA) Mines": "mshamines",
-            "PUDL Raw NREL Annual Technology Baseline (ATB) for Electricity": "nrelatb",
-            "PUDL Raw Pipelines and Hazardous Materials Safety Administration (PHMSA) Annual Natural Gas Report": "phmsagas",
-            "Public Utility Data Liberation Project (PUDL) Data Release": "pudl",
-            "The Public Utility Data Liberation (PUDL) Project": "pudl",
-            "Workplace Democracy, Open Data, and Open Source": "csv_conf_presentation",
-            "Vibrant Clean Energy Resource Adequacy Renewable Energy (RARE) Power Dataset": "vcerare",
-            "The Public Utility Data Liberation Project: Providing Open Data for a Clean Energy Transition": "naps2024",
-            "Removing data barriers for decarbonization with the Public Utility Data Liberation Project": "naps2024",
-            "Vibrant Clean Energy Renewable Generation Profiles": "vcerare",
-        }
-        | {
-            col: "pudl"
-            for col in df.version_title.unique()
-            if "catalyst-cooperative/pudl" in col or "PUDL Data Release" in col
-        }
-        | {
-            col: "ferc_xbrl_extractor"
-            for col in df.version_title.unique()
-            if "catalyst-cooperative/ferc-xbrl-extractor" in col
-        }
-    )
+    dataset_slugs = {
+        "10723220": "ipi_presentation",
+        "10838487": "eiaaeo",
+        "7067366": "eia_bulk_elec",
+        "10607836": "eia191",
+        "4127026": "eia860",
+        "4281336": "eia860m",
+        "4127028": "eia861",
+        "4127039": "eia923",
+        "10840077": "eia930",
+        "7683135": "eiawater",
+        "6633769": "epacamd_eia",
+        "10233185": "epacems",
+        "4127043": "ferc1",
+        "5879542": "ferc2",
+        "7126395": "ferc6",
+        "7126434": "ferc60",
+        "4127100": "ferc714",
+        "10844661": "gridpathatk",
+        "7683517": "mshamines",
+        "10839267": "nrelatb",
+        "7683351": "phmsagas",
+        "11402753": "csv_conf_2024_coops",
+        "13937522": "vcerare",
+        "13948331": "naps2024",
+        "11455506": "csv_conf_2024_pudl",
+        "13919959": "vcerare",
+        "3653158": "pudl_data_release",
+        "3404014": "pudl_code",
+        "10020145": "ferc_xbrl_extractor",
+    }
 
-    missed_mapping = df[~df.version_title.isin(dataset_slugs.keys())].version_title
+    missed_mapping = df[
+        ~df.concept_record_id.isin(dataset_slugs.keys())
+    ].concept_record_id
     assert missed_mapping.empty, f"Missed mapping slugs for {missed_mapping.unique()}"
 
     # Assert we haven't missed any of the titles
-    df["dataset_slug"] = df["version_title"].map(dataset_slugs)
+    df["dataset_slug"] = df["concept_record_id"].map(dataset_slugs)
     assert not df["dataset_slug"].isnull().to_numpy().any()
 
     context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
