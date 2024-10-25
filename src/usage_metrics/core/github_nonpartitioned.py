@@ -61,9 +61,10 @@ def core_github_stargazers(
     """Transform the stargazers to the PUDL Github repository."""
     df = raw_github_stargazers
 
-    # Drop 'fork' column and all URLs other than the main one for the repository
-    # Also drop "open_issues_count" which is identical to "open_issues"
-    df = df.rename({"size": "size_kb"}).drop(columns=["gravatar_id", "avatar_url"])
+    # Drop fields that don't pertain to usage metrics
+    df = df.rename({"size": "size_kb"}).drop(
+        columns=["gravatar_id", "avatar_url", "user_view_type"]
+    )
 
     # Convert string to datetime using Pandas
     df["starred_at"] = pd.to_datetime(df["starred_at"])
