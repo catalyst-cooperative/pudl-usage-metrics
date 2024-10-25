@@ -1,8 +1,8 @@
-"""Create core Zenodo log table
+"""Create core zenodo table
 
-Revision ID: 324a4c7b342c
+Revision ID: b4fee22b4a4d
 Revises: e8435a653eb2
-Create Date: 2024-10-01 13:10:01.924963
+Create Date: 2024-10-18 17:39:14.494677
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '324a4c7b342c'
+revision: str = 'b4fee22b4a4d'
 down_revision: Union[str, None] = 'e8435a653eb2'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -46,7 +46,7 @@ def upgrade() -> None:
     sa.Column('version_status', sa.String(), nullable=True, comment='The status of the Zenodo version.'),
     sa.Column('version_state', sa.String(), nullable=True, comment='The state of the Zenodo version.'),
     sa.Column('version_submitted', sa.Boolean(), nullable=True, comment='Is the version submitted?'),
-    sa.Column('version_description', sa.Boolean(), nullable=True, comment='The description of the version.'),
+    sa.Column('version_description', sa.String(), nullable=True, comment='The description of the version.'),
     sa.Column('partition_key', sa.String(), nullable=True),
     sa.PrimaryKeyConstraint('metrics_date', 'version_id')
     )
