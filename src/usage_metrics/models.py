@@ -466,6 +466,144 @@ core_zenodo_logs = Table(
     Column("partition_key", String),
 )
 
+out_zenodo_logs = Table(
+    "out_zenodo_logs",
+    usage_metrics_metadata,
+    Column(
+        "metrics_date",
+        Date,
+        primary_key=True,
+        comment="The date when the metadata was reported.",
+    ),
+    Column(
+        "version",
+        String,
+        comment="The version (e.g. 10.0.0) of the dataset record.",
+    ),
+    Column(
+        "dataset_slug",
+        String,
+        comment="The shorthand for the dataset being archived. Matches the pudl_archiver repository dataset slugs when the dataset is archived by the PUDL archiver.",
+    ),
+    Column(
+        "new_dataset_downloads",
+        Integer,
+        comment="The number of new daily downloads for the entire dataset. A download is a user (human or machine) downloading a file from a record, excluding double-clicks and robots. If a record has multiple files and you download all files, each file counts as one download.",
+    ),
+    Column(
+        "new_dataset_unique_downloads",
+        Integer,
+        comment="The number of new daily unique downloads for the entire dataset. A unique download is defined as one or more file downloads from files of a single record by a user within a 1-hour time-window. This means that if one or more files of the same record were downloaded multiple times by the same user within the same time-window, it is considered to be one unique download.",
+    ),
+    Column(
+        "new_dataset_views",
+        Integer,
+        comment="The number of new daily views for the entire dataset. A total view is a user (human or machine) visiting a record, excluding double-clicks and robots.",
+    ),
+    Column(
+        "new_dataset_unique_views",
+        Integer,
+        comment="The number of new daily unique downloads for the entire dataset. A unique view is defined as one or more visits by a user within a 1-hour time-window. This means that if the same record was accessed multiple times by the same user within the same time-window, Zenodo considers it as one unique view.",
+    ),
+    Column(
+        "new_version_downloads",
+        Integer,
+        comment="The number of new daily downloads for the version. A total download is a user (human or machine) downloading a file from a record, excluding double-clicks and robots. If a record has multiple files and you download all files, each file counts as one download.",
+    ),
+    Column(
+        "new_version_unique_downloads",
+        Integer,
+        comment="The number of new daily unique downloads for the version. A unique download is defined as one or more file downloads from files of a single record by a user within a 1-hour time-window. This means that if one or more files of the same record were downloaded multiple times by the same user within the same time-window, it is considered to be one unique download.",
+    ),
+    Column(
+        "new_version_views",
+        Integer,
+        comment="The number of new daily views for the version. A total view is a user (human or machine) visiting a record, excluding double-clicks and robots.",
+    ),
+    Column(
+        "new_version_unique_views",
+        Integer,
+        comment="The number of new daily unique downloads for the version. A unique view is defined as one or more visits by a user within a 1-hour time-window. This means that if the same record was accessed multiple times by the same user within the same time-window, Zenodo considers it as one unique view.",
+    ),
+    Column(
+        "version_title",
+        String,
+        comment="The name of the version in Zenodo.",
+    ),
+    Column(
+        "version_id",
+        Integer,
+        primary_key=True,
+        comment="The unique ID of the Zenodo version. This is identical to the version DOI.",
+    ),
+    Column(
+        "version_record_id",
+        Integer,
+        comment="The record ID of the Zenodo version. This is identical to the version ID.",
+    ),
+    Column(
+        "concept_record_id",
+        Integer,
+        comment="The concept record ID. This is shared between all versions of a record.",
+    ),
+    Column(
+        "version_creation_date",
+        DateTime,
+        comment="The datetime the record was created.",
+    ),
+    Column(
+        "version_last_modified_date",
+        DateTime,
+        comment="The datetime the record was last modified.",
+    ),
+    Column(
+        "version_last_updated_date",
+        DateTime,
+        comment="The datetime the record was last updated.",
+    ),
+    Column(
+        "version_publication_date",
+        Date,
+        comment="The date that the version was published.",
+    ),
+    Column(
+        "version_doi",
+        String,
+        comment="The DOI of the Zenodo version.",
+    ),
+    Column(
+        "concept_record_doi",
+        String,
+        comment="The DOI of the Zenodo concept record.",
+    ),
+    Column(
+        "version_doi_url",
+        String,
+        comment="The DOI link of the Zenodo version.",
+    ),
+    Column(
+        "version_status",
+        String,
+        comment="The status of the Zenodo version.",
+    ),
+    Column(
+        "version_state",
+        String,
+        comment="The state of the Zenodo version.",
+    ),
+    Column(
+        "version_submitted",
+        Boolean,
+        comment="Is the version submitted?",
+    ),
+    Column(
+        "version_description",
+        String,
+        comment="The description of the version.",
+    ),
+    Column("partition_key", String),
+)
+
 intake_logs = Table(
     "intake_logs",
     usage_metrics_metadata,
