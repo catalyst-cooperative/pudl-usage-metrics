@@ -1,7 +1,7 @@
 """Add out_zenodo_logs
 
 Revision ID: f5dbba621bb1
-Revises: b4fee22b4a4d
+Revises: 324a4c7b342c
 Create Date: 2024-10-25 13:30:27.163055
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'f5dbba621bb1'
-down_revision: Union[str, None] = 'b4fee22b4a4d'
+down_revision: Union[str, None] = '324a4c7b342c'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
