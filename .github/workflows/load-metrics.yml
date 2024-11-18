@@ -74,7 +74,7 @@ jobs:
       - name: Post to pudl-deployments channel
         if: always()
         id: slack
-        uses: slackapi/slack-github-action@v1
+        uses: slackapi/slack-github-action@v2
         with:
           channel-id: "C03FHB9N0PQ"
           slack-message: "Weekly usage metrics processing ran with status: ${{ job.status }}."
