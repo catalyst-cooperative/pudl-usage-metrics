@@ -7,8 +7,8 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "pandas>=2.2,<2.3",
     "sqlalchemy>=2",
-    "dagster>=1.7.15, <1.8.14",
-    "dagster-webserver>=1.7.15,<1.9",
+    "dagster>=1.7.15, <1.9.4",
+    "dagster-webserver>=1.7.15,<1.10",
     "pandas-gbq>=0.23.1",
     "pydata-google-auth>=1.8.2",
     "jupyterlab>=4.2.3",
@@ -39,7 +39,7 @@ classifiers = [
 dev = [
     "black>=22,<25",  # A deterministic code formatter
     "isort>=5,<6",  # Standardized import sorting
-    "twine>=3.3,<6.0",  # Used to make releases to PyPI
+    "twine>=3.3,<7.0",  # Used to make releases to PyPI
     "tox>=4.16,<4.24",  # Python test environment manager
 ]
 
@@ -62,7 +62,7 @@ tests = [
     "pytest-console-scripts>=1.4.1,<2",  # Allow automatic testing of scripts
     "pytest-cov>=5.0.0",  # Pytest plugin for working with coverage
     "pytest-mock>=3.14,<3.15",  # Pytest plugin for mocking function calls and objects
-    "ruff>=0.4,<0.8",
+    "ruff>=0.4,<0.9",
 ]
 
 [project.scripts]
