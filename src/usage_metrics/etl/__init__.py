@@ -44,6 +44,7 @@ core_module_groups = {
 
 out_module_groups = {
     "out_s3": [usage_metrics.out.s3],
+    "out_zenodo": [usage_metrics.out.zenodo],
 }
 
 non_partitioned_module_groups = {
