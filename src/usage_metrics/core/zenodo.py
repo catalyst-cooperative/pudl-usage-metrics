@@ -83,6 +83,7 @@ def core_zenodo_logs(
         "10723220": "ipi_presentation",
         "10838487": "eiaaeo",
         "7067366": "eia_bulk_elec",
+        "7682357": "eia176",
         "10607836": "eia191",
         "4127026": "eia860",
         "4281336": "eia860m",
