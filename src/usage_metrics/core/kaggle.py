@@ -72,6 +72,6 @@ def core_kaggle_logs(
         ["data", "keywords", "licenses", "collaborators"]
     ].astype(str)
 
-    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
+    context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return df.reset_index()

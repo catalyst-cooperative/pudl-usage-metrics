@@ -119,6 +119,6 @@ def core_s3_logs(
         ]
     )
 
-    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
+    context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return geocoded_df.reset_index()

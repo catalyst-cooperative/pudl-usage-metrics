@@ -45,7 +45,7 @@ def core_github_forks(
         ["owner", "permissions", "license", "topics"]
     ].astype(str)
 
-    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
+    context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return df.reset_index()
 
@@ -73,6 +73,6 @@ def core_github_stargazers(
     df = df.set_index("id")
     assert df.index.is_unique
 
-    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
+    context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return df.reset_index()
