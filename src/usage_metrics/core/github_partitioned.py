@@ -36,7 +36,7 @@ def core_github_popular_referrers(
     df = df.set_index(["metrics_date", "referrer"])
     assert df.index.is_unique
 
-    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
+    context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return df.reset_index()
 
@@ -67,7 +67,7 @@ def core_github_popular_paths(
     df = df.set_index(["metrics_date", "path"])
     assert df.index.is_unique
 
-    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
+    context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return df.reset_index()
 
@@ -119,7 +119,7 @@ def core_github_clones(
     df = df.set_index("metrics_date")
     assert df.index.is_unique
 
-    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
+    context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return df.reset_index()
 
@@ -173,6 +173,6 @@ def core_github_views(
     df = df.set_index("metrics_date")
     assert df.index.is_unique
 
-    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
+    context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return df.reset_index()

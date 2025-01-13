@@ -122,6 +122,6 @@ def core_zenodo_logs(
     df["dataset_slug"] = df["concept_record_id"].map(dataset_slugs)
     assert not df["dataset_slug"].isnull().to_numpy().any()
 
-    context.log.info(f"Saving to {os.getenv("METRICS_PROD_ENV", "local")} environment.")
+    context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return df.reset_index()
