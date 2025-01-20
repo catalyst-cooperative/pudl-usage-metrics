@@ -111,7 +111,7 @@ def core_zenodo_logs(
         "3653158": "pudl_data_release",
         "3404014": "pudl_code",
         "10020145": "ferc_xbrl_extractor",
-        "14624612": "censuspep",
+        "14624611": "censuspep",
     }
 
     missed_mapping = df[
