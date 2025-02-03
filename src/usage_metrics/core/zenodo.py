@@ -112,6 +112,19 @@ def core_zenodo_logs(
         "3404014": "pudl_code",
         "10020145": "ferc_xbrl_extractor",
         "14624611": "censuspep",
+        "14757121": "doeiraec",
+        "14757598": "epapcap",
+        "14758684": "doelead",
+        "14767206": "eianems",
+        "14767235": "epaegrid",
+        "14782473": "eiacbecs",
+        "14736285": "usgsuspvdb",
+        "14782873": "nrelefs",
+        "14783182": "nrelsts",
+        "14783184": "nrelss",
+        "14783214": "usgswtdb",
+        "14783267": "eiarecs",
+        "14783043": "epamats",
     }
 
     missed_mapping = df[
