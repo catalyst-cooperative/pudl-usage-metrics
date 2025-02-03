@@ -38,7 +38,7 @@ classifiers = [
 [project.optional-dependencies]
 dev = [
     "black>=22,<25",  # A deterministic code formatter
-    "isort>=5,<6",  # Standardized import sorting
+    "isort>=5,<7",  # Standardized import sorting
     "twine>=3.3,<7.0",  # Used to make releases to PyPI
     "tox>=4.16,<4.25",  # Python test environment manager
 ]
