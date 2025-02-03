@@ -3,7 +3,7 @@ channels:
   - conda-forge
 dependencies:
   # Used to set up the environment
-  - pip>=21,<25
+  - pip>=21
   - python>=3.12,<3.13
   - setuptools>=70.0
   - pip:
