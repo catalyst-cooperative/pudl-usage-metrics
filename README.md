@@ -28,7 +28,7 @@ mamba activate pudl-usage-metrics
 
 ## Environment Variables
 
-The ETL uses [ipinfo](https://ipinfo.io/) to geocode ip addresses. You need to obtain an ipinfo API token and store it in the `IPINFO_TOKEN` environment variable.
+The ETL uses [ipinfo](https://ipinfo.io/) to geocode ip addresses. Grab the [ipinfo token](https://ipinfo.io/account/token) by logging in using the credentials saved in our [Bitwarden Shared Inframundo Logins collection](https://vault.bitwarden.com/#/vault?collectionId=b53a14cf-48bd-4b53-a59e-b29600217e8b&itemId=50afdcf5-8cec-42a3-b366-b296013ba389&action=view).  `IPINFO_TOKEN` environment variable.
 
 If you want to take advantage of caching raw logs, rather than redownloading them for each run, you can set the optional ``DATA_DIR`` environment variable. If this is not set, the script will save files to a temporary directory by default.
 
