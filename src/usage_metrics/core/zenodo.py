@@ -125,6 +125,7 @@ def core_zenodo_logs(
         "14783214": "usgswtdb",
         "14783267": "eiarecs",
         "14783043": "epamats",
+        "14888356": "nrelsiting",
     }
 
     missed_mapping = df[
