@@ -7,7 +7,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
     "pandas>=2.2,<2.3",
     "sqlalchemy>=2",
-    "dagster>=1.7.15, <1.10.6",
+    "dagster>=1.7.15, <1.10.11",
     "dagster-webserver>=1.7.15,<1.11",
     "pandas-gbq>=0.23.1",
     "pydata-google-auth>=1.8.2",
@@ -40,7 +40,7 @@ dev = [
     "black>=22,<26",  # A deterministic code formatter
     "isort>=5,<7",  # Standardized import sorting
     "twine>=3.3,<7.0",  # Used to make releases to PyPI
-    "tox>=4.16,<4.25",  # Python test environment manager
+    "tox>=4.16,<4.26",  # Python test environment manager
 ]
 
 docs = [
@@ -58,7 +58,7 @@ tests = [
     "pre-commit>=4,<5",  # Allow us to run pre-commit hooks in testing
     "pydocstyle>=5.1,<7",  # Style guidelines for Python documentation
     "pytest>=8,<8.4",  # Our testing framework
-    "pytest-asyncio>=0.20,<0.26",  # Test async functions
+    "pytest-asyncio>=0.20,<0.27",  # Test async functions
     "pytest-console-scripts>=1.4.1,<2",  # Allow automatic testing of scripts
     "pytest-cov>=5.0.0",  # Pytest plugin for working with coverage
     "pytest-mock>=3.14,<3.15",  # Pytest plugin for mocking function calls and objects
