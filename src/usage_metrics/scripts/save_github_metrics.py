@@ -39,7 +39,15 @@ def get_biweekly_metrics(owner: str, repo: str, token: str, metric: str) -> str:
     }
 
     response = requests.get(url, headers=headers, timeout=100)
-    return json.dumps(response.json())
+    response_json = response.json()
+    if response.status != 200 or response_json.get("status") not in (
+        None,
+        "200",
+    ):  # If status returned by API, raise error.
+        raise ValueError(
+            f"Github API for {metric} returning status {response_json.get('status')}. See URL {url}"
+        )
+    return json.dumps(response_json)
 
 
 def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> str:
