@@ -40,7 +40,7 @@ def get_biweekly_metrics(owner: str, repo: str, token: str, metric: str) -> str:
 
     response = requests.get(url, headers=headers, timeout=100)
     response_json = response.json()
-    if response.status != 200 or response_json.get("status") not in (
+    if response.status_code != 200 or response_json.get("status") not in (
         None,
         "200",
     ):  # If status returned by API, raise error.
