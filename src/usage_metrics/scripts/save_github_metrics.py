@@ -43,21 +43,23 @@ def get_biweekly_metrics(owner: str, repo: str, token: str, metric: str) -> str:
 
     # If "status" returned by API or noted in JSON, it's always an error. If the
     # status code is bad or the JSON itself contains a status, raise an error.
-    if response.status_code != 200:
+    if (response.status_code != 200) or (
         # Can be a dictionary or a list of dictionaries, so we have to check both cases
-        if (
+        (
             isinstance(response_json, dict)
             and response_json.get("status") not in [None, "200"]
-        ) or (
+        )
+        or (
             isinstance(response_json, list)
             and any(
                 resp_dict.get("status") not in [None, "200"]
                 for resp_dict in response_json
             )
-        ):
-            raise ValueError(
-                f"Github API for {metric} returning message {response_json}. See URL {url}"
-            )
+        )
+    ):
+        raise ValueError(
+            f"Github API for {metric} returning message {response_json}. See URL {url}"
+        )
     return json.dumps(response_json)
 
 
