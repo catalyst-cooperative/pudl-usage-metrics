@@ -82,7 +82,7 @@ def core_zenodo_logs(
     dataset_slugs = {
         "10723220": "ipi_presentation",
         "10838487": "eiaaeo",
-        "7067366": "eia_bulk_elec",
+        "7067366": "eiaapi",
         "7682357": "eia176",
         "10607836": "eia191",
         "10607838": "eia757a",
@@ -126,6 +126,7 @@ def core_zenodo_logs(
         "14783267": "eiarecs",
         "14783043": "epamats",
         "14888356": "nrelsiting",
+        "15312754": "eiasteo",
     }
 
     missed_mapping = df[
