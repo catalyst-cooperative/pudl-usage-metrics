@@ -464,6 +464,11 @@ core_zenodo_logs = Table(
         comment="The description of the version.",
     ),
     Column("partition_key", String),
+    Column(
+        "software_hash_id",
+        String,
+        comment="A Software Heritage Software Hash ID (SWHID).",
+    ),
 )
 
 intake_logs = Table(
