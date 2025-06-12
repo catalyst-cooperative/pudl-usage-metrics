@@ -12,7 +12,7 @@ from dagster import (
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    # io_manager_key="database_manager",
+    io_manager_key="database_manager",
     tags={"source": "zenodo"},
 )
 def core_zenodo_logs(
@@ -53,6 +53,7 @@ def core_zenodo_logs(
             "stats.version_unique_downloads": "version_unique_downloads",
             "stats.version_views": "version_views",
             "stats.version_unique_views": "version_unique_views",
+            "swh.swhid": "software_hash_id",
         }
     )
     # Drop columns

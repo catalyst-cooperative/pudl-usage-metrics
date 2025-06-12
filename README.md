@@ -77,6 +77,7 @@ Now the environment is all set up and we can start up dagster!
 ## Set some global Dagster configs
 
 In your ``DAGSTER_HOME`` folder, add a ``dagster.yaml`` file or edit your existing one to contain the following code:
+
 ```
 run_queue:
   max_concurrent_runs: 1
@@ -115,16 +116,17 @@ To run a a complete backfill from the Dagit UI go to the job's partitions tab. T
 
 ### Local vs. production development
 
-The choice between local development (written to an SQLite database) and production development (written to a Google CloudSQL Postgres database) is determined through the `METRIC_PROD_ENV` environment variable. By default, if this is not set you will develop locally. To set this variable to develop in production, run the following:
+The choice between local development (written to an SQLite database) and production development (written to a Google CloudSQL Postgres database) is determined through the `METRICS_PROD_ENV` environment variable. By default, if this is not set you will develop locally. To set this variable to develop in production, run the following:
 
 ```
-mamba env config vars set METRIC_PROD_ENV='prod'
+mamba env config vars set METRICS_PROD_ENV='prod'
 mamba activate pudl-usage-metrics
 ```
 
-To revert to local development, set `METRIC_PROD_ENV='local'`.
+To revert to local development, set `METRICS_PROD_ENV='local'`.
 
 #### Schema management
+
 We use Alembic to manage the schemas of both local and production databases. Whenever a new column or table is added, run the following commands to create a new schema migration and then upgrade the database schema to match using the following code:
 
 ```
@@ -170,4 +172,4 @@ The ETL uses [ipinfo](https://ipinfo.io/) for geocoding the user ip addresses wh
 
 ## Add new data sources
 
-To add a new data source to the dagster repo, add new modules to the `raw` and `core` and `out` directories and add these modules to the corresponding jobs. Once the dataset has been tested locally, run a complete backfill for the job with `METRIC_PROD_ENV="prod"` to populate the Cloud SQL database.
+To add a new data source to the dagster repo, add new modules to the `raw` and `core` and `out` directories and add these modules to the corresponding jobs. Once the dataset has been tested locally, run a complete backfill for the job with `METRICS_PROD_ENV="prod"` to populate the Cloud SQL database.
