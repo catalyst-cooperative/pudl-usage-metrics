@@ -2,24 +2,24 @@
 
 import os
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import sqlalchemy as sa
-from dagster import Field, io_manager
+from dagster import io_manager
 
 from usage_metrics.resources.sqldatabase import SQLIOManager
-
-SQLITE_PATH = Path(os.environ.get("DATA_DIR")) / "data/usage_metrics.db"
 
 
 class SQLiteIOManager(SQLIOManager):
     """IO Manager that writes and retrieves dataframes from a SQLite database."""
 
-    def __init__(self, db_path: Path = SQLITE_PATH) -> None:
+    def __init__(self, db_path: Path) -> None:
         """Initialize SQLiteManager object.
 
+        Use sqlite_manager to manage path.
+
         Args:
-            db_path: Path to the sqlite database. Defaults to
-            usage_metrics/data/usage_metrics.db.
+            db_path: Path to the sqlite database.
         """
         engine = sa.create_engine("sqlite:///" + str(db_path))
         if not db_path.exists():
@@ -30,16 +30,17 @@ class SQLiteIOManager(SQLIOManager):
         self.datetime_column = "DATETIME"
 
 
-@io_manager(
-    config_schema={
-        "db_path": Field(
-            str,
-            description="Path to the sqlite database.",
-            default_value=str(SQLITE_PATH),
-        ),
-    }
-)
-def sqlite_manager(init_context) -> SQLiteIOManager:
+@io_manager()
+def sqlite_manager() -> SQLiteIOManager:
     """Create a SQLiteManager dagster resource."""
-    db_path = init_context.resource_config["db_path"]
+    with TemporaryDirectory() as td:
+        # Determine where to save these files
+        if os.environ.get("DATA_DIR"):
+            data_dir = Path(os.environ.get("DATA_DIR"), "data")
+            if not Path.exists(data_dir):
+                Path.mkdir(data_dir)
+        else:
+            data_dir = td
+
+    db_path = data_dir / "usage_metrics.db"
     return SQLiteIOManager(db_path=Path(db_path))
