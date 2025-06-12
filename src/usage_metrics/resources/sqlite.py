@@ -1,5 +1,6 @@
 """Dagster SQLite IOManager."""
 
+import os
 from pathlib import Path
 
 import sqlalchemy as sa
@@ -7,7 +8,7 @@ from dagster import Field, io_manager
 
 from usage_metrics.resources.sqldatabase import SQLIOManager
 
-SQLITE_PATH = Path(__file__).parents[3] / "data/usage_metrics.db"
+SQLITE_PATH = Path(os.environ.get("DATA_DIR")) / "data/usage_metrics.db"
 
 
 class SQLiteIOManager(SQLIOManager):
