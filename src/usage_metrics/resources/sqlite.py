@@ -40,7 +40,7 @@ def sqlite_manager() -> SQLiteIOManager:
             if not Path.exists(data_dir):
                 Path.mkdir(data_dir)
         else:
-            data_dir = td
+            data_dir = Path(td)
 
     db_path = data_dir / "usage_metrics.db"
     return SQLiteIOManager(db_path=Path(db_path))
