@@ -65,6 +65,7 @@ jobs:
           POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
         shell: bash -l {0}
         run: |
+          alembic upgrade head
           python run_data_update.py
 
       - name: Remove Github Action runner's IP
