@@ -8,7 +8,7 @@ from alembic import context
 
 from usage_metrics.models import usage_metrics_metadata
 from usage_metrics.resources.postgres import PostgresIOManager
-from usage_metrics.resources.sqlite import sqlite_manager
+from usage_metrics.resources.sqlite import SQLiteIOManager
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -34,7 +34,7 @@ target_metadata = usage_metrics_metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 dev_envr = os.getenv("METRICS_PROD_ENV", "local")
-engines = {"prod": PostgresIOManager().engine, "local": sqlite_manager().engine}
+engines = {"prod": PostgresIOManager().engine, "local": SQLiteIOManager().engine}
 
 logger.info(f"Configuring database for {dev_envr} database")
 
@@ -52,6 +52,7 @@ def run_migrations_offline() -> None:
 
     """
     url = engines[dev_envr].url
+    logger.info("running offline migration")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -70,6 +71,7 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    logger.info("running online migration")
     with engines[dev_envr].connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
 

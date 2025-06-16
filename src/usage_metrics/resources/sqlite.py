@@ -1,26 +1,34 @@
 """Dagster SQLite IOManager."""
 
+import logging
 import os
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import sqlalchemy as sa
-from dagster import io_manager
+from dagster import Field, Noneable, io_manager
 
 from usage_metrics.resources.sqldatabase import SQLIOManager
+
+logger = logging.getLogger()
+logging.basicConfig(level="INFO")
 
 
 class SQLiteIOManager(SQLIOManager):
     """IO Manager that writes and retrieves dataframes from a SQLite database."""
 
-    def __init__(self, db_path: Path) -> None:
+    def __init__(self, db_path=None) -> None:
         """Initialize SQLiteManager object.
 
         Use sqlite_manager to manage path.
 
         Args:
-            db_path: Path to the sqlite database.
+            db_path: Path to the sqlite database. Default is None,
+                which uses DATA_DIR/data/usage_metrics.db
         """
+        if not db_path:
+            data_dir = Path(os.environ.get("DATA_DIR"), "data")
+            db_path = data_dir / "usage_metrics.db"
+        logger.info(f"Initializing SQLite IO Manager from: {db_path}")
         engine = sa.create_engine("sqlite:///" + str(db_path))
         if not db_path.exists():
             db_path.parent.mkdir(exist_ok=True)
@@ -30,17 +38,20 @@ class SQLiteIOManager(SQLIOManager):
         self.datetime_column = "DATETIME"
 
 
-@io_manager()
-def sqlite_manager() -> SQLiteIOManager:
-    """Create a SQLiteManager dagster resource."""
-    with TemporaryDirectory() as td:
-        # Determine where to save these files
-        if os.environ.get("DATA_DIR"):
-            data_dir = Path(os.environ.get("DATA_DIR"), "data")
-            if not Path.exists(data_dir):
-                Path.mkdir(data_dir)
-        else:
-            data_dir = Path(td)
+@io_manager(
+    config_schema={
+        "db_path": Field(
+            Noneable(str),
+            description="Path to the sqlite database.",
+            default_value=None,
+        ),
+    }
+)
+def sqlite_manager(init_context) -> SQLiteIOManager:
+    """Create a SQLiteManager dagster resource.
 
-    db_path = data_dir / "usage_metrics.db"
-    return SQLiteIOManager(db_path=Path(db_path))
+    Args:
+        db_path: Path to the sqlite database. Default is None,
+            which uses DATA_DIR/data/usage_metrics.db
+    """
+    return SQLiteIOManager(db_path=init_context.resource_config["db_path"])
