@@ -44,7 +44,7 @@ dev = [
 ]
 
 docs = [
-    "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
+    "doc8>=0.9,<2.1",  # Ensures clean documentation formatting
     "sphinx>=4,<9",  # The default Python documentation redering engine
     "sphinx-autoapi>=1.8,<4",  # Generates documentation from docstrings
     "sphinx-issues>=1.2,<6.0",  # Allows references to GitHub issues
@@ -54,7 +54,7 @@ docs = [
 
 tests = [
     "coverage>=5.3,<8",  # Lets us track what code is being tested
-    "doc8>=0.9,<1.2",  # Ensures clean documentation formatting
+    "doc8>=0.9,<2.1",  # Ensures clean documentation formatting
     "pre-commit>=4,<5",  # Allow us to run pre-commit hooks in testing
     "pydocstyle>=5.1,<7",  # Style guidelines for Python documentation
     "pytest>=8,<8.5",  # Our testing framework
