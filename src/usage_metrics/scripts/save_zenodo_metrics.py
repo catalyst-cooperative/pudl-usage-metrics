@@ -50,7 +50,7 @@ def save_zenodo_logs() -> pd.DataFrame():
     """
 
     def _yell_if_missing_hits(request, page_size: int):
-        """Raise and error if we are not getting the correct amount of API hits."""
+        """Raise an error if we are not getting the correct amount of API hits."""
         hits = request.json()["hits"]["hits"]
         if len(hits) != (actual_total := request.json()["hits"]["total"]):
             raise AssertionError(
