@@ -50,12 +50,13 @@ def save_zenodo_logs() -> pd.DataFrame():
     """
 
     def _yell_if_missing_hits(request, page_size: int):
+        """Raise and error if we are not getting the correct amount of API hits."""
         hits = request.json()["hits"]["hits"]
         if len(hits) != (actual_total := request.json()["hits"]["total"]):
             raise AssertionError(
-                f"There are more records than the {len(hits)} found! The Zenodo API "
-                "restricts the number of records to 25 without a size, so we "
-                f"are asking for {page_size} records in the page size, "
+                f"The API request says there is {actual_total} total records but we got "
+                f"{len(hits)}! The Zenodo API restricts the number of records to 25 without "
+                f"a size, so we are asking for {page_size} records in the page size, "
                 f"but there are {actual_total}. Consider increasing the page_size."
             )
 
