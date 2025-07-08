@@ -128,6 +128,13 @@ def core_zenodo_logs(
         "14783043": "epamats",
         "14888356": "nrelsiting",
         "15312754": "eiasteo",
+        "10086108": "ferceqr",  # this one is manually compiled...
+        "2825634": "csvconf4_presentation",
+        "3677547": "ferc1_old",
+        "4127048": "censusdp1tract",
+        "4739559": "csvconf6_presentation",
+        "5348395": "hourly_demand_by_state",
+        "4127054": "epacems_old",
     }
 
     missed_mapping = df[
