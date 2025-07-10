@@ -16,7 +16,7 @@ from usage_metrics.helpers import convert_camel_case_columns_to_snake_case
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
+    # io_manager_key="database_manager",
     tags={"source": "eel-hole"},
 )
 def core_eel_hole_logs(
