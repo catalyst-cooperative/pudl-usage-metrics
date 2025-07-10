@@ -33,6 +33,7 @@ raw_module_groups = {
     "raw_github_partitioned": [usage_metrics.raw.github_partitioned],
     "raw_kaggle": [usage_metrics.raw.kaggle],
     "raw_zenodo": [usage_metrics.raw.zenodo],
+    "raw_eel_hole": [usage_metrics.raw.eel_hole],
 }
 
 core_module_groups = {
@@ -152,6 +153,11 @@ defs: Definitions = Definitions(
             name="zenodo_metrics_etl",
             description="This job ETLs logs for Zenodo archives only.",
             selection=AssetSelection.tag("source", "zenodo"),
+        ),
+        define_asset_job(
+            name="eel_hole_metrics_etl",
+            description="This job ETLs logs for PUDL's data viewer only.",
+            selection=AssetSelection.tag("source", "eel_hole"),
         ),
     ],
 )
