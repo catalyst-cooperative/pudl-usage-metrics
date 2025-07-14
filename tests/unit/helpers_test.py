@@ -62,7 +62,7 @@ def test_url_parse() -> None:
 @pytest.mark.parametrize(
     "camel_case_df,snake_case_df",
     [
-        (pd.DataFrame(columns=["CamelCase"]), pd.DataFrame(columns=["camelcase"])),
+        (pd.DataFrame(columns=["CamelCase"]), pd.DataFrame(columns=["camel_case"])),
         (pd.DataFrame(columns=["Single"]), pd.DataFrame(columns=["single"])),
         (pd.DataFrame(columns=["S"]), pd.DataFrame(columns=["s"])),
     ],

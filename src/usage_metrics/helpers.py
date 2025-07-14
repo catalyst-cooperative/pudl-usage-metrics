@@ -116,7 +116,7 @@ def convert_camel_case_columns_to_snake_case(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         df: A dataframe with snake_case columns.
     """
-    df.columns = df.columns.str.replace(r"(?<!^)(?=[A-Z])", "_").str.lower()
+    df.columns = df.columns.str.replace(r"(?<!^)(?=[A-Z])", "_", regex=True).str.lower()
     return df
 
 
