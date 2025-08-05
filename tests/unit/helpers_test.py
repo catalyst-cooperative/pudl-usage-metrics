@@ -35,13 +35,13 @@ def test_geocode_ip() -> None:
         "country_flag_url": (
             "https://cdn.ipinfo.io/static/images/countries-flags/US.svg"
         ),
-        "loc": "37.4056,-122.0775",
+        "loc": "38.0088,-122.1175",
         "org": "AS15169 Google LLC",
         "postal": "94043",
         "timezone": "America/Los_Angeles",
         "country_name": "United States",
-        "latitude": "37.4056",
-        "longitude": "-122.0775",
+        "latitude": "38.0088",
+        "longitude": "-122.1175",
         "isEU": False,
     }
 
