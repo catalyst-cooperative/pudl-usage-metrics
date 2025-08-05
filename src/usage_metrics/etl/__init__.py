@@ -20,7 +20,6 @@ from dagster import (
     load_asset_checks_from_modules,
     load_assets_from_modules,
 )
-from dagster._core.definitions.cacheable_assets import CacheableAssetsDefinition
 
 import usage_metrics
 from usage_metrics.resources.postgres import postgres_manager
@@ -80,7 +79,7 @@ default_asset_checks = list(
 
 
 def _get_keys_from_assets(
-    asset_def: AssetsDefinition | SourceAsset | CacheableAssetsDefinition,
+    asset_def: AssetsDefinition | SourceAsset,
 ) -> list[AssetKey]:
     """Get a list of asset keys.
 
@@ -92,8 +91,6 @@ def _get_keys_from_assets(
 
     SourceAssets always only have one key, and don't have ``asset.keys``. So we
     look for ``asset.key`` and wrap it in a list.
-
-    We don't handle CacheableAssetsDefinitions yet.
     """
     if isinstance(asset_def, AssetsDefinition):
         return list(asset_def.keys)
