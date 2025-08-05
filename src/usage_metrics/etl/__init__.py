@@ -12,6 +12,7 @@ from dagster import (
     AssetKey,
     AssetsDefinition,
     AssetSelection,
+    CacheableAssetsDefinition,
     Definitions,
     SourceAsset,
     WeeklyPartitionsDefinition,
@@ -20,7 +21,6 @@ from dagster import (
     load_asset_checks_from_modules,
     load_assets_from_modules,
 )
-from dagster._core.definitions.cacheable_assets import CacheableAssetsDefinition
 
 import usage_metrics
 from usage_metrics.resources.postgres import postgres_manager
