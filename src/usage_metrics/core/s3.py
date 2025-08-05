@@ -61,9 +61,6 @@ def core_s3_logs(
         "acl_required",
     ]
 
-    # Drop entirely duplicate rows
-    raw_s3_logs = raw_s3_logs.drop_duplicates()
-
     # Combine time and timezone columns
     raw_s3_logs.time = raw_s3_logs.time + " " + raw_s3_logs.timezone
     raw_s3_logs = raw_s3_logs.drop(columns=["timezone"])
@@ -104,8 +101,11 @@ def core_s3_logs(
     geocoded_df["id"] = (
         geocoded_df.request_id + "_" + geocoded_df.operation + "_" + geocoded_df.key
     )
-    geocoded_df = geocoded_df.set_index("id")
 
+    # Drop entirely duplicate rows
+    geocoded_df = geocoded_df.drop_duplicates()
+
+    geocoded_df = geocoded_df.set_index("id")
     assert geocoded_df.index.is_unique
 
     # Drop unnecessary geocoding columns
