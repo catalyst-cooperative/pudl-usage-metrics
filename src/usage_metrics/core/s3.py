@@ -61,9 +61,6 @@ def core_s3_logs(
         "acl_required",
     ]
 
-    # Drop entirely duplicate rows
-    raw_s3_logs = raw_s3_logs.drop_duplicates()
-
     # Combine time and timezone columns
     raw_s3_logs.time = raw_s3_logs.time + " " + raw_s3_logs.timezone
     raw_s3_logs = raw_s3_logs.drop(columns=["timezone"])
@@ -76,6 +73,17 @@ def core_s3_logs(
         raw_s3_logs["remote_ip"].eq("-"), pd.NA
     )  # Mask null IPs
     geocoded_df = geocode_ips(raw_s3_logs)
+
+    # Drop unnecessary geocoding columns
+    geocoded_df = geocoded_df.drop(
+        columns=[
+            "remote_ip_country_flag",
+            "remote_ip_country_flag_url",
+            "remote_ip_country_currency",
+            "remote_ip_continent",
+            "remote_ip_isEU",
+        ]
+    )
 
     # Convert string to datetime using Pandas
     format_string = "[%d/%b/%Y:%H:%M:%S %z]"
@@ -104,20 +112,12 @@ def core_s3_logs(
     geocoded_df["id"] = (
         geocoded_df.request_id + "_" + geocoded_df.operation + "_" + geocoded_df.key
     )
+
+    # Make sure all completely duplicate rows dropped
+    geocoded_df = geocoded_df.drop_duplicates()
+
     geocoded_df = geocoded_df.set_index("id")
-
     assert geocoded_df.index.is_unique
-
-    # Drop unnecessary geocoding columns
-    geocoded_df = geocoded_df.drop(
-        columns=[
-            "remote_ip_country_flag",
-            "remote_ip_country_flag_url",
-            "remote_ip_country_currency",
-            "remote_ip_continent",
-            "remote_ip_isEU",
-        ]
-    )
 
     context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
