@@ -20,7 +20,6 @@ from dagster import (
     load_asset_checks_from_modules,
     load_assets_from_modules,
 )
-from dagster._core.definitions.cacheable_assets import CacheableAssetsDefinition
 
 import usage_metrics
 from usage_metrics.resources.postgres import postgres_manager
@@ -41,6 +40,7 @@ core_module_groups = {
     "core_kaggle": [usage_metrics.core.kaggle],
     "core_github_partitioned": [usage_metrics.core.github_partitioned],
     "core_zenodo": [usage_metrics.core.zenodo],
+    "core_eel_hole": [usage_metrics.core.eel_hole],
 }
 
 out_module_groups = {
@@ -81,7 +81,7 @@ default_asset_checks = list(
 
 
 def _get_keys_from_assets(
-    asset_def: AssetsDefinition | SourceAsset | CacheableAssetsDefinition,
+    asset_def: AssetsDefinition | SourceAsset,
 ) -> list[AssetKey]:
     """Get a list of asset keys.
 
