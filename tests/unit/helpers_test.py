@@ -35,13 +35,13 @@ def test_geocode_ip() -> None:
         "country_flag_url": (
             "https://cdn.ipinfo.io/static/images/countries-flags/US.svg"
         ),
-        "loc": "38.0088,-122.1175",
+        "loc": "37.4056,-122.0775",
         "org": "AS15169 Google LLC",
         "postal": "94043",
         "timezone": "America/Los_Angeles",
         "country_name": "United States",
-        "latitude": "38.0088",
-        "longitude": "-122.1175",
+        "latitude": "37.4056",
+        "longitude": "-122.0775",
         "isEU": False,
     }
 
@@ -62,7 +62,7 @@ def test_url_parse() -> None:
 @pytest.mark.parametrize(
     "camel_case_df,snake_case_df",
     [
-        (pd.DataFrame(columns=["CamelCase"]), pd.DataFrame(columns=["camelcase"])),
+        (pd.DataFrame(columns=["CamelCase"]), pd.DataFrame(columns=["camel_case"])),
         (pd.DataFrame(columns=["Single"]), pd.DataFrame(columns=["single"])),
         (pd.DataFrame(columns=["S"]), pd.DataFrame(columns=["s"])),
     ],
