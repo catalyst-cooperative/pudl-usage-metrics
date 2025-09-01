@@ -18,11 +18,7 @@ class S3Extractor(GCSExtractor):
     """Extractor for S3 logs stored in GCS."""
 
     def __init__(self, *args, **kwargs):
-        """Initialize the module.
-
-        Args:
-            ds (:class:datastore.Datastore): Initialized datastore.
-        """
+        """Initialize the extractor."""
         self.dataset_name = "pudl_s3_logs"
         self.bucket_name = "pudl-s3-logs.catalyst.coop"
         super().__init__(*args, **kwargs)

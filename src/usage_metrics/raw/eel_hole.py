@@ -1,4 +1,4 @@
-"""Extract data from S3 logs."""
+"""Extract data from PUDL Viewer (aka "eel hole") logs."""
 
 from pathlib import Path
 
@@ -15,14 +15,10 @@ from usage_metrics.raw.extract import GCSExtractor
 
 
 class EelHoleExtractor(GCSExtractor):
-    """Extractor for eel hole logs."""
+    """Extractor for eel hole logs stored in GCS."""
 
     def __init__(self, *args, **kwargs):
-        """Initialize the module.
-
-        Args:
-            ds (:class:datastore.Datastore): Initialized datastore.
-        """
+        """Initialize the extractor."""
         self.dataset_name = "eel_hole_logs"
         self.bucket_name = "pudl-viewer-logs.catalyst.coop"
         super().__init__(*args, **kwargs)

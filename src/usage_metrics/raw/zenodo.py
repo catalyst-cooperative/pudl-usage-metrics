@@ -52,11 +52,7 @@ class ZenodoExtractor(GCSExtractor):
     """Extractor for Zenodo logs."""
 
     def __init__(self, *args, **kwargs):
-        """Initialize the module.
-
-        Args:
-            ds (:class:datastore.Datastore): Initialized datastore.
-        """
+        """Initialize the extractor."""
         self.dataset_name = "pudl_zenodo_logs"
         self.bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
         super().__init__(*args, **kwargs)
