@@ -40,9 +40,15 @@ class DuckDBFilters(BaseModel):
         "contains",
         "greaterThan",
         "greaterThanOrEqual",
+        "lessThan",
+        "lessThanOrEqual",
         "notBlank",
         "startsWith",
         "notEqual",
+        "notContains",
+        "inRange",
+        "blank",
+        "false",  # ?? I don't see this in our options, is this a weirdo that should get removed?
     ]
     value: str | int | float | None = None
 
@@ -125,7 +131,6 @@ class EelHoleLogs(BaseModel):
     class Config:  # noqa: D106
         alias_generator = to_camel
         populate_by_name = True
-
 
 
 @asset(
