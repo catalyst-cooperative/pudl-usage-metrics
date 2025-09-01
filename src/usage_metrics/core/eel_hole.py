@@ -127,6 +127,7 @@ class EelHoleLogs(BaseModel):
         populate_by_name = True
 
 
+
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     # io_manager_key="database_manager",
