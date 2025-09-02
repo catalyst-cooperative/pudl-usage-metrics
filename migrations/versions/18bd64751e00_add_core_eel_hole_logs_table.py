@@ -1,8 +1,8 @@
 """Add core_eel_hole_logs table
 
-Revision ID: a9e42f89049f
+Revision ID: 18bd64751e00
 Revises: 1097f31cdffb
-Create Date: 2025-09-02 09:31:55.908553
+Create Date: 2025-09-02 10:11:12.484611
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'a9e42f89049f'
+revision: str = '18bd64751e00'
 down_revision: Union[str, None] = '1097f31cdffb'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -46,6 +46,19 @@ def upgrade() -> None:
     sa.Column('params_filters_field_type_2', sa.String(), nullable=True, comment='The data type of the variable on which a user is performing a filter using DuckDB.'),
     sa.Column('params_filters_operation_2', sa.String(), nullable=True, comment='The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).'),
     sa.Column('params_filters_value_2', sa.String(), nullable=True, comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas')."),
+    sa.Column('params_filters_field_name_3', sa.String(), nullable=True, comment='The variable on which a user is performing a filter using DuckDB.'),
+    sa.Column('params_filters_field_type_3', sa.String(), nullable=True, comment='The data type of the variable on which a user is performing a filter using DuckDB.'),
+    sa.Column('params_filters_operation_3', sa.String(), nullable=True, comment='The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).'),
+    sa.Column('params_filters_value_3', sa.String(), nullable=True, comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas')."),
+    sa.Column('params_filters_field_name_4', sa.String(), nullable=True, comment='The variable on which a user is performing a filter using DuckDB.'),
+    sa.Column('params_filters_field_type_4', sa.String(), nullable=True, comment='The data type of the variable on which a user is performing a filter using DuckDB.'),
+    sa.Column('params_filters_operation_4', sa.String(), nullable=True, comment='The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).'),
+    sa.Column('params_filters_value_4', sa.String(), nullable=True, comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas')."),
+    sa.Column('params_filters_field_name_5', sa.String(), nullable=True, comment='The variable on which a user is performing a filter using DuckDB.'),
+    sa.Column('params_filters_field_type_5', sa.String(), nullable=True, comment='The data type of the variable on which a user is performing a filter using DuckDB.'),
+    sa.Column('params_filters_operation_5', sa.String(), nullable=True, comment='The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).'),
+    sa.Column('params_filters_value_5', sa.String(), nullable=True, comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas')."),
+    sa.Column('partition_key', sa.String(), nullable=True),
     sa.PrimaryKeyConstraint('insert_id')
     )
     # ### end Alembic commands ###

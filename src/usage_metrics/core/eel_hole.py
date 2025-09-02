@@ -166,6 +166,7 @@ def core_eel_hole_logs(
         columns=[
             "log_name",
             "labels_instanceId",
+            "resource_type",
             "resource_labels_configuration_name",
             "resource_labels_location",
             "resource_labels_project_id",
