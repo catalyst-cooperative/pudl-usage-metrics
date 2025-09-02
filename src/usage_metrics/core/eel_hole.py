@@ -48,7 +48,7 @@ class DuckDBFilters(BaseModel):
         "notContains",
         "inRange",
         "blank",
-        "false",  # ?? I don't see this in our options, is this a weirdo that should get removed?
+        "false",  # TODO: ?? I don't see this in our options, is this a weirdo that should get removed?
     ]
     value: str | int | float | None = None
 
@@ -135,7 +135,7 @@ class EelHoleLogs(BaseModel):
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    # io_manager_key="database_manager",
+    io_manager_key="database_manager",
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_logs(
