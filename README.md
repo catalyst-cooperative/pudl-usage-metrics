@@ -39,14 +39,17 @@ To use the Kaggle API, [sign up for a Kaggle account](https://www.kaggle.com). T
 To set these environment variables, run these commands:
 
 ```
-mamba activate pudl-usage-metrics
-mamba env config vars set IPINFO_TOKEN="{your_api_key_here}"
-mamba env config vars set DAGSTER_HOME="$(pwd)/dagster_home/"
-mamba env config vars set DATA_DIR="$(pwd)/data/"
-mamba env config vars set KAGGLE_USER="{your_kaggle_username_here}" # If setting manually
-mamba env config vars set KAGGLE_KEY="{your_kaggle_api_key_here}" # If setting manually
-mamba activate pudl-usage-metrics
+conda activate pudl-usage-metrics
+conda env config vars set IPINFO_TOKEN="{your_api_key_here}"
+conda env config vars set DAGSTER_HOME="$(pwd)/dagster_home/"
+conda env config vars set DATA_DIR="$(pwd)/data/"
+conda env config vars set KAGGLE_USER="{your_kaggle_username_here}" # If setting manually
+conda env config vars set KAGGLE_KEY="{your_kaggle_api_key_here}" # If setting manually
+conda activate pudl-usage-metrics
 ```
+
+Note that we use `conda` rather than `mamba` because `mamba` doesn't currently allow
+us to directly set variables in this way.
 
 ## Google Cloud Permissions
 
@@ -119,7 +122,7 @@ To run a a complete backfill from the Dagit UI go to the job's partitions tab. T
 The choice between local development (written to an SQLite database) and production development (written to a Google CloudSQL Postgres database) is determined through the `METRICS_PROD_ENV` environment variable. By default, if this is not set you will develop locally. To set this variable to develop in production, run the following:
 
 ```
-mamba env config vars set METRICS_PROD_ENV='prod'
+conda env config vars set METRICS_PROD_ENV='prod'
 mamba activate pudl-usage-metrics
 ```
 
@@ -156,11 +159,11 @@ Then add the connection details as environment variables to your mamba environme
 
 ```
 mamba activate pudl-usage-metrics
-mamba env config vars set POSTGRES_IP={PUDL_USAGE_METRICS_DB_IP}
-mamba env config vars set POSTGRES_USER={PUDL_USAGE_METRICS_DB_USER}
-mamba env config vars set POSTGRES_PASSWORD={PUDL_USAGE_METRICS_DB_PASSWORD}
-mamba env config vars set POSTGRES_DB={PUDL_USAGE_METRICS_DB_DB}
-mamba env config vars set POSTGRES_PORT={PUDL_USAGE_METRICS_DB_PORT}
+conda env config vars set POSTGRES_IP={PUDL_USAGE_METRICS_DB_IP}
+conda env config vars set POSTGRES_USER={PUDL_USAGE_METRICS_DB_USER}
+conda env config vars set POSTGRES_PASSWORD={PUDL_USAGE_METRICS_DB_PASSWORD}
+conda env config vars set POSTGRES_DB={PUDL_USAGE_METRICS_DB_DB}
+conda env config vars set POSTGRES_PORT={PUDL_USAGE_METRICS_DB_PORT}
 mamba activate pudl-usage-metrics
 ```
 

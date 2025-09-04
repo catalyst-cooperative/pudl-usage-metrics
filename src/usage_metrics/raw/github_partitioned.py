@@ -30,11 +30,7 @@ class GithubExtractor(GCSExtractor):
     """Extractor for Github logs."""
 
     def __init__(self, metric: Literal[*GITHUB_METRIC_TYPES], *args, **kwargs):
-        """Initialize the module.
-
-        Args:
-            ds (:class:datastore.Datastore): Initialized datastore.
-        """
+        """Initialize the extrator."""
         self.dataset_name = "pudl_github_logs"
         self.bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
         self.metric = metric

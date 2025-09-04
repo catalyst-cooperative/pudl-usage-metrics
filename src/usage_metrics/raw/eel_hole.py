@@ -1,4 +1,4 @@
-"""Extract data from S3 logs."""
+"""Extract data from PUDL Viewer (aka "eel hole") logs."""
 
 from pathlib import Path
 
@@ -14,13 +14,13 @@ from google.cloud import storage
 from usage_metrics.raw.extract import GCSExtractor
 
 
-class S3Extractor(GCSExtractor):
-    """Extractor for S3 logs stored in GCS."""
+class EelHoleExtractor(GCSExtractor):
+    """Extractor for eel hole logs stored in GCS."""
 
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
-        self.dataset_name = "pudl_s3_logs"
-        self.bucket_name = "pudl-s3-logs.catalyst.coop"
+        self.dataset_name = "eel_hole_logs"
+        self.bucket_name = "pudl-viewer-logs.catalyst.coop"
         super().__init__(*args, **kwargs)
 
     def filter_blobs(
@@ -37,18 +37,25 @@ class S3Extractor(GCSExtractor):
         """
         week_start_date_str = context.partition_key
         week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
-        partition_dates = tuple(week_date_range.strftime("%Y-%m-%d"))
-        return [blob for blob in blobs if blob.name.startswith(partition_dates)]
+        partition_dates = tuple(week_date_range.strftime("%Y/%m/%d"))
+        file_name_prefixes = tuple(
+            f"run.googleapis.com/stdout/{date}" for date in partition_dates
+        )
+        blobs = [blob for blob in blobs if blob.name.startswith(file_name_prefixes)]
+        context.log.info(
+            f"Extracting {len(blobs)} eel-hole logs for week of {context.partition_key}."
+        )
+        return blobs
 
     def load_file(self, file_path: Path) -> pd.DataFrame:
         """Read in file as dataframe."""
-        return pd.read_csv(file_path, delimiter=" ", header=None)
+        return pd.read_json(file_path, lines=True)
 
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    tags={"source": "s3"},
+    tags={"source": "eel_hole"},
 )
-def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
-    """Extract S3 logs from sub-daily files and return one daily DataFrame."""
-    return S3Extractor().extract(context)
+def raw_eel_hole_logs(context: AssetExecutionContext) -> pd.DataFrame:
+    """Extract eel hole logs from sub-daily files and return one weekly DataFrame."""
+    return EelHoleExtractor().extract(context)
