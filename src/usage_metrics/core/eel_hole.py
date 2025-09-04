@@ -200,18 +200,23 @@ def _core_eel_hole_logs(
     filters_only = pd.DataFrame(
         filters_df["json_payload_params_filters"].to_list(), index=filters_df.index
     )
-    normalized = pd.concat(
-        [filters_only[i].apply(pd.Series) for i in filters_only], axis=1
-    )
-    normalized.columns = [
-        f"json_payload_params_filters_{col.replace('.', '_')}"
-        for col in pd.io.common.dedup_names(
-            normalized.columns, is_potential_multiindex=False
+
+    if not filters_only.empty:
+        # If we have search filters, do some maneuvering to process them
+        normalized = pd.concat(
+            [filters_only[i].apply(pd.Series) for i in filters_only], axis=1
         )
-    ]
-    converted_df = converted_df.merge(
-        normalized, how="left", left_index=True, right_index=True, validate="1:1"
-    ).drop(columns="json_payload_params_filters")
+        normalized.columns = [
+            f"json_payload_params_filters_{col.replace('.', '_')}"
+            for col in pd.io.common.dedup_names(
+                normalized.columns, is_potential_multiindex=False
+            )
+        ]
+        converted_df = converted_df.merge(
+            normalized, how="left", left_index=True, right_index=True, validate="1:1"
+        )
+
+    converted_df = converted_df.drop(columns="json_payload_params_filters")
 
     # Remove json_payload from the column names
     converted_df.columns = converted_df.columns.str.replace("json_payload_", "")
