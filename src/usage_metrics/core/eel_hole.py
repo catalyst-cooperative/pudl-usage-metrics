@@ -48,7 +48,8 @@ class DuckDBFilters(BaseModel):
         "notContains",
         "inRange",
         "blank",
-        "false",  # TODO: ?? I don't see this in our options, is this a weirdo that should get removed?
+        "false",
+        "true",
     ]
     value: str | int | float | None = None
 
@@ -60,7 +61,9 @@ class DuckDBFilters(BaseModel):
 class DuckDBParams(BaseModel):
     """DuckDB search query parameter class."""
 
-    filters: Annotated[list[DuckDBFilters] | None, BeforeValidator(json_string_to_list)]
+    filters: Annotated[
+        list[DuckDBFilters] | None, BeforeValidator(json_string_to_list)
+    ]  # Convert JSON string to list before validating
     name: str
     page: int
     per_page: int
@@ -81,7 +84,10 @@ class JsonPayload(BaseModel):
     score: float | None = None
     tags: str | None = None
     # Fields returned for a 'search' or 'duckdb_preview' response
-    url: Literal["/search", "/api/duckdb"] | None = None
+    url: Literal["/search", "/api/duckdb"] | None = (
+        None  # Change to full url - should be a string
+    )
+    # TODO: add user_id
     # Fields returned for a 'duckdb_preview' or 'duckdb_csv' response
     params: DuckDBParams | None = None
 
@@ -135,10 +141,9 @@ class EelHoleLogs(BaseModel):
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
     tags={"source": "eel_hole"},
 )
-def core_eel_hole_logs(
+def _core_eel_hole_logs(
     context: AssetExecutionContext,
     raw_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
@@ -192,7 +197,9 @@ def core_eel_hole_logs(
         & (converted_df.json_payload_params_filters),
         ["json_payload_params_filters"],
     ]
-    filters_only = pd.DataFrame(filters_df["json_payload_params_filters"].to_list())
+    filters_only = pd.DataFrame(
+        filters_df["json_payload_params_filters"].to_list(), index=filters_df.index
+    )
     normalized = pd.concat(
         [filters_only[i].apply(pd.Series) for i in filters_only], axis=1
     )
@@ -202,9 +209,6 @@ def core_eel_hole_logs(
             normalized.columns, is_potential_multiindex=False
         )
     ]
-    normalized.index = (
-        filters_df.index
-    )  # Assign the old index to join these new columns back to their old values.
     converted_df = converted_df.merge(
         normalized, how="left", left_index=True, right_index=True, validate="1:1"
     ).drop(columns="json_payload_params_filters")
@@ -223,8 +227,6 @@ def core_eel_hole_logs(
         "event",
     ] = "log_in"
 
-    # Drop any remaining rows where there is no event
-
     # Whatever is after the search= gives you information about what they were searching for
     # before they logged in. We care about this!
     converted_df.loc[converted_df.event == "log_in", "log_in_query"] = (
@@ -235,12 +237,130 @@ def core_eel_hole_logs(
         .str.replace("+", " ")
     )
 
-    # Drop some logs that are just about the app itself running.
-    converted_df = converted_df.loc[
-        converted_df.event.notnull(),
-        :,
-    ]
+    # Drop any remaining rows where there is no event
+    # These are some logs that are just about the app itself running.
+    converted_df = converted_df.loc[converted_df.event.notnull(), :]
 
     context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
     return converted_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="database_manager",
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_log_ins(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of log-in events from eel-hole logs."""
+    context.log.info(f"Processing data for the week of {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warn(f"No data found for the week of {context.partition_key}")
+        return _core_eel_hole_logs
+
+    login_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "log_in"]
+    login_df = login_df.loc[
+        :, ["insert_id", "timestamp", "text_payload", "log_in_query"]
+    ]
+
+    return login_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="database_manager",
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_searches(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of search events from eel-hole logs."""
+    context.log.info(f"Processing data for the week of {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warn(f"No data found for the week of {context.partition_key}")
+        return _core_eel_hole_logs
+
+    search_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "search"]
+    search_df = search_df.loc[:, ["insert_id", "timestamp", "query", "url"]]
+
+    return search_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="database_manager",
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_hits(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of search hits from eel-hole logs."""
+    context.log.info(f"Processing data for the week of {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warn(f"No data found for the week of {context.partition_key}")
+        return _core_eel_hole_logs
+
+    hit_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "hit"]
+    hit_df = hit_df.loc[:, ["insert_id", "timestamp", "name", "score", "tags"]]
+
+    return hit_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="database_manager",
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_previews(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of DuckDB preview requests from eel-hole logs."""
+    context.log.info(f"Processing data for the week of {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warn(f"No data found for the week of {context.partition_key}")
+        return _core_eel_hole_logs
+
+    preview_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_preview"]
+    preview_df = preview_df.loc[
+        :,
+        ["insert_id", "timestamp", "url"]
+        + [col for col in preview_df.columns if col.startswith("params_")],
+    ]
+
+    return preview_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="database_manager",
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_downloads(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of DuckDB download requests from eel-hole logs."""
+    context.log.info(f"Processing data for the week of {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warn(f"No data found for the week of {context.partition_key}")
+        return _core_eel_hole_logs
+
+    download_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_csv"]
+    download_df = download_df.loc[
+        :,
+        ["insert_id", "timestamp", "url"]
+        + [col for col in download_df.columns if col.startswith("params_")],
+    ]
+
+    return download_df.reset_index(drop=True)
