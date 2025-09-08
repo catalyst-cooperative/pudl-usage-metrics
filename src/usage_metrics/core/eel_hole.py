@@ -256,6 +256,23 @@ def _core_eel_hole_logs(
 
     context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
+    # Add a session ID for users
+    # Increment the session ID if a user has been inactive for 30 min or more.
+    def create_user_id(timestamp):
+        return timestamp.diff().gt(pd.Timedelta("30min")).cumsum()
+
+    session_ids = converted_df.groupby("user_id")["timestamp"].apply(create_user_id) + 1
+    session_ids = (
+        session_ids.reset_index()
+        .set_index("insert_id")
+        .rename(columns={"timestamp": "session_id"})
+        .drop(columns="user_id")
+    )
+
+    converted_df = converted_df.merge(
+        session_ids, how="left", left_index=True, right_index=True, validate="1:1"
+    )
+
     return converted_df.reset_index(drop=True)
 
 
@@ -277,7 +294,7 @@ def core_eel_hole_log_ins(
 
     login_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "log_in"]
     login_df = login_df.loc[
-        :, ["insert_id", "user_id", "timestamp", "text_payload", "log_in_query"]
+        :, ["insert_id", "timestamp", "text_payload", "log_in_query"]
     ]
 
     return login_df.reset_index(drop=True)
@@ -300,7 +317,9 @@ def core_eel_hole_searches(
         return _core_eel_hole_logs
 
     search_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "search"]
-    search_df = search_df.loc[:, ["insert_id", "user_id", "timestamp", "query", "url"]]
+    search_df = search_df.loc[
+        :, ["insert_id", "user_id", "timestamp", "query", "url", "session_id"]
+    ]
 
     return search_df.reset_index(drop=True)
 
@@ -323,7 +342,7 @@ def core_eel_hole_hits(
 
     hit_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "hit"]
     hit_df = hit_df.loc[
-        :, ["insert_id", "user_id", "timestamp", "name", "score", "tags"]
+        :, ["insert_id", "user_id", "timestamp", "name", "score", "tags", "session_id"]
     ]
 
     return hit_df.reset_index(drop=True)
@@ -348,7 +367,7 @@ def core_eel_hole_previews(
     preview_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_preview"]
     preview_df = preview_df.loc[
         :,
-        ["insert_id", "user_id", "timestamp", "url"]
+        ["insert_id", "user_id", "timestamp", "url", "session_id"]
         + [col for col in preview_df.columns if col.startswith("params_")],
     ]
 
@@ -374,7 +393,7 @@ def core_eel_hole_downloads(
     download_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_csv"]
     download_df = download_df.loc[
         :,
-        ["insert_id", "user_id", "timestamp", "url"]
+        ["insert_id", "user_id", "timestamp", "url", "session_id"]
         + [col for col in download_df.columns if col.startswith("params_")],
     ]
 

@@ -537,6 +537,11 @@ core_eel_hole_log_ins = Table(
         String,
         comment="What was the user doing when they were motivated to log in? This mirrors query when the search prompted a log-in event.",
     ),
+    Column(
+        "session_id",
+        Float,
+        comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
+    ),
     Column("partition_key", String),
 )
 
@@ -568,6 +573,11 @@ core_eel_hole_searches = Table(
         "url",
         String,
         comment="What endpoint is a user hitting?",
+    ),
+    Column(
+        "session_id",
+        Float,
+        comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
     ),
     Column("partition_key", String),
 )
@@ -606,6 +616,11 @@ core_eel_hole_hits = Table(
         "tags",
         String,
         comment="The tags associated with a given table in the search results. Only populated for 'hit' events types.",
+    ),
+    Column(
+        "session_id",
+        Float,
+        comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
     ),
     Column("partition_key", String),
 )
@@ -769,6 +784,11 @@ core_eel_hole_previews = Table(
         String,
         comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
     ),
+    Column(
+        "session_id",
+        Float,
+        comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
+    ),
     Column("partition_key", String),
 )
 
@@ -931,6 +951,11 @@ core_eel_hole_downloads = (
             "params_filters_value_5",
             String,
             comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        ),
+        Column(
+            "session_id",
+            Float,
+            comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
         ),
         Column("partition_key", String),
     ),
