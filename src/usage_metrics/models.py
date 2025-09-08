@@ -518,6 +518,11 @@ core_eel_hole_log_ins = Table(
         comment="A unique identifier for the log entry.",
     ),
     Column(
+        "user_id",
+        String,
+        comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+    ),
+    Column(
         "timestamp",
         DateTime,
         comment="The time the event described by the log entry occurred.",
@@ -543,6 +548,11 @@ core_eel_hole_searches = Table(
         String,
         primary_key=True,
         comment="A unique identifier for the log entry.",
+    ),
+    Column(
+        "user_id",
+        String,
+        comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
     ),
     Column(
         "timestamp",
@@ -571,6 +581,11 @@ core_eel_hole_hits = Table(
         String,
         primary_key=True,
         comment="A unique identifier for the log entry.",
+    ),
+    Column(
+        "user_id",
+        String,
+        comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
     ),
     Column(
         "timestamp",
@@ -605,6 +620,11 @@ core_eel_hole_previews = Table(
         comment="A unique identifier for the log entry.",
     ),
     Column(
+        "user_id",
+        String,
+        comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+    ),
+    Column(
         "timestamp",
         DateTime,
         comment="The time the event described by the log entry occurred.",
@@ -752,8 +772,171 @@ core_eel_hole_previews = Table(
     Column("partition_key", String),
 )
 
-core_eel_hole_downloads = Table(
-    "core_eel_hole_downloads",
+core_eel_hole_downloads = (
+    Table(
+        "core_eel_hole_downloads",
+        usage_metrics_metadata,
+        Column(
+            "insert_id",
+            String,
+            primary_key=True,
+            comment="A unique identifier for the log entry.",
+        ),
+        Column(
+            "user_id",
+            String,
+            comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+        ),
+        Column(
+            "timestamp",
+            DateTime,
+            comment="The time the event described by the log entry occurred.",
+        ),
+        Column(
+            "url",
+            String,
+            comment="What endpoint is a user hitting?",
+        ),
+        Column(
+            "params_name",
+            String,
+            comment="The name of the table being queried using DuckDB.",
+        ),
+        Column(
+            "params_page",
+            Integer,
+            comment="The page of the query.",
+        ),
+        Column(
+            "params_per_page",
+            Integer,
+            comment="The number of records returned per DuckDB query. This is set by us, so it should be expected to hold constant without our intervention.",
+        ),
+        Column(
+            "params_filters_field_name",
+            String,
+            comment="The variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_field_type",
+            String,
+            comment="The data type of the variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_operation",
+            String,
+            comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
+        ),
+        Column(
+            "params_filters_value",
+            String,
+            comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        ),
+        Column(
+            "params_filters_field_name_1",
+            String,
+            comment="The variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_field_type_1",
+            String,
+            comment="The data type of the variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_operation_1",
+            String,
+            comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
+        ),
+        Column(
+            "params_filters_value_1",
+            String,
+            comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        ),
+        Column(
+            "params_filters_field_name_2",
+            String,
+            comment="The variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_field_type_2",
+            String,
+            comment="The data type of the variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_operation_2",
+            String,
+            comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
+        ),
+        Column(
+            "params_filters_value_2",
+            String,
+            comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        ),
+        Column(
+            "params_filters_field_name_3",
+            String,
+            comment="The variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_field_type_3",
+            String,
+            comment="The data type of the variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_operation_3",
+            String,
+            comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
+        ),
+        Column(
+            "params_filters_value_3",
+            String,
+            comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        ),
+        Column(
+            "params_filters_field_name_4",
+            String,
+            comment="The variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_field_type_4",
+            String,
+            comment="The data type of the variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_operation_4",
+            String,
+            comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
+        ),
+        Column(
+            "params_filters_value_4",
+            String,
+            comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        ),
+        Column(
+            "params_filters_field_name_5",
+            String,
+            comment="The variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_field_type_5",
+            String,
+            comment="The data type of the variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_operation_5",
+            String,
+            comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
+        ),
+        Column(
+            "params_filters_value_5",
+            String,
+            comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        ),
+        Column("partition_key", String),
+    ),
+)
+core_eel_hole_user_settings_updates = Table(
+    "core_eel_hole_user_settings_updates",
     usage_metrics_metadata,
     Column(
         "insert_id",
@@ -762,149 +945,29 @@ core_eel_hole_downloads = Table(
         comment="A unique identifier for the log entry.",
     ),
     Column(
+        "user_id",
+        String,
+        comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+    ),
+    Column(
         "timestamp",
         DateTime,
         comment="The time the event described by the log entry occurred.",
     ),
     Column(
-        "url",
-        String,
-        comment="What endpoint is a user hitting?",
+        "accepted",
+        Boolean,
+        comment="Has a user accepted the privacy policy?",
     ),
     Column(
-        "params_name",
-        String,
-        comment="The name of the table being queried using DuckDB.",
+        "newsletter",
+        Boolean,
+        comment="Has a user subscribed to the newsletter?",
     ),
     Column(
-        "params_page",
-        Integer,
-        comment="The page of the query.",
-    ),
-    Column(
-        "params_per_page",
-        Integer,
-        comment="The number of records returned per DuckDB query. This is set by us, so it should be expected to hold constant without our intervention.",
-    ),
-    Column(
-        "params_filters_field_name",
-        String,
-        comment="The variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_field_type",
-        String,
-        comment="The data type of the variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_operation",
-        String,
-        comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
-    ),
-    Column(
-        "params_filters_value",
-        String,
-        comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
-    ),
-    Column(
-        "params_filters_field_name_1",
-        String,
-        comment="The variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_field_type_1",
-        String,
-        comment="The data type of the variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_operation_1",
-        String,
-        comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
-    ),
-    Column(
-        "params_filters_value_1",
-        String,
-        comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
-    ),
-    Column(
-        "params_filters_field_name_2",
-        String,
-        comment="The variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_field_type_2",
-        String,
-        comment="The data type of the variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_operation_2",
-        String,
-        comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
-    ),
-    Column(
-        "params_filters_value_2",
-        String,
-        comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
-    ),
-    Column(
-        "params_filters_field_name_3",
-        String,
-        comment="The variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_field_type_3",
-        String,
-        comment="The data type of the variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_operation_3",
-        String,
-        comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
-    ),
-    Column(
-        "params_filters_value_3",
-        String,
-        comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
-    ),
-    Column(
-        "params_filters_field_name_4",
-        String,
-        comment="The variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_field_type_4",
-        String,
-        comment="The data type of the variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_operation_4",
-        String,
-        comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
-    ),
-    Column(
-        "params_filters_value_4",
-        String,
-        comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
-    ),
-    Column(
-        "params_filters_field_name_5",
-        String,
-        comment="The variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_field_type_5",
-        String,
-        comment="The data type of the variable on which a user is performing a filter using DuckDB.",
-    ),
-    Column(
-        "params_filters_operation_5",
-        String,
-        comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
-    ),
-    Column(
-        "params_filters_value_5",
-        String,
-        comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        "outreach",
+        Boolean,
+        comment="Has a user agreed to be contacted for further discussion about PUDL?",
     ),
     Column("partition_key", String),
 )
