@@ -91,8 +91,8 @@ class JsonPayload(BaseModel):
     # Fields returned for a 'privacy-policy' event
     # We don't persist these as they are logged in the user
     # database, but why not validate them anyways?
-    accepted: bool | None = (None,)
-    newsletter: bool | None = (None,)
+    accepted: bool | None = None
+    newsletter: bool | None = None
     outreach: bool | None = None
 
     class Config:  # noqa: D106
@@ -267,17 +267,30 @@ def _core_eel_hole_logs(
     def create_user_id(timestamp):
         return timestamp.diff().gt(pd.Timedelta("30min")).cumsum()
 
-    session_ids = converted_df.groupby("user_id")["timestamp"].apply(create_user_id) + 1
-    session_ids = (
-        session_ids.reset_index()
-        .set_index("insert_id")
-        .rename(columns={"timestamp": "session_id"})
-        .drop(columns="user_id")
-    )
+    if converted_df.user_id.notnull().any():  # If the data contains user IDs
+        session_ids = (
+            converted_df.set_index("insert_id")
+            .groupby("user_id")["timestamp"]
+            .apply(create_user_id)
+            + 1
+        )
 
-    converted_df = converted_df.merge(
-        session_ids, how="left", left_index=True, right_index=True, validate="1:1"
-    )
+        # Because we process these as partitions, let's make the session_id a concatenation
+        # of the weekly partition and the unique session ID.
+        # This will take the format 2025-08-31-s1
+        session_ids = context.partition_key + "-s" + session_ids.astype(str)
+
+        session_ids = (
+            session_ids.reset_index()
+            .rename(columns={"timestamp": "session_id"})
+            .drop(columns="user_id")
+        )
+
+        converted_df = converted_df.merge(
+            session_ids, how="left", on="insert_id", validate="1:1"
+        )
+    else:
+        converted_df["session_id"] = pd.NA
 
     return converted_df.reset_index(drop=True)
 

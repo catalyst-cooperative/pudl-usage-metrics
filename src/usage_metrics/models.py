@@ -539,7 +539,7 @@ core_eel_hole_log_ins = Table(
     ),
     Column(
         "session_id",
-        Float,
+        String,
         comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
     ),
     Column("partition_key", String),
@@ -576,7 +576,7 @@ core_eel_hole_searches = Table(
     ),
     Column(
         "session_id",
-        Float,
+        String,
         comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
     ),
     Column("partition_key", String),
@@ -619,7 +619,7 @@ core_eel_hole_hits = Table(
     ),
     Column(
         "session_id",
-        Float,
+        String,
         comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
     ),
     Column("partition_key", String),
@@ -786,7 +786,7 @@ core_eel_hole_previews = Table(
     ),
     Column(
         "session_id",
-        Float,
+        String,
         comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
     ),
     Column("partition_key", String),
@@ -954,7 +954,7 @@ core_eel_hole_downloads = (
         ),
         Column(
             "session_id",
-            Float,
+            String,
             comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
         ),
         Column("partition_key", String),
