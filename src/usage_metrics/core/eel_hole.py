@@ -76,20 +76,24 @@ class DuckDBParams(BaseModel):
 class JsonPayload(BaseModel):
     """Portion of eel hole logs where payload is returned as a JSON."""
 
-    event: Literal["search", "hit", "duckdb_preview", "duckdb_csv"]
+    event: Literal["search", "hit", "duckdb_preview", "duckdb_csv", "privacy-policy"]
     timestamp: datetime.datetime
+    user_id: str | None = None
     # Fields returned for a 'hit' response
     name: str | None = None
     query: str | None = None
     score: float | None = None
     tags: str | None = None
     # Fields returned for a 'search' or 'duckdb_preview' response
-    url: Literal["/search", "/api/duckdb"] | None = (
-        None  # Change to full url - should be a string
-    )
-    # TODO: add user_id
+    url: str | None = None
     # Fields returned for a 'duckdb_preview' or 'duckdb_csv' response
     params: DuckDBParams | None = None
+    # Fields returned for a 'privacy-policy' event
+    # We don't persist these as they are logged in the user
+    # database, but why not validate them anyways?
+    accepted: bool | None = None
+    newsletter: bool | None = None
+    outreach: bool | None = None
 
     class Config:  # noqa: D106
         alias_generator = to_camel
@@ -125,12 +129,22 @@ class EelHoleLogs(BaseModel):
         return value
 
     @model_validator(mode="before")
-    def drop_non_events(cls, data):  # noqa: N805
-        """Where JSON payload event is a 'loading' message, drop JSON payload."""
+    def drop_bad_records(cls, data):  # noqa: N805
+        """Where JSON payload event is a 'loading' message or params badly formatted, drop JSON payload."""
         if isinstance(data["jsonPayload"], dict):  # noqa: SIM102
             if (
-                event := data["jsonPayload"].get("event")
-            ) and "loading datapackage from" in event:
+                # If event is a "loading" message
+                (
+                    (event := data["jsonPayload"].get("event"))
+                    and "loading datapackage from" in event
+                )
+                # Or if params are malformed
+                or (
+                    (params := data["jsonPayload"].get("params"))
+                    and (params.get("name") is not None)
+                    and (params.get("page") is None)
+                )
+            ):
                 data.pop("jsonPayload", None)
         return data
 
@@ -152,7 +166,7 @@ def _core_eel_hole_logs(
 
     if raw_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return raw_eel_hole_logs
+        return pd.DataFrame()
 
     # Flatten the many nested columns and coerce them into the expected class
     # Then drop the two columns (json_payload and json_payload_params) that we exploded
@@ -200,18 +214,23 @@ def _core_eel_hole_logs(
     filters_only = pd.DataFrame(
         filters_df["json_payload_params_filters"].to_list(), index=filters_df.index
     )
-    normalized = pd.concat(
-        [filters_only[i].apply(pd.Series) for i in filters_only], axis=1
-    )
-    normalized.columns = [
-        f"json_payload_params_filters_{col.replace('.', '_')}"
-        for col in pd.io.common.dedup_names(
-            normalized.columns, is_potential_multiindex=False
+
+    if not filters_only.empty:
+        # If we have search filters, do some maneuvering to process them
+        normalized = pd.concat(
+            [filters_only[i].apply(pd.Series) for i in filters_only], axis=1
         )
-    ]
-    converted_df = converted_df.merge(
-        normalized, how="left", left_index=True, right_index=True, validate="1:1"
-    ).drop(columns="json_payload_params_filters")
+        normalized.columns = [
+            f"json_payload_params_filters_{col.replace('.', '_')}"
+            for col in pd.io.common.dedup_names(
+                normalized.columns, is_potential_multiindex=False
+            )
+        ]
+        converted_df = converted_df.merge(
+            normalized, how="left", left_index=True, right_index=True, validate="1:1"
+        )
+
+    converted_df = converted_df.drop(columns="json_payload_params_filters")
 
     # Remove json_payload from the column names
     converted_df.columns = converted_df.columns.str.replace("json_payload_", "")
@@ -243,6 +262,36 @@ def _core_eel_hole_logs(
 
     context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
+    # Add a session ID for users
+    # Increment the session ID if a user has been inactive for 30 min or more.
+    def create_session_id(timestamp):
+        return timestamp.diff().gt(pd.Timedelta("30min")).cumsum()
+
+    if converted_df.user_id.notnull().any():  # If the data contains user IDs
+        session_ids = (
+            converted_df.set_index("insert_id")
+            .groupby("user_id")["timestamp"]
+            .apply(create_session_id)
+            + 1
+        )
+
+        # Because we process these as partitions, let's make the session_id a concatenation
+        # of the weekly partition and the unique session ID.
+        # This will take the format 2025-08-31-s1
+        session_ids = context.partition_key + "-s" + session_ids.astype(str)
+
+        session_ids = (
+            session_ids.reset_index()
+            .rename(columns={"timestamp": "session_id"})
+            .drop(columns="user_id")
+        )
+
+        converted_df = converted_df.merge(
+            session_ids, how="left", on="insert_id", validate="1:1"
+        )
+    else:
+        converted_df["session_id"] = pd.NA
+
     return converted_df.reset_index(drop=True)
 
 
@@ -260,7 +309,7 @@ def core_eel_hole_log_ins(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     login_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "log_in"]
     login_df = login_df.loc[
@@ -284,10 +333,12 @@ def core_eel_hole_searches(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     search_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "search"]
-    search_df = search_df.loc[:, ["insert_id", "timestamp", "query", "url"]]
+    search_df = search_df.loc[
+        :, ["insert_id", "user_id", "timestamp", "query", "url", "session_id"]
+    ]
 
     return search_df.reset_index(drop=True)
 
@@ -306,7 +357,7 @@ def core_eel_hole_hits(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     hit_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "hit"]
     hit_df = hit_df.loc[:, ["insert_id", "timestamp", "name", "score", "tags"]]
@@ -328,12 +379,12 @@ def core_eel_hole_previews(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     preview_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_preview"]
     preview_df = preview_df.loc[
         :,
-        ["insert_id", "timestamp", "url"]
+        ["insert_id", "user_id", "timestamp", "url", "session_id"]
         + [col for col in preview_df.columns if col.startswith("params_")],
     ]
 
@@ -354,13 +405,42 @@ def core_eel_hole_downloads(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     download_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_csv"]
     download_df = download_df.loc[
         :,
-        ["insert_id", "timestamp", "url"]
+        ["insert_id", "user_id", "timestamp", "url", "session_id"]
         + [col for col in download_df.columns if col.startswith("params_")],
     ]
 
     return download_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="database_manager",
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_user_settings_updates(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of user setting updates."""
+    context.log.info(f"Processing data for the week of {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warn(f"No data found for the week of {context.partition_key}")
+        return pd.DataFrame()
+
+    settings_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "privacy-policy"]
+    settings_df = settings_df.loc[
+        :,
+        ["insert_id", "user_id", "timestamp", "accepted", "newsletter", "outreach"],
+    ]
+
+    # If user_id is none, there shouldn't really be a log here.
+    # Drop these weirdo records.
+    settings_df = settings_df.loc[settings_df.user_id.notnull()]
+
+    return settings_df.reset_index(drop=True)
