@@ -133,11 +133,17 @@ class EelHoleLogs(BaseModel):
         """Where JSON payload event is a 'loading' message or params badly formatted, drop JSON payload."""
         if isinstance(data["jsonPayload"], dict):  # noqa: SIM102
             if (
-                (event := data["jsonPayload"].get("event"))
-                and "loading datapackage from" in event
-                or (params := data["jsonPayload"].get("params"))
-                and (params.get("name") is not None)
-                and (params.get("page") is None)
+                # If event is a "loading" message
+                (
+                    (event := data["jsonPayload"].get("event"))
+                    and "loading datapackage from" in event
+                )
+                # Or if params are malformed
+                or (
+                    (params := data["jsonPayload"].get("params"))
+                    and (params.get("name") is not None)
+                    and (params.get("page") is None)
+                )
             ):
                 data.pop("jsonPayload", None)
         return data
