@@ -360,9 +360,7 @@ def core_eel_hole_hits(
         return _core_eel_hole_logs
 
     hit_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "hit"]
-    hit_df = hit_df.loc[
-        :, ["insert_id", "user_id", "timestamp", "name", "score", "tags", "session_id"]
-    ]
+    hit_df = hit_df.loc[:, ["insert_id", "timestamp", "name", "score", "tags"]]
 
     return hit_df.reset_index(drop=True)
 

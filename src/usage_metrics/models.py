@@ -518,11 +518,6 @@ core_eel_hole_log_ins = Table(
         comment="A unique identifier for the log entry.",
     ),
     Column(
-        "user_id",
-        String,
-        comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
-    ),
-    Column(
         "timestamp",
         DateTime,
         comment="The time the event described by the log entry occurred.",
@@ -536,11 +531,6 @@ core_eel_hole_log_ins = Table(
         "log_in_query",
         String,
         comment="What was the user doing when they were motivated to log in? This mirrors query when the search prompted a log-in event.",
-    ),
-    Column(
-        "session_id",
-        String,
-        comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
     ),
     Column("partition_key", String),
 )
@@ -593,11 +583,6 @@ core_eel_hole_hits = Table(
         comment="A unique identifier for the log entry.",
     ),
     Column(
-        "user_id",
-        String,
-        comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
-    ),
-    Column(
         "timestamp",
         DateTime,
         comment="The time the event described by the log entry occurred.",
@@ -616,11 +601,6 @@ core_eel_hole_hits = Table(
         "tags",
         String,
         comment="The tags associated with a given table in the search results. Only populated for 'hit' events types.",
-    ),
-    Column(
-        "session_id",
-        String,
-        comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
     ),
     Column("partition_key", String),
 )
