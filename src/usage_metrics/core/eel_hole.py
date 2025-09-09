@@ -166,7 +166,7 @@ def _core_eel_hole_logs(
 
     if raw_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return raw_eel_hole_logs
+        return pd.DataFrame()
 
     # Flatten the many nested columns and coerce them into the expected class
     # Then drop the two columns (json_payload and json_payload_params) that we exploded
@@ -264,14 +264,14 @@ def _core_eel_hole_logs(
 
     # Add a session ID for users
     # Increment the session ID if a user has been inactive for 30 min or more.
-    def create_user_id(timestamp):
+    def create_session_id(timestamp):
         return timestamp.diff().gt(pd.Timedelta("30min")).cumsum()
 
     if converted_df.user_id.notnull().any():  # If the data contains user IDs
         session_ids = (
             converted_df.set_index("insert_id")
             .groupby("user_id")["timestamp"]
-            .apply(create_user_id)
+            .apply(create_session_id)
             + 1
         )
 
@@ -309,7 +309,7 @@ def core_eel_hole_log_ins(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     login_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "log_in"]
     login_df = login_df.loc[
@@ -333,7 +333,7 @@ def core_eel_hole_searches(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     search_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "search"]
     search_df = search_df.loc[
@@ -357,7 +357,7 @@ def core_eel_hole_hits(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     hit_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "hit"]
     hit_df = hit_df.loc[:, ["insert_id", "timestamp", "name", "score", "tags"]]
@@ -379,7 +379,7 @@ def core_eel_hole_previews(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     preview_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_preview"]
     preview_df = preview_df.loc[
@@ -405,7 +405,7 @@ def core_eel_hole_downloads(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     download_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_csv"]
     download_df = download_df.loc[
@@ -431,7 +431,7 @@ def core_eel_hole_user_settings_updates(
 
     if _core_eel_hole_logs.empty:
         context.log.warn(f"No data found for the week of {context.partition_key}")
-        return _core_eel_hole_logs
+        return pd.DataFrame()
 
     settings_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "privacy-policy"]
     settings_df = settings_df.loc[
