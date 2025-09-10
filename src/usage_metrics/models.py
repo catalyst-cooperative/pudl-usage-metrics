@@ -67,53 +67,208 @@ datasette_request_logs = Table(
     Column("partition_key", String),
 )
 
+# Metadata derived from:
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html#log-record-fields
+# https://ipinfo.io/developers/lite-api
 core_s3_logs = Table(
     "core_s3_logs",
     usage_metrics_metadata,
     Column("id", String, primary_key=True, comment="A unique ID for each log."),
     # Query information
-    Column("time", DateTime),
-    Column("request_uri", String),
-    Column("operation", String),
-    Column("bucket", String),
-    Column("bucket_owner", String),
-    Column("requester", String),
-    Column("http_status", Integer),
-    Column("megabytes_sent", Float),
+    Column(
+        "time",
+        DateTime,
+        comment="The time at which the request was received; these dates and times are in Coordinated Universal Time (UTC).",
+    ),
+    Column(
+        "request_uri",
+        String,
+        comment="The Request-URI part of the HTTP request message.",
+    ),
+    Column(
+        "operation",
+        String,
+        comment="The operation listed here is declared as SOAP.operation, REST.HTTP_method.resource_type, WEBSITE.HTTP_method.resource_type, or BATCH.DELETE.OBJECT, or S3.action.resource_type for S3 Lifecycle and logging. For Compute checksum job requests, the operation is listed as S3.COMPUTE.OBJECT.CHECKSUM.",
+    ),
+    Column(
+        "bucket",
+        String,
+        comment="The name of the bucket that the request was processed against. If the system receives a malformed request and cannot determine the bucket, the request will not appear in any server access log.",
+    ),
+    Column(
+        "bucket_owner",
+        String,
+        comment="The canonical user ID of the owner of the source bucket. The canonical user ID is another form of the AWS account ID.",
+    ),
+    Column(
+        "requester",
+        String,
+        comment="The canonical user ID of the requester, or null for unauthenticated requests. If the requester was an IAM user, this field returns the requester's IAM user name along with the AWS account that the IAM user belongs to. This identifier is the same one used for access control purposes.",
+    ),
+    Column(
+        "http_status", Integer, comment="The numeric HTTP status code of the response."
+    ),
+    Column(
+        "megabytes_sent",
+        Float,
+        comment="The total size of the object in question in megabytes.",
+    ),
     # IP location
-    Column("remote_ip", String),
-    Column("remote_ip_city", String),
-    Column("remote_ip_loc", String),
-    Column("remote_ip_org", String),
-    Column("remote_ip_hostname", String),
-    Column("remote_ip_country_name", String),
-    Column("remote_ip_asn", String),
-    Column("remote_ip_bogon", Boolean),
-    Column("remote_ip_country", String),
-    Column("remote_ip_timezone", String),
-    Column("remote_ip_latitude", Float),
-    Column("remote_ip_longitude", Float),
-    Column("remote_ip_postal", String),
-    Column("remote_ip_region", String),
-    Column("remote_ip_full_location", String),
+    Column(
+        "remote_ip",
+        String,
+        comment="The apparent IP address of the requester. Intermediate proxies and firewalls might obscure the actual IP address of the machine that's making the request.",
+    ),
+    Column(
+        "remote_ip_city",
+        String,
+        comment="City where the IP is located, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_loc",
+        String,
+        comment="Geospatial coordinates of the IP, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_org",
+        String,
+        comment="IP Organization name, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_hostname",
+        String,
+        comment="Name of the IP host, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_country_name",
+        String,
+        comment="Country where the IP is located, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_asn",
+        String,
+        comment="Autonomous System Number as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_bogon",
+        Boolean,
+        comment="Is the IP address a bogon (bogus or invalid)?",
+    ),
+    Column(
+        "remote_ip_country",
+        String,
+        comment="ISO 3166 country code of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_timezone",
+        String,
+        comment="Timezone of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_latitude",
+        Float,
+        comment="Latitude of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_longitude",
+        Float,
+        comment="Longitude of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_postal",
+        String,
+        comment="Postcode or zipcode of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_region",
+        String,
+        comment="Region/state of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_full_location",
+        String,
+        comment="Full address of the IP address, as determined by IPInfo.",
+    ),
     # Other reported context
-    Column("access_point_arn", String),
-    Column("acl_required", String),
-    Column("authentication_type", String),
-    Column("cipher_suite", String),
-    Column("error_code", String),
-    Column("host_header", String),
-    Column("host_id", String),
-    Column("key", String),
-    Column("object_size", Float),
-    Column("request_id", String),
-    Column("referer", String),
-    Column("signature_version", String),
-    Column("tls_version", String),
-    Column("total_time", BigInteger),
-    Column("turn_around_time", Float),
-    Column("user_agent", String),
-    Column("version_id", String),
+    Column(
+        "access_point_arn",
+        String,
+        comment="The Amazon Resource Name (ARN) of the access point of the request. If the access point ARN is malformed or not used, the field will be null",
+    ),
+    Column(
+        "acl_required",
+        String,
+        comment="A string that indicates whether the request required an access control list (ACL) for authorization. If the request required an ACL for authorization, the string is Yes. If no ACLs were required, the string is -.",
+    ),
+    Column(
+        "authentication_type",
+        String,
+        comment="The type of request authentication used: AuthHeader for authentication headers, QueryString for query string (presigned URL), or a - for unauthenticated requests.",
+    ),
+    Column(
+        "cipher_suite",
+        String,
+        comment="The Transport Layer Security (TLS) cipher that was negotiated for an HTTPS request or a - for HTTP.",
+    ),
+    Column(
+        "error_code",
+        String,
+        comment="The Amazon S3 Error responses of the GET portion of the copy operation, or - if no error occurred.",
+    ),
+    Column(
+        "host_header",
+        String,
+        comment="The endpoint that was used to connect to Amazon S3.",
+    ),
+    Column(
+        "host_id", String, comment="The x-amz-id-2 or Amazon S3 extended request ID."
+    ),
+    Column(
+        "key",
+        String,
+        comment="The key (object name) of the object being copied, or - if the operation doesn't take a key parameter.",
+    ),
+    Column(
+        "object_size",
+        Float,
+        comment="The total size of the object in question in bytes.",
+    ),
+    Column(
+        "request_id",
+        String,
+        comment="A string generated by Amazon S3 to uniquely identify each request. For Compute checksum job requests, the Request ID field displays the associated job ID.",
+    ),
+    Column(
+        "referer",
+        String,
+        comment="The value of the HTTP Referer header, if present. HTTP user-agents (for example, browsers) typically set this header to the URL of the linking or embedding page when making a request.",
+    ),
+    Column(
+        "signature_version",
+        String,
+        comment="The signature version, SigV2 or SigV4, that was used to authenticate the request, or a - for unauthenticated requests.",
+    ),
+    Column(
+        "tls_version",
+        String,
+        comment="The Transport Layer Security (TLS) version negotiated by the client. The value is one of following: TLSv1.1, TLSv1.2, TLSv1.3, or - if TLS wasn't used.",
+    ),
+    Column(
+        "total_time",
+        BigInteger,
+        comment="The number of milliseconds that the request was in flight from the server's perspective. This value is measured from the time that your request is received to the time that the last byte of the response is sent. Measurements made from the client's perspective might be longer because of network latency.",
+    ),
+    Column(
+        "turn_around_time",
+        Float,
+        comment="The number of milliseconds that Amazon S3 spent processing your request. This value is measured from the time that the last byte of your request was received until the time that the first byte of the response was sent.",
+    ),
+    Column("user_agent", String, comment="The value of the HTTP User-Agent header."),
+    Column(
+        "version_id",
+        String,
+        comment="The version ID in the request, or - if the operation doesn't take a versionId parameter.",
+    ),
     Column("partition_key", String),
 )
 
@@ -122,46 +277,182 @@ out_s3_logs = Table(
     usage_metrics_metadata,
     Column("id", String, primary_key=True, comment="A unique ID for each log."),
     # Query information
-    Column("time", DateTime),
+    Column(
+        "time",
+        DateTime,
+        comment="The time at which the request was received; these dates and times are in Coordinated Universal Time (UTC).",
+    ),
     Column("table", String),
     Column("version", String),
     # IP location
-    Column("remote_ip", String),
-    Column("remote_ip_city", String),
-    Column("remote_ip_loc", String),
-    Column("remote_ip_org", String),
-    Column("remote_ip_hostname", String),
-    Column("remote_ip_country_name", String),
-    Column("remote_ip_asn", String),
-    Column("remote_ip_bogon", Boolean),
-    Column("remote_ip_country", String),
-    Column("remote_ip_timezone", String),
-    Column("remote_ip_latitude", Float),
-    Column("remote_ip_longitude", Float),
-    Column("remote_ip_postal", String),
-    Column("remote_ip_region", String),
-    Column("remote_ip_full_location", String),
+    Column(
+        "remote_ip",
+        String,
+        comment="The apparent IP address of the requester. Intermediate proxies and firewalls might obscure the actual IP address of the machine that's making the request.",
+    ),
+    Column(
+        "remote_ip_city",
+        String,
+        comment="City where the IP is located, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_loc",
+        String,
+        comment="Geospatial coordinates of the IP, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_org",
+        String,
+        comment="IP Organization name, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_hostname",
+        String,
+        comment="Name of the IP host, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_country_name",
+        String,
+        comment="Country where the IP is located, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_asn",
+        String,
+        comment="Autonomous System Number as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_bogon",
+        Boolean,
+        comment="Is the IP address a bogon (bogus or invalid)?",
+    ),
+    Column(
+        "remote_ip_country",
+        String,
+        comment="ISO 3166 country code of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_timezone",
+        String,
+        comment="Timezone of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_latitude",
+        Float,
+        comment="Latitude of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_longitude",
+        Float,
+        comment="Longitude of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_postal",
+        String,
+        comment="Postcode or zipcode of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_region",
+        String,
+        comment="Region/state of the IP address, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_full_location",
+        String,
+        comment="Full address of the IP address, as determined by IPInfo.",
+    ),
     # Other reported context
-    Column("access_point_arn", String),
-    Column("acl_required", String),
-    Column("authentication_type", String),
-    Column("megabytes_sent", Float),
-    Column("cipher_suite", String),
-    Column("error_code", String),
-    Column("host_header", String),
-    Column("host_id", String),
-    Column("http_status", Integer),
-    Column("key", String),
-    Column("object_size", Float),
-    Column("referer", String),
-    Column("request_id", String),
-    Column("request_uri", String),
-    Column("signature_version", String),
-    Column("tls_version", String),
-    Column("total_time", BigInteger),
-    Column("turn_around_time", Float),
-    Column("user_agent", String),
-    Column("version_id", String),
+    Column(
+        "access_point_arn",
+        String,
+        comment="The Amazon Resource Name (ARN) of the access point of the request. If the access point ARN is malformed or not used, the field will be null",
+    ),
+    Column(
+        "acl_required",
+        String,
+        comment="A string that indicates whether the request required an access control list (ACL) for authorization. If the request required an ACL for authorization, the string is Yes. If no ACLs were required, the string is -.",
+    ),
+    Column(
+        "authentication_type",
+        String,
+        comment="The type of request authentication used: AuthHeader for authentication headers, QueryString for query string (presigned URL), or a - for unauthenticated requests.",
+    ),
+    Column(
+        "megabytes_sent",
+        Float,
+        comment="The total size of the object in question in megabytes.",
+    ),
+    Column(
+        "cipher_suite",
+        String,
+        comment="The Transport Layer Security (TLS) cipher that was negotiated for an HTTPS request or a - for HTTP.",
+    ),
+    Column(
+        "error_code",
+        String,
+        comment="The Amazon S3 Error responses of the GET portion of the copy operation, or - if no error occurred.",
+    ),
+    Column(
+        "host_header",
+        String,
+        comment="The endpoint that was used to connect to Amazon S3.",
+    ),
+    Column(
+        "host_id", String, comment="The x-amz-id-2 or Amazon S3 extended request ID."
+    ),
+    Column(
+        "http_status", Integer, comment="The numeric HTTP status code of the response."
+    ),
+    Column(
+        "key",
+        String,
+        comment="The key (object name) of the object being copied, or - if the operation doesn't take a key parameter.",
+    ),
+    Column(
+        "object_size",
+        Float,
+        comment="The total size of the object in question in bytes.",
+    ),
+    Column(
+        "referer",
+        String,
+        comment="The value of the HTTP Referer header, if present. HTTP user-agents (for example, browsers) typically set this header to the URL of the linking or embedding page when making a request.",
+    ),
+    Column(
+        "request_id",
+        String,
+        comment="A string generated by Amazon S3 to uniquely identify each request. For Compute checksum job requests, the Request ID field displays the associated job ID.",
+    ),
+    Column(
+        "request_uri",
+        String,
+        comment="The Request-URI part of the HTTP request message.",
+    ),
+    Column(
+        "signature_version",
+        String,
+        comment="The signature version, SigV2 or SigV4, that was used to authenticate the request, or a - for unauthenticated requests.",
+    ),
+    Column(
+        "tls_version",
+        String,
+        comment="The Transport Layer Security (TLS) version negotiated by the client. The value is one of following: TLSv1.1, TLSv1.2, TLSv1.3, or - if TLS wasn't used.",
+    ),
+    Column(
+        "total_time",
+        BigInteger,
+        comment="The number of milliseconds that the request was in flight from the server's perspective. This value is measured from the time that your request is received to the time that the last byte of the response is sent. Measurements made from the client's perspective might be longer because of network latency.",
+    ),
+    Column(
+        "turn_around_time",
+        Float,
+        comment="The number of milliseconds that Amazon S3 spent processing your request. This value is measured from the time that the last byte of your request was received until the time that the first byte of the response was sent.",
+    ),
+    Column("user_agent", String, comment="The value of the HTTP User-Agent header."),
+    Column(
+        "version_id",
+        String,
+        comment="The version ID in the request, or - if the operation doesn't take a versionId parameter.",
+    ),
     Column("partition_key", String),
 )
 
@@ -175,21 +466,49 @@ core_kaggle_logs = Table(
         comment="The unique date for each metrics snapshot.",
     ),
     # Metrics on Kaggle usage
-    Column("total_views", Integer),
-    Column("total_downloads", Integer),
-    Column("total_votes", Integer),
-    Column("usability_rating", Float),
+    Column(
+        "total_views",
+        Integer,
+        comment="How many people have viewed this dataset all-time.",
+    ),
+    Column(
+        "total_downloads",
+        Integer,
+        comment="How many people have downloaded this dataset all-time.",
+    ),
+    Column(
+        "total_votes",
+        Integer,
+        comment="How many people have upvoted this dataset all-time.",
+    ),
+    Column(
+        "usability_rating",
+        Float,
+        comment="The current Kaggle usability rating (out of 10)?",
+    ),
     # Metadata on dataset
-    Column("dataset_name", String),
-    Column("owner", String),
-    Column("title", String),
-    Column("subtitle", String),
-    Column("description", String),
-    Column("keywords", String),
-    Column("dataset_id", String),
-    Column("is_private", String),
-    Column("licenses", String),
-    Column("collaborators", String),
+    Column("dataset_name", String, comment="The slug of the dataset."),
+    Column("owner", String, comment="The owner of the dataset."),
+    Column("title", String, comment="The full title of the dataset."),
+    Column("subtitle", String, comment="The subtitle of the dataset."),
+    Column("description", String, comment="The description of the dataset."),
+    Column("keywords", String, comment="All keywords associated with the dataset."),
+    Column("dataset_id", String, comment="The unique dataset ID generated by Kaggle."),
+    Column(
+        "is_private",
+        String,
+        comment="Whether the dataset is private (not viewable by the public).",
+    ),
+    Column(
+        "licenses",
+        String,
+        comment="A list of licenses attributed to the dataset. This is a list of dictionaries that has been dumped into a string during processing as it has no analytical value.",
+    ),
+    Column(
+        "collaborators",
+        String,
+        comment="A list of Kaggle users who are listed as collaborators on this dataset. This is a list of dictionaries that has been dumped into a string during processing as it has no analytical value.",
+    ),
     Column("data", String),
     Column("partition_key", String),
 )
@@ -204,8 +523,16 @@ core_github_popular_referrers = Table(
         comment="The date for each metrics snapshot.",
     ),
     Column("referrer", String, primary_key=True, comment="The unique referrer."),
-    Column("total_referrals", Integer),
-    Column("unique_referrals", Integer),
+    Column(
+        "total_referrals",
+        Integer,
+        comment="Total number of referrals over the last 14 days.",
+    ),
+    Column(
+        "unique_referrals",
+        Integer,
+        comment="Unique number of referrals over the last 14 days.",
+    ),
     Column("partition_key", String),
 )
 
@@ -224,9 +551,15 @@ core_github_popular_paths = Table(
         primary_key=True,
         comment="One of the ten most popular Github paths on a given date.",
     ),
-    Column("title", String),
-    Column("total_views", Integer),
-    Column("unique_views", Integer),
+    Column("title", String, comment="Full title of the Github path."),
+    Column(
+        "total_views", Integer, comment="Total views of the path over the last 14 days."
+    ),
+    Column(
+        "unique_views",
+        Integer,
+        comment="Unique views of the path over the last 14 days.",
+    ),
     Column("partition_key", String),
 )
 
@@ -239,8 +572,16 @@ core_github_clones = Table(
         primary_key=True,
         comment="The date for each metrics snapshot.",
     ),
-    Column("total_clones", Integer),
-    Column("unique_clones", Integer),
+    Column(
+        "total_clones",
+        Integer,
+        comment="Total number of clones of the PUDL repository over the last 14 days.",
+    ),
+    Column(
+        "unique_clones",
+        Integer,
+        comment="Unique number of clones of the PUDL repository over the last 14 days.",
+    ),
     Column("partition_key", String),
 )
 
@@ -253,8 +594,16 @@ core_github_views = Table(
         primary_key=True,
         comment="The date for each metrics snapshot.",
     ),
-    Column("total_views", Integer),
-    Column("unique_views", Integer),
+    Column(
+        "total_views",
+        Integer,
+        comment="Total views of the repository over the last 14 days.",
+    ),
+    Column(
+        "unique_views",
+        Integer,
+        comment="Unique views of the repository over the last 14 days.",
+    ),
     Column("partition_key", String),
 )
 
@@ -264,41 +613,63 @@ core_github_forks = Table(
     Column(
         "id", Integer, primary_key=True, comment="The unique identifier for each fork."
     ),
-    Column("node_id", String),
-    Column("name", String),
-    Column("full_name", String),
-    Column("private", Boolean),
-    Column("owner", String),
-    Column("description", String),
-    Column("url", String),
-    Column("created_at", DateTime),
-    Column("updated_at", DateTime),
-    Column("pushed_at", DateTime),
-    Column("homepage", String),
-    Column("size_kb", Integer),
-    Column("stargazers_count", Integer),
-    Column("watchers_count", Integer),
-    Column("language", String),
-    Column("has_issues", Boolean),
-    Column("has_projects", Boolean),
-    Column("has_downloads", Boolean),
-    Column("has_wiki", Boolean),
-    Column("has_pages", Boolean),
-    Column("has_discussions", Boolean),
-    Column("forks_count", Integer),
-    Column("archived", Boolean),
-    Column("disabled", Boolean),
-    Column("license", String),
-    Column("allow_forking", Boolean),
-    Column("is_template", Boolean),
-    Column("web_commit_signoff_required", Boolean),
-    Column("topics", String),
-    Column("visibility", String),
-    Column("forks", Integer),
-    Column("open_issues", Integer),
-    Column("watchers", Integer),
-    Column("default_branch", String),
-    Column("permissions", String),
+    Column("node_id", String, comment="The global node ID of the fork in Github."),
+    Column("name", String, comment="Name of fork."),
+    Column("full_name", String, comment="Full name of fork, including repository."),
+    Column("private", Boolean, comment="Is this fork private?"),
+    Column("owner", String, comment="Metadata about the owner."),
+    Column("description", String, comment="Description of the fork."),
+    Column("url", String, comment="API link to the forked repoitory."),
+    Column("created_at", DateTime, comment="Time the repository was created, in UTC."),
+    Column(
+        "updated_at", DateTime, comment="Time the repository was last updated, in UTC."
+    ),
+    Column("pushed_at", DateTime, comment="Time of the last pushed commit, in UTC."),
+    Column("homepage", String, comment="Home page of the repository."),
+    Column("size_kb", Integer, comment="Size in KB of the repository."),
+    Column(
+        "stargazers_count",
+        Integer,
+        comment="Count of how many people have starred the repository.",
+    ),
+    Column(
+        "watchers_count",
+        Integer,
+        comment="Count of how many people are watching the repository.",
+    ),
+    Column("language", String, comment="Repository language."),
+    Column("has_issues", Boolean, comment="Does the repository have issues?"),
+    Column("has_projects", Boolean, comment="Does the repository have projects?"),
+    Column("has_downloads", Boolean, comment="Does the repository have downloads?"),
+    Column("has_wiki", Boolean, comment="Does the repository have a wiki?"),
+    Column("has_pages", Boolean, comment="Does the repository have pages?"),
+    Column("has_discussions", Boolean, comment="Does the repository have discussions?"),
+    Column("forks_count", Integer, comment="Count of forks of the forked repository."),
+    Column("archived", Boolean, comment="Is this repository archived?"),
+    Column("disabled", Boolean, comment="Is this repository disabled?"),
+    Column("license", String, comment="License of the repository."),
+    Column("allow_forking", Boolean, comment="Does the repository allow forking?"),
+    Column("is_template", Boolean, comment="Is the repository a template?"),
+    Column(
+        "web_commit_signoff_required",
+        Boolean,
+        comment="Does the repository require signoffs for web-based commits?",
+    ),
+    Column(
+        "topics", String, comment="A list of topics associated with the repository."
+    ),
+    Column("visibility", String, comment="The visibility setting of the repository."),
+    Column("forks", Integer, comment="How many forks are there for this repository?"),
+    Column(
+        "open_issues",
+        Integer,
+        comment="How many open issues are there in this repository?",
+    ),
+    Column(
+        "watchers", Integer, comment="How many people are watching this repository?"
+    ),
+    Column("default_branch", String, comment="The default branch of the repository."),
+    Column("permissions", String, comment="Permissions settings on the repository."),
 )
 
 core_github_stargazers = Table(
