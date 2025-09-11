@@ -512,7 +512,7 @@ core_kaggle_logs = Table(
     Column("data", String),
     Column("partition_key", String),
 )
-
+# See: https://docs.github.com/en/rest/metrics/traffic?apiVersion=2022-11-28#get-top-referral-sources
 core_github_popular_referrers = Table(
     "core_github_popular_referrers",
     usage_metrics_metadata,
@@ -536,6 +536,7 @@ core_github_popular_referrers = Table(
     Column("partition_key", String),
 )
 
+# See: https://docs.github.com/en/rest/metrics/traffic?apiVersion=2022-11-28#get-top-referral-paths
 core_github_popular_paths = Table(
     "core_github_popular_paths",
     usage_metrics_metadata,
@@ -563,6 +564,7 @@ core_github_popular_paths = Table(
     Column("partition_key", String),
 )
 
+# See https://docs.github.com/en/rest/metrics/traffic?apiVersion=2022-11-28#get-repository-clones
 core_github_clones = Table(
     "core_github_clones",
     usage_metrics_metadata,
@@ -585,6 +587,7 @@ core_github_clones = Table(
     Column("partition_key", String),
 )
 
+# See docs: https://docs.github.com/en/rest/metrics/traffic?apiVersion=2022-11-28#get-page-views
 core_github_views = Table(
     "core_github_views",
     usage_metrics_metadata,
@@ -607,6 +610,7 @@ core_github_views = Table(
     Column("partition_key", String),
 )
 
+# See docs: https://docs.github.com/en/rest/repos/forks
 core_github_forks = Table(
     "core_github_forks",
     usage_metrics_metadata,
@@ -672,6 +676,7 @@ core_github_forks = Table(
     Column("permissions", String, comment="Permissions settings on the repository."),
 )
 
+# See docs: https://docs.github.com/en/rest/activity/starring
 core_github_stargazers = Table(
     "core_github_stargazers",
     usage_metrics_metadata,
@@ -681,23 +686,49 @@ core_github_stargazers = Table(
         primary_key=True,
         comment="The unique identifier for each stargazer.",
     ),
-    Column("starred_at", DateTime),
-    Column("login", String),
-    Column("node_id", String),
-    Column("url", String),
-    Column("html_url", String),
-    Column("followers_url", String),
-    Column("following_url", String),
-    Column("gists_url", String),
-    Column("starred_url", String),
-    Column("subscriptions_url", String),
-    Column("organizations_url", String),
-    Column("repos_url", String),
-    Column("events_url", String),
-    Column("received_events_url", String),
-    Column("type", String),
-    Column("site_admin", Boolean),
+    Column(
+        "starred_at", DateTime, comment="When the user starred the repository, in UTC."
+    ),
+    Column("login", String, comment="Github username."),
+    Column("node_id", String, comment="The global node ID of the fork in Github."),
+    Column("url", String, comment="API link to the user account."),
+    Column("html_url", String, comment="HTML link to the user account."),
+    Column("followers_url", String, comment="API link to the user's followers."),
+    Column(
+        "following_url",
+        String,
+        comment="API link to a list of users that the user is following.",
+    ),
+    Column("gists_url", String, comment="API link to a list of the user's gists."),
+    Column(
+        "starred_url",
+        String,
+        comment="API link to a list of the user's starred repositories.",
+    ),
+    Column(
+        "subscriptions_url",
+        String,
+        comment="API link to a list of the user's subscriptions.",
+    ),
+    Column(
+        "organizations_url",
+        String,
+        comment="API link to a list of the user's organizations.",
+    ),
+    Column(
+        "repos_url", String, comment="API link to a list of the user's repositories."
+    ),
+    Column("events_url", String, comment="API link to a list of the user's events."),
+    Column(
+        "received_events_url",
+        String,
+        comment="API link to a list of the user's received events.",
+    ),
+    Column("type", String, comment="Type of entity (e.g., user)."),
+    Column("site_admin", Boolean, comment="Is this user a site admin?"),
 )
+
+# See: https://zenodo.org/help/statistics
 
 core_zenodo_logs = Table(
     "core_zenodo_logs",
