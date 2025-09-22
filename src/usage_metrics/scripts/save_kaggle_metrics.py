@@ -4,6 +4,7 @@ import json
 import logging
 import sys
 from datetime import date
+from pathlib import Path
 
 from google.cloud import storage
 from kaggle.api.kaggle_api_extended import KaggleApi
@@ -15,10 +16,17 @@ logging.basicConfig(level="INFO")
 def get_kaggle_dataset_metadata() -> str:
     """Get PUDL project usage metadata from Kaggle site."""
     api = KaggleApi()
-    kaggle_owner = "catalystcooperative"
-    kaggle_dataset = "pudl-project"
+    api.authenticate()
+    api.dataset_metadata(
+        "catalystcooperative/pudl-project", Path.cwd()
+    )  # Download metrics to CWD.
 
-    metadata = api.metadata_get(kaggle_owner, kaggle_dataset)
+    json_path = Path(Path.cwd(), "dataset-metadata.json")
+    with Path.open(json_path) as file:
+        metadata_str = json.load(
+            file
+        )  # Kaggle downloads to the current working directory.
+        metadata = json.loads(metadata_str)  # Fix bad formatting in original JSON file
     metadata.update({"metrics_date": date.today().strftime("%Y-%m-%d")})
     return json.dumps(metadata)
 
