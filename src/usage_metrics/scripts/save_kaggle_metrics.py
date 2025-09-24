@@ -3,6 +3,7 @@
 import json
 import logging
 import sys
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -15,18 +16,24 @@ logging.basicConfig(level="INFO")
 
 def get_kaggle_dataset_metadata() -> str:
     """Get PUDL project usage metadata from Kaggle site."""
+    # Instantiate and authenticate to the Kaggle API
     api = KaggleApi()
     api.authenticate()
-    api.dataset_metadata(
-        "catalystcooperative/pudl-project", Path.cwd()
-    )  # Download metrics to CWD.
 
-    json_path = Path(Path.cwd(), "dataset-metadata.json")
-    with Path.open(json_path) as file:
-        metadata_str = json.load(
-            file
-        )  # Kaggle downloads to the current working directory.
-        metadata = json.loads(metadata_str)  # Fix bad formatting in original JSON file
+    # Create a temporary directory to save the file to.
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        api.dataset_metadata(
+            "catalystcooperative/pudl-project", tmpdir
+        )  # Download metrics to CWD.
+
+        json_path = Path(tmpdir, "dataset-metadata.json")
+        with Path.open(json_path) as file:
+            metadata_str = json.load(
+                file
+            )  # Kaggle downloads to the current working directory.
+
+    metadata = json.loads(metadata_str)  # Fix bad formatting in original JSON file
     metadata.update({"metrics_date": date.today().strftime("%Y-%m-%d")})
     return json.dumps(metadata)
 

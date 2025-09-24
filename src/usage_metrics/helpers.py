@@ -159,8 +159,16 @@ def get_table_name_from_context(context: OutputContext) -> str:
     return context.get_identifier()
 
 
-def retry_request(retries=3, delay=2, backoff=2):
-    """Define a decorator to retry requests."""
+def retry_request(retries: int = 3, delay: int = 2, backoff: int = 2):
+    """Define a decorator to retry requests with an exponential backoff.
+
+    The first backoff will be 2 seconds, the second 2*2 seconds and so-on.
+
+    Args:
+        retries: how many retries to attempt.
+        delay: original number of seconds to wait before retrying.
+        backoff: the exponent by which to increase the backoff each time.
+    """
 
     def decorator(func):
         @wraps(func)
