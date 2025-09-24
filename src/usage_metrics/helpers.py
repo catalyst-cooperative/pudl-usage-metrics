@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import UTC, datetime, timezone
+from functools import wraps
 from pathlib import Path
 from urllib.parse import urlparse
 
 import ipinfo
 import pandas as pd
+import requests
 from dagster import OutputContext, RetryPolicy, op
 from joblib import Memory
 
@@ -154,3 +157,33 @@ def get_table_name_from_context(context: OutputContext) -> str:
     if context.has_asset_key:
         return context.asset_key.to_python_identifier()
     return context.get_identifier()
+
+
+def retry_request(retries: int = 3, delay: int = 2, backoff: int = 2):
+    """Define a decorator to retry requests with an exponential backoff.
+
+    The first backoff will be 2 seconds, the second 2*2 seconds and so-on.
+
+    Args:
+        retries: how many retries to attempt.
+        delay: original number of seconds to wait before retrying.
+        backoff: the exponent by which to increase the backoff each time.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            nonlocal delay  # Make ruff happy
+            attempts = 0
+            while attempts < retries:
+                try:
+                    return func(*args, **kwargs)
+                except requests.exceptions.RequestException:
+                    attempts += 1
+                    time.sleep(delay)
+                    delay *= backoff  # Exponential backoff
+            raise Exception("Max retries reached")
+
+        return wrapper
+
+    return decorator

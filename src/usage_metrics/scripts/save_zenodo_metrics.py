@@ -11,6 +11,8 @@ import requests
 from google.cloud import storage
 from pydantic import BaseModel, StringConstraints
 
+from usage_metrics.helpers import retry_request
+
 Doi = Annotated[str, StringConstraints(pattern=r"10\.5281/zenodo\.\d+")]
 SandboxDoi = Annotated[str, StringConstraints(pattern=r"10\.5072/zenodo\.\d+")]
 
@@ -49,16 +51,22 @@ def save_zenodo_logs() -> pd.DataFrame():
     and then upload to the sources.catalyst.coop GCS bucket.
     """
 
-    def _yell_if_missing_hits(request, page_size: int):
+    def _yell_if_missing_hits(request_json, page_size: int):
         """Raise an error if we are not getting the correct amount of API hits."""
-        hits = request.json()["hits"]["hits"]
-        if len(hits) != (actual_total := request.json()["hits"]["total"]):
+        hits = request_json["hits"]["hits"]
+        if len(hits) != (actual_total := request_json["hits"]["total"]):
             raise AssertionError(
                 f"The API request says there is {actual_total} total records but we got "
                 f"{len(hits)}! The Zenodo API restricts the number of records to 25 without "
                 f"a size, so we are asking for {page_size} records in the page size, "
                 f"but there are {actual_total}. Consider increasing the page_size."
             )
+
+    @retry_request(retries=3, delay=1, backoff=2)
+    def fetch_json(url):
+        """Get and load a JSON file from Zenodo."""
+        record_versions = requests.get(url=url, timeout=100)
+        return record_versions.json()
 
     bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
     client = storage.Client()
@@ -69,10 +77,10 @@ def save_zenodo_logs() -> pd.DataFrame():
 
     # First, get metadata on all the datasets in the Catalyst Cooperative community
     # If a dataset is not added to Cat Community, it will not show up here.
-    community_records = requests.get(url=community_url, timeout=100)
-    _yell_if_missing_hits(community_records, page_size)
+    community_records_json = fetch_json(community_url)
+    _yell_if_missing_hits(community_records_json, page_size)
 
-    dataset_records = community_records.json()["hits"]["hits"]
+    dataset_records = community_records_json["hits"]["hits"]
     dataset_records = [CommunityMetadata(**record) for record in dataset_records]
 
     for record in dataset_records:
@@ -80,9 +88,9 @@ def save_zenodo_logs() -> pd.DataFrame():
         # For each dataset in the community, get all archived versions and their
         # corresponding metrics.
         versions_url = f"https://zenodo.org/api/records/{record.recid}/versions?page=1&size={page_size}&sort=version"
-        record_versions = requests.get(url=versions_url, timeout=100)
-        _yell_if_missing_hits(record_versions, page_size)
-        versions_metadata = json.dumps(record_versions.json())
+        record_versions_json = fetch_json(versions_url)
+        _yell_if_missing_hits(record_versions_json, page_size)
+        versions_metadata = json.dumps(record_versions_json)
         blob_name = f"zenodo/{date.today().strftime('%Y-%m-%d')}-{record.recid}.json"
         upload_to_bucket(bucket=bucket, blob_name=blob_name, data=versions_metadata)
 
