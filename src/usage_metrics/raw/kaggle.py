@@ -44,16 +44,35 @@ class KaggleExtractor(GCSExtractor):
         blobs = [blob for blob in blobs if blob.name in file_name_prefixes]
         return blobs
 
-    def load_file(self, file_path: Path) -> pd.DataFrame:
+    def load_file(
+        self, context: AssetExecutionContext, file_path: Path
+    ) -> pd.DataFrame:
         """Read in JSON file as dataframe."""
         with Path.open(file_path, "r") as file:
             data = json.load(file)
-            if data["hasErrorMessage"]:
+            if data.get("hasErrorMessage"):
                 # Catch error message contained in Kaggle API JSON response
                 raise AssertionError(f"Data contains error {data['errorMessage']}")
-            df = pd.json_normalize(data["info"])
-            df["metrics_date"] = data["metrics_date"]
+            # The format of the input data changed after a change in the archiving method
+            # for the 9-21-2025 partition.
+            if pd.to_datetime(context.partition_key) < pd.to_datetime("2025-09-21"):
+                df = pd.json_normalize(data["info"])
+                df["metrics_date"] = data["metrics_date"]
+            else:
+                df = pd.json_normalize(data)
             return df
+
+    def extract_logs_into_list(
+        self, context: AssetExecutionContext, file_paths: list[Path]
+    ) -> list[pd.DataFrame]:
+        """Read files into a list of Pandas DataFrames, passing context into load method."""
+        dict_dfs = []
+        for path in file_paths:
+            try:
+                dict_dfs.append(self.load_file(context, path))
+            except pd.errors.EmptyDataError:
+                context.log.warnings(f"{path} is an empty file, couldn't read.")
+        return dict_dfs
 
 
 @asset(
