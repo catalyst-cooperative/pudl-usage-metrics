@@ -68,11 +68,8 @@ class GCSExtractor(ABC):
         """Read in file as dataframe."""
         ...
 
-    def extract(self, context: AssetExecutionContext) -> pd.DataFrame:
-        """Download all logs from GCS bucket.
-
-        If the file already exists locally don't download it.
-        """
+    def get_download_dir(self) -> Path:
+        """Get download directory as path."""
         with TemporaryDirectory() as td:
             # Determine where to save these files
             if os.environ.get("DATA_DIR"):
@@ -81,20 +78,39 @@ class GCSExtractor(ABC):
                     Path.mkdir(download_dir)
             else:
                 download_dir = td
+        return download_dir
 
-            # Download logs from GCS
-            bucket = storage.Client().get_bucket(self.bucket_name)
-            blobs = bucket.list_blobs()
-            blobs = self.filter_blobs(context, blobs)
-            file_paths = self.get_blobs_from_gcs(blobs=blobs, download_dir=download_dir)
+    def download_gcs_blobs(
+        self, context: AssetExecutionContext, download_dir: Path
+    ) -> list[Path]:
+        """Download GCS blobs and return paths to files."""
+        # Download logs from GCS
+        bucket = storage.Client().get_bucket(self.bucket_name)
+        blobs = bucket.list_blobs()
+        blobs = self.filter_blobs(context, blobs)
+        return self.get_blobs_from_gcs(blobs=blobs, download_dir=download_dir)
 
-            # Extract logs into a Pandas DF
-            dict_dfs = []
-            for path in file_paths:
-                try:
-                    dict_dfs.append(self.load_file(path))
-                except pd.errors.EmptyDataError:
-                    context.log.warnings(f"{path} is an empty file, couldn't read.")
-            if dict_dfs:  # If data, return concatenated DF
-                return pd.concat(dict_dfs)
-            return pd.DataFrame()
+    def extract_logs_into_list(
+        self, context: AssetExecutionContext, file_paths: list[Path]
+    ) -> list[pd.DataFrame]:
+        """Read files into a list of Pandas DataFrames."""
+        list_dfs = []
+        for path in file_paths:
+            try:
+                list_dfs.append(self.load_file(path))
+            except pd.errors.EmptyDataError:
+                context.log.warnings(f"{path} is an empty file, couldn't read.")
+        return list_dfs
+
+    def extract(self, context: AssetExecutionContext) -> pd.DataFrame:
+        """Download all logs from GCS bucket.
+
+        If the file already exists locally don't download it.
+        """
+        download_dir = self.get_download_dir()
+        file_paths = self.download_gcs_blobs(context, download_dir)
+        list_dfs = self.extract_logs_into_list(context, file_paths)
+
+        if list_dfs:  # If data, return concatenated DF
+            return pd.concat(list_dfs)
+        return pd.DataFrame()
