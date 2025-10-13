@@ -40,7 +40,7 @@ dev = [
     "black>=22,<26",  # A deterministic code formatter
     "isort>=5,<7",  # Standardized import sorting
     "twine>=3.3,<7.0",  # Used to make releases to PyPI
-    "tox>=4.16,<4.31",  # Python test environment manager
+    "tox>=4.16,<4.32",  # Python test environment manager
 ]
 
 docs = [
