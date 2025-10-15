@@ -55,6 +55,9 @@ class KaggleExtractor(GCSExtractor):
                 raise AssertionError(f"Data contains error {data['errorMessage']}")
             # The format of the input data changed after a change in the archiving method
             # for the 9-21-2025 partition.
+            # Prior to this partition, we had everything nested under the "info" key,
+            # except for metrics_date. In the newer data, there isn't the same
+            # nesting structure and all fields are housed in the top-level.
             if pd.to_datetime(context.partition_key) < pd.to_datetime("2025-09-21"):
                 df = pd.json_normalize(data["info"])
                 df["metrics_date"] = data["metrics_date"]
