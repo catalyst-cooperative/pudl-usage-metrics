@@ -484,10 +484,12 @@ core_kaggle_logs = Table(
     Column(
         "usability_rating",
         Float,
-        comment="The current Kaggle usability rating (out of 10)?",
+        comment="The current Kaggle usability rating (out of 10).",
     ),
     # Metadata on dataset
-    Column("dataset_name", String, comment="The slug of the dataset."),
+    Column(
+        "dataset_name", String, comment="The short-hand name (slug) of the dataset."
+    ),
     Column("owner", String, comment="The owner of the dataset."),
     Column("title", String, comment="The full title of the dataset."),
     Column("subtitle", String, comment="The subtitle of the dataset."),
