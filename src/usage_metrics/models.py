@@ -1169,6 +1169,26 @@ core_eel_hole_previews = Table(
         comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
     ),
     Column(
+        "params_filters_field_name_6",
+        String,
+        comment="The variable on which a user is performing a filter using DuckDB.",
+    ),
+    Column(
+        "params_filters_field_type_6",
+        String,
+        comment="The data type of the variable on which a user is performing a filter using DuckDB.",
+    ),
+    Column(
+        "params_filters_operation_6",
+        String,
+        comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
+    ),
+    Column(
+        "params_filters_value_6",
+        String,
+        comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+    ),
+    Column(
         "session_id",
         String,
         comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
@@ -1333,6 +1353,26 @@ core_eel_hole_downloads = (
         ),
         Column(
             "params_filters_value_5",
+            String,
+            comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        ),
+        Column(
+            "params_filters_field_name_6",
+            String,
+            comment="The variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_field_type_6",
+            String,
+            comment="The data type of the variable on which a user is performing a filter using DuckDB.",
+        ),
+        Column(
+            "params_filters_operation_6",
+            String,
+            comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
+        ),
+        Column(
+            "params_filters_value_6",
             String,
             comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
         ),

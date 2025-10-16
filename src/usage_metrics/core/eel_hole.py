@@ -4,7 +4,7 @@ import datetime
 import json
 import math
 import os
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, get_args
 from urllib.parse import urlsplit
 
 import pandas as pd
@@ -15,6 +15,10 @@ from dagster import (
 )
 from pydantic import BaseModel, BeforeValidator, field_validator, model_validator
 from pydantic.alias_generators import to_camel
+
+ALLOWABLE_EVENT_TYPES = Literal[
+    "search", "hit", "duckdb_preview", "duckdb_csv", "privacy-policy"
+]
 
 
 def json_string_to_list(value: Any):
@@ -76,7 +80,7 @@ class DuckDBParams(BaseModel):
 class JsonPayload(BaseModel):
     """Portion of eel hole logs where payload is returned as a JSON."""
 
-    event: Literal["search", "hit", "duckdb_preview", "duckdb_csv", "privacy-policy"]
+    event: ALLOWABLE_EVENT_TYPES
     timestamp: datetime.datetime
     user_id: str | None = None
     # Fields returned for a 'hit' response
@@ -133,10 +137,9 @@ class EelHoleLogs(BaseModel):
         """Where JSON payload event is a 'loading' message or params badly formatted, drop JSON payload."""
         if isinstance(data["jsonPayload"], dict):  # noqa: SIM102
             if (
-                # If event is a "loading" message
                 (
                     (event := data["jsonPayload"].get("event"))
-                    and "loading datapackage from" in event
+                    and event not in get_args(ALLOWABLE_EVENT_TYPES)
                 )
                 # Or if params are malformed
                 or (

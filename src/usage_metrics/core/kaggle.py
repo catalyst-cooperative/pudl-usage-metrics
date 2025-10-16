@@ -36,6 +36,7 @@ def core_kaggle_logs(
         return raw_kaggle_logs
 
     # Where there is a "nullable" column, drop the corresponding "has" and duplicate column from data
+    # This only exists prior to 09/21/2025.
     nullable_cols = [col for col in raw_kaggle_logs.columns if "Nullable" in col]
     duplicated_cols = [col.replace("Nullable", "") for col in nullable_cols] + [
         "has{}".format((col[0].upper() + col[1:]).replace("Nullable", ""))
@@ -43,14 +44,18 @@ def core_kaggle_logs(
     ]
 
     df = raw_kaggle_logs.drop(columns=duplicated_cols)
+    # Newer data doesn't have the "Nullable" suffix, so we drop this suffix and
+    # then perform the rename to ensure consistency over time.
+    df.columns = df.columns.str.removesuffix("Nullable")
+
     df = df.rename(
         columns={
-            "datasetSlugNullable": "dataset_name",
-            "ownerUserNullable": "owner",
-            "usabilityRatingNullable": "usability_rating",
-            "titleNullable": "title",
-            "subtitleNullable": "subtitle",
-            "descriptionNullable": "description",
+            "datasetSlug": "dataset_name",
+            "ownerUser": "owner",
+            "usabilityRating": "usability_rating",
+            "title": "title",
+            "subtitle": "subtitle",
+            "description": "description",
             "datasetId": "dataset_id",
             "totalViews": "total_views",
             "totalVotes": "total_votes",
@@ -68,9 +73,12 @@ def core_kaggle_logs(
 
     # For now, dump dictionaries and lists into a string
     # We don't need these for metrics and expect them to stay essentially the same over time.
-    df[["data", "keywords", "licenses", "collaborators"]] = df[
-        ["data", "keywords", "licenses", "collaborators"]
-    ].astype(str)
+    to_string_cols = [
+        col
+        for col in ["data", "keywords", "licenses", "collaborators"]
+        if col in df.columns
+    ]
+    df[to_string_cols] = df[to_string_cols].astype(str)
 
     context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
