@@ -111,6 +111,7 @@ class GCSExtractor(ABC):
         file_paths = self.download_gcs_blobs(context, download_dir)
         list_dfs = self.extract_logs_into_list(context, file_paths)
 
+        df = pd.DataFrame()
         if list_dfs:  # If data, return concatenated DF
-            return pd.concat(list_dfs)
-        return pd.DataFrame()
+            df = pd.concat(list_dfs)
+        return df
