@@ -1,9 +1,9 @@
 """Generic extraction functionality for data from GCS."""
 
 import os
+import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pandas as pd
 from dagster import (
@@ -76,7 +76,7 @@ class GCSExtractor(ABC):
             if not Path.exists(download_dir):
                 Path.mkdir(download_dir)
         else:
-            td = TemporaryDirectory()
+            td = tempfile.mkdtemp()
             download_dir = Path(td.name)
         return download_dir
 
