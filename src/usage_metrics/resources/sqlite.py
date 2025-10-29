@@ -22,18 +22,21 @@ class SQLiteIOManager(SQLIOManager):
         Use sqlite_manager to manage path.
 
         Args:
-            db_path: Path to the sqlite database. Default is None,
-                which uses DATA_DIR/data/usage_metrics.db
+            db_path: Path to the sqlite database.
         """
-        if not db_path:
-            data_dir = Path(os.environ.get("DATA_DIR"), "data")
-            db_path = data_dir / "usage_metrics.db"
+        if db_path is None:
+            db_path = os.environ.get("DB_DIR")
+            if db_path is None:
+                raise AssertionError(
+                    "Need to set a DB_DIR environment variable to the folder where you want to save the SQLite database."
+                )
+        db_path = Path(db_path) / "usage_metrics.db"
         logger.info(f"Initializing SQLite IO Manager from: {db_path}")
-        engine = sa.create_engine("sqlite:///" + str(db_path))
         if not db_path.exists():
             db_path.parent.mkdir(exist_ok=True)
             db_path.touch()
 
+        engine = sa.create_engine("sqlite:///" + str(db_path))
         self.engine = engine
         self.datetime_column = "DATETIME"
 
@@ -42,7 +45,7 @@ class SQLiteIOManager(SQLIOManager):
     config_schema={
         "db_path": Field(
             Noneable(str),
-            description="Path to the sqlite database.",
+            description="Path to the folder containing the SQLite database. Defaults to $DB_DIR if None.",
             default_value=None,
         ),
     }

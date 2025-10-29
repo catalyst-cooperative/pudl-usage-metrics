@@ -42,7 +42,8 @@ To set these environment variables, run these commands:
 conda activate pudl-usage-metrics
 conda env config vars set IPINFO_TOKEN="{your_api_key_here}"
 conda env config vars set DAGSTER_HOME="$(pwd)/dagster_home/"
-conda env config vars set DATA_DIR="$(pwd)/data/"
+conda env config vars set DB_DIR="$(pwd)/data/"
+conda env config vars set DATA_DIR="$(pwd)/data/" # Optional, will save raw input data locally
 conda env config vars set KAGGLE_USER="{your_kaggle_username_here}" # If setting manually
 conda env config vars set KAGGLE_KEY="{your_kaggle_api_key_here}" # If setting manually
 conda activate pudl-usage-metrics
