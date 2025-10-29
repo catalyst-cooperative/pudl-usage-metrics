@@ -54,7 +54,7 @@ def core_zenodo_logs(
             "stats.version_views": "version_views",
             "stats.version_unique_views": "version_unique_views",
             "swh.swhid": "software_hash_id_legacy",
-            "swh": "software_hash",  # Updated in mid October 2025
+            "swh": "software_hash_id",  # Updated in mid October 2025
         }
     )
     # Drop columns
