@@ -77,7 +77,7 @@ class GCSExtractor(ABC):
                 Path.mkdir(download_dir)
         else:
             td = TemporaryDirectory()
-            download_dir = td
+            download_dir = Path(td.name)
         return download_dir
 
     def download_gcs_blobs(
