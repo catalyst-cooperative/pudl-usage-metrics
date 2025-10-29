@@ -53,12 +53,14 @@ def core_zenodo_logs(
             "stats.version_unique_downloads": "version_unique_downloads",
             "stats.version_views": "version_views",
             "stats.version_unique_views": "version_unique_views",
-            "swh.swhid": "software_hash_id",
-            "swh": "software_hash_id",  # Updated in mid October 2025
+            "swh.swhid": "software_hash_id_legacy",
+            "swh": "software_hash",  # Updated in mid October 2025
         }
     )
     # Drop columns
-    df = df.drop(columns=["files", "owners", "revision"]).drop(
+    df = df.drop(
+        columns=["files", "owners", "revision", "software_hash_id_legacy"]
+    ).drop(
         columns=[col for col in df.columns if col.startswith(("metadata.", "links."))]
     )
     # Column names vary by Zenodo archive type, so we drop any remaining metadata and link columns
