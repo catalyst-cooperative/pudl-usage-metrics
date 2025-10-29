@@ -34,7 +34,7 @@ target_metadata = usage_metrics_metadata
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 dev_envr = os.getenv("METRICS_PROD_ENV", "local")
-engines = {"prod": PostgresIOManager().engine, "local": SQLiteIOManager().engine}
+io_managers = {"prod": PostgresIOManager, "local": SQLiteIOManager}
 
 logger.info(f"Configuring database for {dev_envr} database")
 
@@ -51,7 +51,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = engines[dev_envr].url
+    engine = io_managers[dev_envr]().engine  # Only instantiate the desired io manager
+    url = engine.url
     logger.info("running offline migration")
     context.configure(
         url=url,
@@ -72,7 +73,8 @@ def run_migrations_online() -> None:
 
     """
     logger.info("running online migration")
-    with engines[dev_envr].connect() as connection:
+    engine = io_managers[dev_envr]().engine  # Only instantiate the desired io manager
+    with engine.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
