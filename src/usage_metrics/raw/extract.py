@@ -1,9 +1,9 @@
 """Generic extraction functionality for data from GCS."""
 
 import os
+import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pandas as pd
 from dagster import (
@@ -70,14 +70,14 @@ class GCSExtractor(ABC):
 
     def get_download_dir(self) -> Path:
         """Get download directory as path."""
-        with TemporaryDirectory() as td:
-            # Determine where to save these files
-            if os.environ.get("DATA_DIR"):
-                download_dir = Path(os.environ.get("DATA_DIR"), f"{self.dataset_name}/")
-                if not Path.exists(download_dir):
-                    Path.mkdir(download_dir)
-            else:
-                download_dir = td
+        # Determine where to save these files
+        if os.environ.get("DATA_DIR"):
+            download_dir = Path(os.environ.get("DATA_DIR"), f"{self.dataset_name}/")
+            if not Path.exists(download_dir):
+                Path.mkdir(download_dir)
+        else:
+            td = tempfile.mkdtemp()
+            download_dir = Path(td)
         return download_dir
 
     def download_gcs_blobs(

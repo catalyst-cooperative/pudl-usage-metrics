@@ -53,12 +53,29 @@ def core_zenodo_logs(
             "stats.version_unique_downloads": "version_unique_downloads",
             "stats.version_views": "version_views",
             "stats.version_unique_views": "version_unique_views",
-            "swh.swhid": "software_hash_id",
+            "swh.swhid": "software_hash_id_legacy",
             "swh": "software_hash_id",  # Updated in mid October 2025
         }
     )
+
+    # De-duplicate software_hash_id columns
+    # Older data will only have the legacy column, newer data should only have the
+    # software_hash_id field, and data during the transition may have both.
+    if "software_hash_id" in df.columns:
+        if "software_hash_id_legacy" in df.columns:
+            # Handle overlapping data
+            df["software_hash_id"] = df["software_hash_id"].fillna(
+                df["software_hash_id_legacy"]
+            )
+    else:
+        if "software_hash_id_legacy" in df.columns:
+            # Handle older data
+            df["software_hash_id"] = df["software_hash_id_legacy"]
+
     # Drop columns
-    df = df.drop(columns=["files", "owners", "revision"]).drop(
+    df = df.drop(
+        columns=["files", "owners", "revision", "software_hash_id_legacy"]
+    ).drop(
         columns=[col for col in df.columns if col.startswith(("metadata.", "links."))]
     )
     # Column names vary by Zenodo archive type, so we drop any remaining metadata and link columns
