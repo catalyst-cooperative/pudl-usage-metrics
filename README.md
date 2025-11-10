@@ -30,7 +30,7 @@ mamba activate pudl-usage-metrics
 
 The ETL uses [ipinfo](https://ipinfo.io/) to geocode ip addresses. Grab the [ipinfo token](https://ipinfo.io/account/token) by logging in using the credentials saved in our [Bitwarden Shared Inframundo Logins collection](https://vault.bitwarden.com/#/vault?collectionId=b53a14cf-48bd-4b53-a59e-b29600217e8b&itemId=50afdcf5-8cec-42a3-b366-b296013ba389&action=view).  `IPINFO_TOKEN` environment variable.
 
-If you want to take advantage of caching raw logs, rather than redownloading them for each run, you can set the optional ``DATA_DIR`` environment variable. If this is not set, the script will save files to a temporary directory by default.
+The ``DATA_DIR`` environment variable is required for local development. In this directory, the script will cache input data and save the processed database.
 
 Dagster stores run logs and caches in a directory stored in the `DAGSTER_HOME` environment variable. The `usage_metrics/dagster_home/dagster.yaml` file contains configuration for the dagster instance. **Note:** The `usage_metrics/dagster_home/storage` directory could grow to become a couple GBs because all op outputs for every run are stored there. You can read more about the dagster_home directory in the [dagster docs](https://docs.dagster.io/deployment/dagster-instance#default-local-behavior).
 
@@ -42,8 +42,7 @@ To set these environment variables, run these commands:
 conda activate pudl-usage-metrics
 conda env config vars set IPINFO_TOKEN="{your_api_key_here}"
 conda env config vars set DAGSTER_HOME="$(pwd)/dagster_home/"
-conda env config vars set DB_DIR="$(pwd)/data/"
-conda env config vars set DATA_DIR="$(pwd)/data/" # Optional, will save raw input data locally
+conda env config vars set DATA_DIR="$(pwd)/data/" # Required for local development. Input and output data will be saved here.
 conda env config vars set KAGGLE_USER="{your_kaggle_username_here}" # If setting manually
 conda env config vars set KAGGLE_KEY="{your_kaggle_api_key_here}" # If setting manually
 conda activate pudl-usage-metrics

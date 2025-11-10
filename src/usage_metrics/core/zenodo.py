@@ -57,6 +57,17 @@ def core_zenodo_logs(
             "swh": "software_hash_id",  # Updated in mid October 2025
         }
     )
+
+    # De-duplicate software_hash_id columns
+    # Older data will only have the legacy column, newer data should only have the
+    # software_hash_id field, and data during the transition may have both.
+    if "software_hash_id" not in df.columns:  # Handle older data
+        df["software_hash_id"] = df["software_hash_id_legacy"]
+    elif "software_hash_id_legacy" in df.columns:  # Handle overlapping data
+        df["software_hash_id"] = df["software_hash_id"].fillna(
+            "software_hash_id_legacy"
+        )
+
     # Drop columns
     df = df.drop(
         columns=["files", "owners", "revision", "software_hash_id_legacy"]

@@ -25,10 +25,10 @@ class SQLiteIOManager(SQLIOManager):
             db_path: Path to the sqlite database.
         """
         if db_path is None:
-            db_path = os.environ.get("DB_DIR")
+            db_path = os.environ.get("DATA_DIR")
             if db_path is None:
                 raise AssertionError(
-                    "Need to set a DB_DIR environment variable to the folder where you want to save the SQLite database."
+                    "Need to set a DATA_DIR environment variable to the folder where you want to save the SQLite database."
                 )
         db_path = Path(db_path) / "usage_metrics.db"
         logger.info(f"Initializing SQLite IO Manager from: {db_path}")
@@ -45,7 +45,7 @@ class SQLiteIOManager(SQLIOManager):
     config_schema={
         "db_path": Field(
             Noneable(str),
-            description="Path to the folder containing the SQLite database. Defaults to $DB_DIR if None.",
+            description="Path to the folder containing the SQLite database. Defaults to $DATA_DIR if None.",
             default_value=None,
         ),
     }
