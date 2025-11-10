@@ -99,7 +99,7 @@ class GCSExtractor(ABC):
             try:
                 list_dfs.append(self.load_file(path))
             except pd.errors.EmptyDataError:
-                context.log.warnings(f"{path} is an empty file, couldn't read.")
+                context.log.warning(f"{path} is an empty file, couldn't read.")
         return list_dfs
 
     def extract(self, context: AssetExecutionContext) -> pd.DataFrame:
