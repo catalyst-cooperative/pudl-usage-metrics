@@ -33,7 +33,8 @@ def get_kaggle_dataset_metadata() -> str:
                 file
             )  # Kaggle downloads to the current working directory.
 
-    metadata = json.loads(metadata_str)  # Fix bad formatting in original JSON file
+    if isinstance(metadata_str, str):
+        metadata = json.loads(metadata_str)  # Fix bad formatting in original JSON file
     metadata.update({"metrics_date": date.today().strftime("%Y-%m-%d")})
     return json.dumps(metadata)
 
