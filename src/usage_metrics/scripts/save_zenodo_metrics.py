@@ -72,7 +72,7 @@ def save_zenodo_logs() -> pd.DataFrame():
     client = storage.Client()
     bucket = client.get_bucket(bucket_name)
 
-    page_size = 100
+    page_size = 25
     community_url = f"https://zenodo.org/api/communities/14454015-63f1-4f05-80fd-1a9b07593c9e/records?page=1&size={page_size}&sort=newest"
 
     # First, get metadata on all the datasets in the Catalyst Cooperative community
