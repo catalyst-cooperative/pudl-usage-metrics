@@ -37,9 +37,10 @@ def get_s3_bucket_objects_detailed(bucket_name: str) -> pd.DataFrame:
 
     # Extract object name without bucket prefix
     df["object_name"] = df["name"].str.replace(f"{bucket_name}/", "", 1)
+    df["metrics_date"] = date.today().strftime("%Y-%m-%d")
 
     return (
-        df[["object_name", "size"]]
+        df[["object_name", "size", "metrics_date"]]
         .rename(columns={"size": "size_bytes"})
         .reset_index(drop=True)
     )
