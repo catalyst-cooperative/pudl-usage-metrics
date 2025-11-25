@@ -74,6 +74,14 @@ jobs:
         run: |
           python src/usage_metrics/scripts/save_zenodo_metrics.py
 
+      - shell: bash -l {0}
+        name: Save S3 File Sizes
+        id: s3
+        # Run even if prior metric saving fails
+        if: "!cancelled()"
+        run: |
+          python src/usage_metrics/scripts/save_s3_file_size_metrics.py
+
       - name: Inform the Codemonkeys
         uses: 8398a7/action-slack@v3
         with:
