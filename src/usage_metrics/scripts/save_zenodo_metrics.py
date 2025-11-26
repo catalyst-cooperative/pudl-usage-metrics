@@ -52,7 +52,11 @@ def save_zenodo_logs() -> pd.DataFrame():
     """
 
     def get_all_records(url: str, page: int = 1, page_size: int = 25):
-        """ Iterate through pages and get all records."""
+        """Iterate through pages and get all records.
+
+        Also return the JSON itself, which is used to maintain the original format
+        of data in cases where we are querying more than one page.
+        """
         all_dataset_records = []
         while True:
             logger.debug(f"Archiving page {page}")
@@ -63,22 +67,11 @@ def save_zenodo_logs() -> pd.DataFrame():
             all_dataset_records += dataset_records
 
             actual_total = records_json["hits"]["total"]
-            if page_size * page <= actual_total:
-                page += 1 # Increment page
+            if page_size * page < actual_total:
+                page += 1  # Increment page
             else:
-                break # Exit loop when all records extracted
-        return all_dataset_records
-
-    def _yell_if_missing_hits(request_json, page_size: int):
-        """Raise an error if we are not getting the correct amount of API hits."""
-        hits = request_json["hits"]["hits"]
-        if len(hits) != (actual_total := request_json["hits"]["total"]):
-            raise AssertionError(
-                f"The API request says there is {actual_total} total records but we got "
-                f"{len(hits)}! The Zenodo API restricts the number of records to 25 without "
-                f"a size, so we are asking for {page_size} records in the page size, "
-                f"but there are {actual_total}. Consider increasing the page_size."
-            )
+                break  # Exit loop when all records extracted
+        return all_dataset_records, records_json
 
     @retry_request(retries=3, delay=1, backoff=2)
     def fetch_json(url):
@@ -92,7 +85,9 @@ def save_zenodo_logs() -> pd.DataFrame():
 
     # First, get metadata on all the datasets in the Catalyst Cooperative community
     # If a dataset is not added to Cat Community, it will not show up here.
-    all_datasets = get_all_records(url = "https://zenodo.org/api/communities/14454015-63f1-4f05-80fd-1a9b07593c9e/records")
+    all_datasets, _ = get_all_records(
+        url="https://zenodo.org/api/communities/14454015-63f1-4f05-80fd-1a9b07593c9e/records"
+    )
     all_dataset_records = [CommunityMetadata(**record) for record in all_datasets]
 
     for record in all_dataset_records:
@@ -100,8 +95,10 @@ def save_zenodo_logs() -> pd.DataFrame():
         # For each dataset in the community, get all archived versions and their
         # corresponding metrics.
         versions_url = f"https://zenodo.org/api/records/{record.recid}/versions"
-        all_versions = get_all_records(url = versions_url)
-        breakpoint()
+        all_versions, record_versions_json = get_all_records(url=versions_url)
+        record_versions_json["hits"]["hits"] = (
+            all_versions  # Add all versions into one JSON
+        )
         versions_metadata = json.dumps(record_versions_json)
         blob_name = f"zenodo/{date.today().strftime('%Y-%m-%d')}-{record.recid}.json"
         upload_to_bucket(bucket=bucket, blob_name=blob_name, data=versions_metadata)
