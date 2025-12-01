@@ -46,7 +46,7 @@ dev = [
 
 docs = [
     "doc8>=0.9,<2.1",  # Ensures clean documentation formatting
-    "sphinx>=4,<9",  # The default Python documentation redering engine
+    "sphinx>=4,<10",  # The default Python documentation redering engine
     "sphinx-autoapi>=1.8,<4",  # Generates documentation from docstrings
     "sphinx-issues>=1.2,<6.0",  # Allows references to GitHub issues
     "sphinx-rtd-dark-mode>=1.2,<2",  # Allow user to toggle light/dark mode
