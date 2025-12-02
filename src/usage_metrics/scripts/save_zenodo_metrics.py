@@ -54,6 +54,9 @@ def save_zenodo_logs() -> pd.DataFrame():
     def get_all_records(url: str, page: int = 1, page_size: int = 25):
         """Iterate through pages and get all records.
 
+        Zenodo requires authentication for API requests over a page size of 25.
+        Instead of navigating authentication, this function grabs all the records
+        by iterating through several pages at the page size limit.
         Also return the JSON itself, which is used to maintain the original format
         of data in cases where we are querying more than one page.
         """
