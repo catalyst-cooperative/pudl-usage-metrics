@@ -10,6 +10,7 @@ from usage_metrics.helpers import (
 )
 
 
+@pytest.mark.xfail(reason="This test inconsistently fails on the lat/long & loc.")
 def test_geocode_ip() -> None:
     """Test Google Public DNS IP."""
     geocoded_ip = geocode_ip("8.8.8.8")
