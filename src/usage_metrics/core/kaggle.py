@@ -48,6 +48,11 @@ def core_kaggle_logs(
     # then perform the rename to ensure consistency over time.
     df.columns = df.columns.str.removesuffix("Nullable")
 
+    # Starting with partition:2025-11-23 the column names start
+    # with "info.", so we drop that and then perform the rename to ensure consistency
+    # over time.
+    df.columns = df.columns.str.removeprefix("info.")
+
     df = df.rename(
         columns={
             "datasetSlug": "dataset_name",
