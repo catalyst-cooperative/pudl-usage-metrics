@@ -954,6 +954,11 @@ core_eel_hole_searches = Table(
         comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
     ),
     Column(
+        "user_domain",
+        String,
+        comment="User's email domain - the part of a user's email address that follows the '@' symbol.",
+    ),
+    Column(
         "timestamp",
         DateTime,
         comment="The time the event described by the log entry occurred.",
@@ -1022,6 +1027,11 @@ core_eel_hole_previews = Table(
         "user_id",
         String,
         comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+    ),
+    Column(
+        "user_domain",
+        String,
+        comment="User's email domain - the part of a user's email address that follows the '@' symbol.",
     ),
     Column(
         "timestamp",
@@ -1212,6 +1222,11 @@ core_eel_hole_downloads = (
             comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
         ),
         Column(
+            "user_domain",
+            String,
+            comment="User's email domain - the part of a user's email address that follows the '@' symbol.",
+        ),
+        Column(
             "timestamp",
             DateTime,
             comment="The time the event described by the log entry occurred.",
@@ -1397,6 +1412,11 @@ core_eel_hole_user_settings_updates = Table(
         "user_id",
         String,
         comment="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+    ),
+    Column(
+        "user_domain",
+        String,
+        comment="User's email domain - the part of a user's email address that follows the '@' symbol.",
     ),
     Column(
         "timestamp",
