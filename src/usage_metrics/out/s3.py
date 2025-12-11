@@ -22,6 +22,7 @@ REQUESTERS_IGNORE = [
 def out_s3_logs(
     context: AssetExecutionContext,
     core_s3_logs: pd.DataFrame,
+    core_s3_file_sizes: pd.DataFrame,
 ) -> pd.DataFrame:
     """Output daily S3 logs.
 
@@ -44,6 +45,28 @@ def out_s3_logs(
     # Add columns for tables and versions
     out[["version", "table"]] = out["key"].str.split("/", expand=True, n=1)
     out["version"] = out["version"].replace(["-", ""], pd.NA)
+
+    # Categorize usage types
+    # TODO: Only after the eel-hole bucket was created!!
+
+    # First, default to "other_s3" - these are direct S3 queries.
+    out["usage_type"] = "other_s3"
+    # If the data has a referer type of data.catalyst.coop, it is definitely coming
+    # from the eel-hole, but it's not definitively a link click or a DuckDB search.
+    # We label all data.catalyst.coop referers as eel_hole_link, then overwrite
+    # All data types where the data is being queried from the eel hole bucket as
+    # eel_hole_duckdb as these are definitively preview/download queries.
+    out["usage_type"] = out["usage_type"].mask(
+        out.referer.str.startswith("https://data.catalyst.coop/"), "eel_hole_link"
+    )
+    out["usage_type"] = out["usage_type"].mask(
+        out.version == "eel-hole", "eel_hole_duckdb"
+    )
+    # Finally, we label all queries originating from our docs.
+    out["usage_type"] = out["usage_type"].mask(
+        out.referer.str.contains("pudl.readthedocs.io|docs.catalyst.coop", regex=True),
+        "docs_link",
+    )
 
     # Drop columns
     out = out.drop(
