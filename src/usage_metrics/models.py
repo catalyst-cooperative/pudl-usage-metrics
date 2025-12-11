@@ -113,6 +113,11 @@ core_s3_logs = Table(
         Float,
         comment="The total size of the object in question in megabytes.",
     ),
+    Column(
+        "normalized_file_downloads",
+        Float,
+        comment="The proportion of the file that is downloaded (0 to 1).",
+    ),
     # IP location
     Column(
         "remote_ip",
@@ -284,6 +289,13 @@ out_s3_logs = Table(
     ),
     Column("table", String),
     Column("version", String),
+    Column(
+        "usage_type",
+        String,
+        comment=(
+            "The type of usage activity. Distinguishes between requests made through DuckDB via the eel hole (eel_hole_duckdb), by clicking the download Parquet button in the eel hole (eel_hole_link), by clicking a download link from the docs, or other direct S3 activity."
+        ),
+    ),
     # IP location
     Column(
         "remote_ip",
@@ -380,6 +392,11 @@ out_s3_logs = Table(
         "megabytes_sent",
         Float,
         comment="The total size of the object in question in megabytes.",
+    ),
+    Column(
+        "normalized_file_downloads",
+        Float,
+        comment="The proportion of the file that is downloaded (0 to 1).",
     ),
     Column(
         "cipher_suite",
