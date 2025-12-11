@@ -83,6 +83,7 @@ class JsonPayload(BaseModel):
     event: ALLOWABLE_EVENT_TYPES
     timestamp: datetime.datetime
     user_id: str | None = None
+    user_domain: str | None = None
     # Fields returned for a 'hit' response
     name: str | None = None
     query: str | None = None
@@ -340,7 +341,16 @@ def core_eel_hole_searches(
 
     search_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "search"]
     search_df = search_df.loc[
-        :, ["insert_id", "user_id", "timestamp", "query", "url", "session_id"]
+        :,
+        [
+            "insert_id",
+            "user_id",
+            "user_domain",
+            "timestamp",
+            "query",
+            "url",
+            "session_id",
+        ],
     ]
 
     return search_df.reset_index(drop=True)
@@ -387,7 +397,7 @@ def core_eel_hole_previews(
     preview_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_preview"]
     preview_df = preview_df.loc[
         :,
-        ["insert_id", "user_id", "timestamp", "url", "session_id"]
+        ["insert_id", "user_id", "user_domain", "timestamp", "url", "session_id"]
         + [col for col in preview_df.columns if col.startswith("params_")],
     ]
 
@@ -413,7 +423,7 @@ def core_eel_hole_downloads(
     download_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_csv"]
     download_df = download_df.loc[
         :,
-        ["insert_id", "user_id", "timestamp", "url", "session_id"]
+        ["insert_id", "user_id", "user_domain", "timestamp", "url", "session_id"]
         + [col for col in download_df.columns if col.startswith("params_")],
     ]
 
@@ -439,7 +449,15 @@ def core_eel_hole_user_settings_updates(
     settings_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "privacy-policy"]
     settings_df = settings_df.loc[
         :,
-        ["insert_id", "user_id", "timestamp", "accepted", "newsletter", "outreach"],
+        [
+            "insert_id",
+            "user_id",
+            "user_domain",
+            "timestamp",
+            "accepted",
+            "newsletter",
+            "outreach",
+        ],
     ]
 
     # If user_id is none, there shouldn't really be a log here.
