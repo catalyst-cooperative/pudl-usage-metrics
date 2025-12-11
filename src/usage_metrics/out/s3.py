@@ -46,26 +46,30 @@ def out_s3_logs(
     out["version"] = out["version"].replace(["-", ""], pd.NA)
 
     # Categorize usage types
-    # TODO: Only after the eel-hole bucket was created!!
-
-    # First, default to "other_s3" - these are direct S3 queries.
-    out["usage_type"] = "other_s3"
-    # If the data has a referer type of data.catalyst.coop, it is definitely coming
-    # from the eel-hole, but it's not definitively a link click or a DuckDB search.
-    # We label all data.catalyst.coop referers as eel_hole_link, then overwrite
-    # All data types where the data is being queried from the eel hole bucket as
-    # eel_hole_duckdb as these are definitively preview/download queries.
-    out["usage_type"] = out["usage_type"].mask(
-        out.referer.str.startswith("https://data.catalyst.coop/"), "eel_hole_link"
-    )
-    out["usage_type"] = out["usage_type"].mask(
-        out.version == "eel-hole", "eel_hole_duckdb"
-    )
-    # Finally, we label all queries originating from our docs.
-    out["usage_type"] = out["usage_type"].mask(
-        out.referer.str.contains("pudl.readthedocs.io|docs.catalyst.coop", regex=True),
-        "docs_link",
-    )
+    # Only after the eel-hole bucket was created on Nov 24th.
+    if pd.to_datetime(context.partition_key) >= pd.to_datetime("2025-11-24"):
+        # First, default to "other_s3" - these are direct S3 queries.
+        out["usage_type"] = "other_s3"
+        # If the data has a referer type of data.catalyst.coop, it is definitely coming
+        # from the eel-hole, but it's not definitively a link click or a DuckDB search.
+        # We label all data.catalyst.coop referers as eel_hole_link, then overwrite
+        # All data types where the data is being queried from the eel hole bucket as
+        # eel_hole_duckdb as these are definitively preview/download queries.
+        out["usage_type"] = out["usage_type"].mask(
+            out.referer.str.startswith("https://data.catalyst.coop/"), "eel_hole_link"
+        )
+        out["usage_type"] = out["usage_type"].mask(
+            out.version == "eel-hole", "eel_hole_duckdb"
+        )
+        # Finally, we label all queries originating from our docs.
+        out["usage_type"] = out["usage_type"].mask(
+            out.referer.str.contains(
+                "pudl.readthedocs.io|docs.catalyst.coop", regex=True
+            ),
+            "docs_link",
+        )
+    else:
+        out["usage_type"] = pd.NA
 
     # Drop columns
     out = out.drop(
