@@ -1,7 +1,7 @@
 """Add normalized downloads and categorize S3 use type
 
 Revision ID: 125d095ac7e2
-Revises: a9524eefb534
+Revises: 18aca676b08b
 Create Date: 2025-12-11 15:35:03.348096
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = '125d095ac7e2'
-down_revision: Union[str, None] = 'a9524eefb534'
+down_revision: Union[str, None] = '18aca676b08b'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
