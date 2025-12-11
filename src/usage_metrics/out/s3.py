@@ -22,7 +22,6 @@ REQUESTERS_IGNORE = [
 def out_s3_logs(
     context: AssetExecutionContext,
     core_s3_logs: pd.DataFrame,
-    core_s3_file_sizes: pd.DataFrame,
 ) -> pd.DataFrame:
     """Output daily S3 logs.
 

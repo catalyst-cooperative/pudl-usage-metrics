@@ -104,7 +104,7 @@ def core_s3_logs(
 
     # Normalize file download count
     geocoded_df["normalized_file_downloads"] = (
-        geocoded_df["megabytes_sent"] / geocoded_df["object_size"]
+        geocoded_df["bytes_sent"] / geocoded_df["object_size"]
     )
 
     # Convert bytes to megabytes
