@@ -69,7 +69,8 @@ def out_s3_logs(
             "docs_link",
         )
     else:
-        out["usage_type"] = pd.NA
+        # Before this date, lump usage into one category
+        out["usage_type"] = "all"
 
     # Drop columns
     out = out.drop(
