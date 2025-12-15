@@ -102,6 +102,11 @@ def core_s3_logs(
     for field in numeric_fields:
         geocoded_df[field] = pd.to_numeric(geocoded_df[field], errors="coerce")
 
+    # Normalize file download count
+    geocoded_df["normalized_file_downloads"] = (
+        geocoded_df["bytes_sent"] / geocoded_df["object_size"]
+    )
+
     # Convert bytes to megabytes
     geocoded_df["bytes_sent"] = geocoded_df["bytes_sent"] / 1000000
     geocoded_df = geocoded_df.rename(columns={"bytes_sent": "megabytes_sent"})
