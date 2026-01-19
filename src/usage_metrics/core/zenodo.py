@@ -153,6 +153,13 @@ def core_zenodo_logs(
         "4739559": "csv_conf_2021_pudl",
         "5348395": "hourly_demand_by_state",
         "4127054": "epacems_old",
+        "18036225": "nrelcambium2024",
+        "14907943": "nrelcambium2023",
+        "14920259": "nrelcambium2022",
+        "14920247": "nrelcambium2021",
+        "14907941": "nrelcambium2020",
+        "18248545": "rus7",
+        "18251901": "ferceqr_metadata",
     }
 
     missed_mapping = df[
