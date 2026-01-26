@@ -159,6 +159,7 @@ def core_zenodo_logs(
         "14920246": "nrelcambium2021",
         "14907940": "nrelcambium2020",
         "18248545": "rus7",
+        "18315222": "rus12",
         "18251901": "ferceqr_metadata",
     }
 
