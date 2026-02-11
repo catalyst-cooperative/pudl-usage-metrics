@@ -74,7 +74,7 @@ class GCSExtractor(ABC):
         if os.environ.get("DATA_DIR"):
             download_dir = Path(os.environ.get("DATA_DIR"), f"{self.dataset_name}/")
             if not Path.exists(download_dir):
-                Path.mkdir(download_dir)
+                Path.mkdir(download_dir, parents=True, exist_ok=True)
         else:
             td = tempfile.mkdtemp()
             download_dir = Path(td)
