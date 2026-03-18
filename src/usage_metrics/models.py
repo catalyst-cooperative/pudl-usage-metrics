@@ -667,6 +667,9 @@ core_github_forks = Table(
     Column("has_wiki", Boolean, comment="Does the repository have a wiki?"),
     Column("has_pages", Boolean, comment="Does the repository have pages?"),
     Column("has_discussions", Boolean, comment="Does the repository have discussions?"),
+    Column(
+        "has_pull_requests", Boolean, comment="Does the repository have pull requests?"
+    ),
     Column("forks_count", Integer, comment="Count of forks of the forked repository."),
     Column("archived", Boolean, comment="Is this repository archived?"),
     Column("disabled", Boolean, comment="Is this repository disabled?"),
