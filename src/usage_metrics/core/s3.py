@@ -68,12 +68,11 @@ def core_s3_logs(
     # We don't care about this column and don't persist to DB.
     if pd.to_datetime(context.partition_key) > pd.to_datetime("2026-02-15"):
         raw_s3_logs.columns = base_columns + ["aws_region"]
+        raw_s3_logs = raw_s3_logs.drop(columns=["aws_region"])
 
     # Combine time and timezone columns
     raw_s3_logs.time = raw_s3_logs.time + " " + raw_s3_logs.timezone
-    raw_s3_logs = raw_s3_logs.drop(
-        columns=["timezone", "aws_region"]
-    )  # Also drop aws_region
+    raw_s3_logs = raw_s3_logs.drop(columns=["timezone"])
 
     # Drop S3 lifecycle transitions
     raw_s3_logs = raw_s3_logs.loc[raw_s3_logs.operation != "S3.TRANSITION_INT.OBJECT"]
