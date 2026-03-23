@@ -31,7 +31,7 @@ def core_s3_logs(
         context.log.warn(f"No data found for the week of {context.partition_key}")
         return raw_s3_logs
     # Name columns
-    raw_s3_logs.columns = [
+    base_columns = [
         "bucket_owner",
         "bucket",
         "time",
@@ -60,6 +60,14 @@ def core_s3_logs(
         "access_point_arn",
         "acl_required",
     ]
+
+    # In late February 2026, AWS started tracking AWS region.
+    # We don't care about this column and don't persist to DB.
+    if pd.to_datetime(context.partition_key) <= pd.to_datetime("2026-02-15"):
+        raw_s3_logs.columns = base_columns
+    else:
+        raw_s3_logs.columns = base_columns + ["aws_region"]
+        raw_s3_logs = raw_s3_logs.drop(columns=["aws_region"])
 
     # Combine time and timezone columns
     raw_s3_logs.time = raw_s3_logs.time + " " + raw_s3_logs.timezone
