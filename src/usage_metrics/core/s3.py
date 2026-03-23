@@ -61,12 +61,11 @@ def core_s3_logs(
         "acl_required",
     ]
 
-    if pd.to_datetime(context.partition_key) <= pd.to_datetime("2026-02-15"):
-        raw_s3_logs.columns = base_columns
-
     # In late February 2026, AWS started tracking AWS region.
     # We don't care about this column and don't persist to DB.
-    if pd.to_datetime(context.partition_key) > pd.to_datetime("2026-02-15"):
+    if pd.to_datetime(context.partition_key) <= pd.to_datetime("2026-02-15"):
+        raw_s3_logs.columns = base_columns
+    else:
         raw_s3_logs.columns = base_columns + ["aws_region"]
         raw_s3_logs = raw_s3_logs.drop(columns=["aws_region"])
 
