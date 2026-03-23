@@ -18,6 +18,10 @@ from dagster import (
 )
 
 import usage_metrics
+from usage_metrics.resources.parquet_io_manager import (
+    local_parquet_manager,
+    s3_parquet_manager,
+)
 from usage_metrics.resources.postgres import postgres_manager
 from usage_metrics.resources.sqlite import sqlite_manager
 
