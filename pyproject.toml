@@ -4,24 +4,9 @@ version = "0.1.0"
 authors = [{name = "PUDL", email = "pudl@catalyst.coop"}]
 requires-python = ">=3.12,<3.13"
 
-dependencies = [
-    "pandas>=2.2,<3.1",
-    "sqlalchemy>=2",
-    "dagster>=1.7.15, <1.12.23",
-    "dagster-webserver>=1.7.15,<1.13",
-    "pandas-gbq>=0.23.1",
-    "pydata-google-auth>=1.8.2",
-    "jupyterlab>=4.2.3",
-    "psycopg2-binary>=2.9.9",
-    "ipinfo>=5.0.1",
-    "joblib>=1.4.2",
-    "matplotlib>=3.9.0",
-    "pg8000>=1.31.1",
-    "cloud-sql-python-connector[pg8000]>=1.11.0",
-    "google-cloud-storage>=2.17",
-    "kaggle>=1.6.3",
-    "s3fs>=2025.10.0"
-    ]
+# managed by pixi; see tool.pixi.dependencies below
+# cloud-sql-python-connector is configured here because we need extras [pg8000].
+dependencies = ["cloud-sql-python-connector[pg8000]>=1.11.0"]
 
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -35,45 +20,51 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
-
-[project.optional-dependencies]
-dev = [
-    "black>=22,<27",  # A deterministic code formatter
-    "isort>=5,<9",  # Standardized import sorting
-    "twine>=3.3,<7.0",  # Used to make releases to PyPI
-    "tox>=4.16,<4.53",  # Python test environment manager
-]
-
-docs = [
-    "doc8>=0.9,<2.1",  # Ensures clean documentation formatting
-    "sphinx>=4,<10",  # The default Python documentation redering engine
-    "sphinx-autoapi>=1.8,<4",  # Generates documentation from docstrings
-    "sphinx-issues>=1.2,<7.0",  # Allows references to GitHub issues
-    "sphinx-rtd-dark-mode>=1.2,<2",  # Allow user to toggle light/dark mode
-    "sphinx-rtd-theme>=1,<4",  # Standard Sphinx theme for Read The Docs
-]
-
-tests = [
-    "coverage>=5.3,<8",  # Lets us track what code is being tested
-    "doc8>=0.9,<2.1",  # Ensures clean documentation formatting
-    "pre-commit>=4,<5",  # Allow us to run pre-commit hooks in testing
-    "pydocstyle>=5.1,<7",  # Style guidelines for Python documentation
-    "pytest>=8,<9.1",  # Our testing framework
-    "pytest-asyncio>=0.20,<1.4",  # Test async functions
-    "pytest-console-scripts>=1.4.1,<2",  # Allow automatic testing of scripts
-    "pytest-cov>=5.0.0",  # Pytest plugin for working with coverage
-    "pytest-mock>=3.14,<3.16",  # Pytest plugin for mocking function calls and objects
-    "ruff>=0.4,<0.16",
-]
-
 [project.scripts]
 pudl_usage_metrics = "pudl_usage_metrics.cli:main"
 
 [build-system]
-requires = [
-    "setuptools>=66",
-]
-build-backend = "setuptools.build_meta"
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/usage_metrics"]
+
+[tool.pixi.workspace]
+name = "pudl-usage-metrics"
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+channels = ["conda-forge"]
+
+[tool.pixi.environments]
+default = ["default"]
+test = ["test"]
+
+[tool.pixi.dependencies]
+pandas = ">=2.2,<3.1"
+sqlalchemy = ">=2"
+dagster = ">=1.7.15, <1.12.23"
+dagster-webserver = ">=1.7.15,<1.13"
+pandas-gbq = ">=0.23.1"
+pydata-google-auth = ">=1.8.2"
+jupyterlab = ">=4.2.3"
+psycopg2-binary = ">=2.9.9"
+joblib = ">=1.4.2"
+matplotlib = ">=3.9.0"
+pg8000 = ">=1.31.1"
+#cloud-sql-python-connector[pg8000] = ">=1.11.0"
+google-cloud-storage = ">=2.17"
+kaggle = ">=1.6.3"
+s3fs = ">=2025.10.0"
+
+[tool.pixi.pypi-dependencies]
+# Install the local package in editable mode. Assume dependencies are specified either
+# above in [tools.pixi.dependenccies] (for conda packages) or in this section, if they
+# happen to only be available via PyPI.
+pudl-usage-metrics = { path = ".", editable = true }
+ipinfo = ">=5.0.1"
+
+[tool.pixi.feature.test.dependencies]
+pytest = "*"
 
 [tool.doc8]
 max-line-length = 88
