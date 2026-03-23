@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       partition:
-        description: "Specific partition to ETL."
+        description: "Specific date partition to ETL (defaults to latest if blank)."
         required: false
 
   schedule:
