@@ -7,15 +7,11 @@ import os
 import warnings
 
 from dagster import (
-    AssetCheckResult,
-    AssetChecksDefinition,
     AssetKey,
     AssetsDefinition,
     AssetSelection,
     Definitions,
     SourceAsset,
-    WeeklyPartitionsDefinition,
-    asset_check,
     define_asset_job,
     load_asset_checks_from_modules,
     load_assets_from_modules,
@@ -106,8 +102,14 @@ _asset_keys = itertools.chain.from_iterable(
 )
 
 resources_by_env = {
-    "prod": {"database_manager": postgres_manager},
-    "local": {"database_manager": sqlite_manager},
+    "prod": {
+        "database_manager": postgres_manager,
+        "parquet_manager": s3_parquet_manager,
+    },
+    "local": {
+        "database_manager": sqlite_manager,
+        "parquet_manager": local_parquet_manager,
+    },
 }
 
 resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
