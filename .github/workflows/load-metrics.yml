@@ -2,6 +2,11 @@ name: load-metrics
 
 on:
   workflow_dispatch:
+    inputs:
+      partition:
+        description: "Specific partition to ETL."
+        required: false
+
   schedule:
     - cron: "14 7 * * 1" # Every Monday at 7:14 AM UTC
 
@@ -63,10 +68,11 @@ jobs:
           POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
           POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
+          PARTITION: ${{ github.event.inputs.partition }}
         shell: bash -l {0}
         run: |
           alembic upgrade head
-          python run_data_update.py
+          python run_data_update.py ${PARTITION:+--partition "$PARTITION"}
 
       - name: Remove Github Action runner's IP
         run: |
