@@ -47,7 +47,7 @@ jobs:
         with:
           version: ">= 363.0.0"
 
-      - name: Run tox
+      - name: Run all tests and generate coverage report
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
@@ -58,7 +58,7 @@ jobs:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
-          pixi run -e test tox
+          pixi run pytest-ci
 
       - name: Upload test coverage report to CodeCov
         uses: codecov/codecov-action@v5

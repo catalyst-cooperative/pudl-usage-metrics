@@ -73,11 +73,48 @@ pytest-console-scripts = ">=1.4.1,<2"
 pytest-cov = ">=5.0.0"
 pytest-mock = ">=3.14,<3.16"
 ruff = ">=0.4,<0.16"
-tox = ">=4.16,<4.51"
 
-[tool.pixi.tasks]
-update_local = { cmd = "dagster dev -m usage_metrics.etl", env = { METRICS_PROD_ENV = "local" } }
-update_prod = { cmd = "dagster dev -m usage_metrics.etl", env = { METRICS_PROD_ENV = "prod" } }
+[tool.pixi.tasks.update-local]
+cmd = "dagster dev -m usage_metrics.etl"
+env = { METRICS_PROD_ENV = "local" }
+description = "Start dagster server that stores ETL results locally"
+
+[tool.pixi.tasks.update-prod]
+cmd = "dagster dev -m usage_metrics.etl"
+env = { METRICS_PROD_ENV = "prod" }
+description = "Start dagster server that stores ETL results in S3 "
+
+[tool.pixi.feature.test.tasks.ruff-check]
+cmd = "ruff check ./"
+description = "Run the ruff linter on the whole repo"
+
+[tool.pixi.feature.test.tasks.pre-commit-run]
+cmd = "pre-commit run --all-files --show-diff-on-failure"
+description = "Run all pre-commit hooks"
+
+[tool.pixi.feature.test.tasks.linters]
+depends-on = [
+    "pre-commit-run",
+    "ruff-check"
+]
+description = "Run the pre-commit and ruff linters"
+
+[tool.pixi.feature.test.tasks.coverage-erase]
+cmd = "coverage erase"
+description = "Clear coverage data"
+
+[tool.pixi.feature.test.tasks.pytest-unit]
+cmd = "pytest --cov=src/usage_metrics --cov-append --cov-report=xml --doctest-modules src/usage_metrics tests"
+description = "Run all the software unit tests"
+
+[tool.pixi.feature.test.tasks.pytest-ci]
+cmd = "coverage report --sort=cover"
+depends-on = [
+    "coverage-erase",
+    "linters",
+    "pytest-unit",
+]
+description = "Run all CI tests and report test coverage"
 
 [tool.doc8]
 max-line-length = 88
