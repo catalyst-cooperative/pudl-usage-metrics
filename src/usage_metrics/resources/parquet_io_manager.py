@@ -7,7 +7,7 @@ https://github.com/dagster-io/dagster/blob/master/examples/project_fully_feature
 import os
 from pathlib import Path
 
-import pandas
+import pandas as pd
 from dagster import (
     ConfigurableIOManager,
     Field,
@@ -15,6 +15,28 @@ from dagster import (
     OutputContext,
     io_manager,
 )
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    Float,
+    Integer,
+    String,
+)
+
+from usage_metrics.helpers import get_table_name_from_context
+from usage_metrics.models import usage_metrics_metadata
+
+SQLALCHEMY_TO_ARROW = {
+    BigInteger: "int64",
+    Boolean: "bool",
+    Float: "float64",
+    Integer: "int32",
+    String: "string",
+}
+"""Type map so we can use the sqlalchemy metadata.
+
+Note: dates and times don't play nice, so we ignore them and hope for the best.
+"""
 
 
 class PartitionedParquetIOManager(ConfigurableIOManager):
@@ -27,25 +49,37 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
     def _base_path(self):
         raise NotImplementedError
 
-    def handle_output(self, context: OutputContext, obj: pandas.DataFrame):
+    def handle_output(self, context: OutputContext, obj: pd.DataFrame):
         """Save a data frame to a parquet file."""
         path = self._get_path(context)
         if "://" not in self._base_path:
             path.parent.mkdir(parents=True, exist_ok=True)
 
-        if isinstance(obj, pandas.DataFrame):
+        if isinstance(obj, pd.DataFrame):
             row_count = len(obj)
             context.log.info(f"Row count: {row_count}")
-            obj.to_parquet(path=path, index=False)
+            table_name = get_table_name_from_context(context)
+            assert (
+                table_name in usage_metrics_metadata.tables
+            ), f"""{table_name} does not have a schema defined.
+                Create a schema for it in usage_metrics.models."""
+            table_metadata = usage_metrics_metadata.tables[table_name]
+            table_dtypes = {
+                c.name: SQLALCHEMY_TO_ARROW[type(c.type)]
+                for c in table_metadata.columns
+                if c.name in obj.columns and type(c.type) in SQLALCHEMY_TO_ARROW
+            }
+            # we need this astype because int nulls in string-object columns make Arrow sad
+            obj.astype(table_dtypes).to_parquet(path=path, index=False)
         else:
             raise Exception(f"Outputs of type {type(obj)} not supported.")
 
         context.add_output_metadata({"row_count": row_count, "path": path})
 
-    def load_input(self, context) -> pandas.DataFrame | str:
+    def load_input(self, context) -> pd.DataFrame | str:
         """Load a data frame from a parquet file."""
         path = self._get_path(context)
-        return pandas.read_parquet(path)
+        return pd.read_parquet(path)
 
     def _get_path(self, context: InputContext | OutputContext):
         """Compute the parquet path for this asset."""
@@ -53,8 +87,8 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
 
         if context.has_asset_partitions:
             start, end = context.asset_partitions_time_window
-            dt_format = "%Y%m%d%H%M%S"
-            partition_str = start.strftime(dt_format) + "_" + end.strftime(dt_format)
+            dt_format = "%Y-%m-%d"
+            partition_str = start.strftime(dt_format) + "--" + end.strftime(dt_format)
             return Path(self._base_path) / key / f"{partition_str}.parquet"
         return Path(self._base_path) / f"{key}.parquet"
 
@@ -74,7 +108,7 @@ class LocalPartitionedParquetIOManager(PartitionedParquetIOManager):
         "base_path": Field(
             str,
             description="Base path for local parquet storage.",
-            default_value=os.environ.get("DATA_DIR"),
+            default_value=str(Path(os.environ.get("DATA_DIR")) / "usage_metrics"),
         )
     }
 )
@@ -100,7 +134,7 @@ class S3PartitionedParquetIOManager(PartitionedParquetIOManager):
         "s3_bucket": Field(
             str,
             description="S3 bucket for remote parquet storage.",
-            default_value=os.environ.get("S3_BUCKET", "pudl.catalyst.coop"),
+            default_value=os.environ.get("S3_BUCKET", "metrics.catalyst.coop"),
         )
     }
 )
