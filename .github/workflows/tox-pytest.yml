@@ -58,7 +58,7 @@ jobs:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
-          tox
+          pixi run -e test tox
 
       - name: Upload test coverage report to CodeCov
         uses: codecov/codecov-action@v6
