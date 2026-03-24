@@ -9874,7 +9874,7 @@ packages:
 - pypi: ./
   name: pudl-usage-metrics
   version: 0.1.0
-  sha256: e1e0a469023ce3dfc588a9764a9dc5ba31a350812e8d89c7efd9f455b7b06bdd
+  sha256: caaa79f980dc868fd56e27cb940fb9be1ec1835b6c65caffacf078c19f3f0a02
   requires_dist:
   - cloud-sql-python-connector[pg8000]>=1.11.0
   requires_python: '>=3.12,<3.13'

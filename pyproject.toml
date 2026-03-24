@@ -51,20 +51,23 @@ psycopg2-binary = ">=2.9.9"
 joblib = ">=1.4.2"
 matplotlib = ">=3.9.0"
 pg8000 = ">=1.31.1"
-#cloud-sql-python-connector[pg8000] = ">=1.11.0"
 google-cloud-storage = ">=2.17"
 kaggle = ">=1.6.3"
 s3fs = ">=2025.10.0"
 
 [tool.pixi.pypi-dependencies]
 # Install the local package in editable mode. Assume dependencies are specified either
-# above in [tools.pixi.dependenccies] (for conda packages) or in this section, if they
+# above in [tools.pixi.dependencies] (for conda packages) or in this section, if they
 # happen to only be available via PyPI.
 pudl-usage-metrics = { path = ".", editable = true }
 ipinfo = ">=5.0.1"
 
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
+
+[tool.pixi.tasks]
+update_local = { cmd = "dagster dev -m usage_metrics.etl", env = { METRICS_PROD_ENV = "local" } }
+update_prod = { cmd = "dagster dev -m usage_metrics.etl", env = { METRICS_PROD_ENV = "prod" } }
 
 [tool.doc8]
 max-line-length = 88
