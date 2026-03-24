@@ -31,7 +31,7 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
         """Save a data frame to a parquet file."""
         path = self._get_path(context)
         if "://" not in self._base_path:
-            path.parent().mkdir(parents=True, exist_ok=True)
+            path.parent.mkdir(parents=True, exist_ok=True)
 
         if isinstance(obj, pandas.DataFrame):
             row_count = len(obj)
