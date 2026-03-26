@@ -35,7 +35,7 @@ jobs:
 
       - name: Get GitHub Action runner's IP Address
         id: ip
-        run: ipv4=$(curl --silent --url https://api.ipify.org); echo "ipv4=$ipv4" >> $GITHUB_OUTPUT
+        run: ipv4=$(curl --silent --url "https://api.ipify.org"); echo "ipv4=$ipv4" >> "$GITHUB_OUTPUT"
 
       - name: Echo IP for github runner
         run: |
