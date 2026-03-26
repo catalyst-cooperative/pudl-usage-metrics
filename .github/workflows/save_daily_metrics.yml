@@ -17,22 +17,17 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Set up conda environment for testing
-        uses: mamba-org/setup-micromamba@v2
+      - name: Install usage metrics environment using pixi
+        uses: prefix-dev/setup-pixi@v0.9.4
         with:
-          environment-file: environment.yml
-          cache-environment: true
-          condarc: |
-            channels:
-            - conda-forge
-            channel_priority: strict
+          locked: true
+          cache: true
 
-      - name: Log conda environnment information
+      - name: Log VM and environnment information
         run: |
-          conda info
-          conda list
-          conda config --show-sources
-          conda config --show
+          lscpu
+          free -h
+          pixi list
           printenv | sort
 
       - name: Authenticate gcloud

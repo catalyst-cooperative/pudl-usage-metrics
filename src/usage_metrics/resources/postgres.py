@@ -13,11 +13,11 @@ class PostgresIOManager(SQLIOManager):
 
     def __init__(
         self,
-        user: str = os.environ["POSTGRES_USER"],
-        password: str = os.environ["POSTGRES_PASSWORD"],
-        db: str = os.environ["POSTGRES_DB"],
-        ip: str = os.environ["POSTGRES_IP"],
-        port: str = os.environ["POSTGRES_PORT"],
+        user: str = os.environ.get("POSTGRES_USER", ""),
+        password: str = os.environ.get("POSTGRES_PASSWORD", ""),
+        db: str = os.environ.get("POSTGRES_DB", ""),
+        ip: str = os.environ.get("POSTGRES_IP", ""),
+        port: str = os.environ.get("POSTGRES_PORT", ""),
     ) -> None:
         """Initialize PostgresManager object."""
         self.engine = sa.create_engine(
@@ -31,27 +31,27 @@ class PostgresIOManager(SQLIOManager):
         "postgres_user": Field(
             str,
             description="Postgres connection string user.",
-            default_value=os.environ["POSTGRES_USER"],
+            default_value=os.environ.get("POSTGRES_USER", ""),
         ),
         "postgres_password": Field(
             str,
             description="Postgres connection string password.",
-            default_value=os.environ["POSTGRES_PASSWORD"],
+            default_value=os.environ.get("POSTGRES_PASSWORD", ""),
         ),
         "postgres_db": Field(
             str,
             description="Postgres connection string database.",
-            default_value=os.environ["POSTGRES_DB"],
+            default_value=os.environ.get("POSTGRES_DB", ""),
         ),
         "postgres_ip": Field(
             str,
             description="Postgres connection string ip address.",
-            default_value=os.environ["POSTGRES_IP"],
+            default_value=os.environ.get("POSTGRES_IP", ""),
         ),
         "postgres_port": Field(
             str,
             description="Postgres connection string port.",
-            default_value=os.environ["POSTGRES_PORT"],
+            default_value=os.environ.get("POSTGRES_PORT", ""),
         ),
     }
 )

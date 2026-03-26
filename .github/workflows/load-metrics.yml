@@ -27,19 +27,15 @@ jobs:
           service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
           create_credentials_file: true
 
-      - name: Install Conda environment using mamba
-        uses: mamba-org/setup-micromamba@v2
+      - name: Install usage metrics environment using pixi
+        uses: prefix-dev/setup-pixi@v0.9.4
         with:
-          environment-file: environment.yml
-          cache-environment: true
-          condarc: |
-            channels:
-            - conda-forge
-            channel_priority: strict
+          locked: true
+          cache: true
 
       - name: Get GitHub Action runner's IP Address
         id: ip
-        run: ipv4=$(curl --silent --url https://api.ipify.org); echo "ipv4=$ipv4" >> $GITHUB_OUTPUT
+        run: ipv4=$(curl --silent --url "https://api.ipify.org"); echo "ipv4=$ipv4" >> "$GITHUB_OUTPUT"
 
       - name: Echo IP for github runner
         run: |

@@ -19,25 +19,18 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Set up conda environment for testing
-        uses: mamba-org/setup-micromamba@v2
+      - name: Install usage metrics environment using pixi
+        uses: prefix-dev/setup-pixi@v0.9.4
         with:
-          environment-file: environment.yml
-          cache-environment: true
-          cache-environment-key: environment-${{ hashFiles('pyproject.toml') }}
-          condarc: |
-            channels:
-            - conda-forge
-            channel_priority: strict
+          locked: true
+          cache: true
+          cache-write: ${{ github.event_name == 'push' && github.ref_name == 'main' }}
 
-      - name: Log VM and conda environnment information
+      - name: Log VM and environnment information
         run: |
           lscpu
           free -h
-          conda info
-          conda list
-          conda config --show-sources
-          conda config --show
+          pixi list
           printenv | sort
 
       - name: Authenticate gcloud
@@ -54,7 +47,7 @@ jobs:
         with:
           version: ">= 363.0.0"
 
-      - name: Run tox
+      - name: Run all tests and generate coverage report
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
@@ -65,7 +58,7 @@ jobs:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
-          tox
+          pixi run pytest-ci
 
       - name: Upload test coverage report to CodeCov
         uses: codecov/codecov-action@v5
