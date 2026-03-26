@@ -108,7 +108,7 @@ class LocalPartitionedParquetIOManager(PartitionedParquetIOManager):
         "base_path": Field(
             str,
             description="Base path for local parquet storage.",
-            default_value=str(Path(os.environ.get("DATA_DIR")) / "usage_metrics"),
+            default_value=str(Path(os.environ.get("DATA_DIR", ".")) / "usage_metrics"),
         )
     }
 )
