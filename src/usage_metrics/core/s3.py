@@ -15,6 +15,7 @@ from usage_metrics.helpers import geocode_ips
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "s3"},
 )
 def core_s3_logs(

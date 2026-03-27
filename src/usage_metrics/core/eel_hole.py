@@ -302,6 +302,7 @@ def _core_eel_hole_logs(
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_log_ins(
@@ -326,6 +327,7 @@ def core_eel_hole_log_ins(
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_searches(
@@ -359,6 +361,7 @@ def core_eel_hole_searches(
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_hits(
@@ -381,6 +384,7 @@ def core_eel_hole_hits(
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_previews(
@@ -407,6 +411,7 @@ def core_eel_hole_previews(
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_downloads(
@@ -433,6 +438,7 @@ def core_eel_hole_downloads(
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_user_settings_updates(
