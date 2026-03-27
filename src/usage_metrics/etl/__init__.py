@@ -19,8 +19,8 @@ from dagster import (
 
 import usage_metrics
 from usage_metrics.resources.parquet_io_manager import (
+    gcs_parquet_manager,
     local_parquet_manager,
-    s3_parquet_manager,
 )
 from usage_metrics.resources.postgres import postgres_manager
 from usage_metrics.resources.sqlite import sqlite_manager
@@ -108,7 +108,7 @@ _asset_keys = itertools.chain.from_iterable(
 resources_by_env = {
     "prod": {
         "database_manager": postgres_manager,
-        "parquet_manager": s3_parquet_manager,
+        "parquet_manager": gcs_parquet_manager,
     },
     "local": {
         "database_manager": sqlite_manager,
