@@ -82,7 +82,7 @@ description = "Start dagster server that stores ETL results locally"
 [tool.pixi.tasks.update-prod]
 cmd = "dagster dev -m usage_metrics.etl"
 env = { METRICS_PROD_ENV = "prod" }
-description = "Start dagster server that stores ETL results in S3 "
+description = "Start dagster server that stores ETL results in GCS"
 
 [tool.pixi.feature.test.tasks.ruff-check]
 cmd = "ruff check ./"

@@ -119,27 +119,27 @@ def local_parquet_manager(init_context) -> LocalPartitionedParquetIOManager:
     )
 
 
-class S3PartitionedParquetIOManager(PartitionedParquetIOManager):
-    """Prod version of the parquet IO manager which stores files on S3."""
+class GCSPartitionedParquetIOManager(PartitionedParquetIOManager):
+    """Prod version of the parquet IO manager which stores files on GCS."""
 
-    s3_bucket: str
+    gcs_bucket: str
 
     @property
     def _base_path(self):
-        return "s3://" + self.s3_bucket
+        return "gs://" + self.gcs_bucket
 
 
 @io_manager(
     config_schema={
-        "s3_bucket": Field(
+        "gcs_bucket": Field(
             str,
-            description="S3 bucket for remote parquet storage.",
-            default_value=os.environ.get("S3_BUCKET", "metrics.catalyst.coop"),
+            description="GCS bucket for remote parquet storage.",
+            default_value=os.environ.get("GCS_BUCKET", "metrics.catalyst.coop"),
         )
     }
 )
-def s3_parquet_manager(init_context) -> S3PartitionedParquetIOManager:
-    """Create S3PartitionedParquetIOManager dagster resource."""
-    return S3PartitionedParquetIOManager(
-        s3_bucket=init_context.resource_config["s3_bucket"]
+def gcs_parquet_manager(init_context) -> GCSPartitionedParquetIOManager:
+    """Create GCSPartitionedParquetIOManager dagster resource."""
+    return GCSPartitionedParquetIOManager(
+        gcs_bucket=init_context.resource_config["gcs_bucket"]
     )
