@@ -5,7 +5,6 @@ https://github.com/dagster-io/dagster/blob/master/examples/project_fully_feature
 """
 
 import os
-from pathlib import Path
 
 import pandas as pd
 from dagster import (
@@ -22,6 +21,7 @@ from sqlalchemy import (
     Integer,
     String,
 )
+from upath import UPath
 
 from usage_metrics.helpers import get_table_name_from_context
 from usage_metrics.models import usage_metrics_metadata
@@ -81,7 +81,7 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
         path = self._get_path(context)
         return pd.read_parquet(path)
 
-    def _get_path(self, context: InputContext | OutputContext):
+    def _get_path(self, context: InputContext | OutputContext) -> str:
         """Compute the parquet path for this asset."""
         key = context.asset_key.path[-1]
 
@@ -89,12 +89,12 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
             start, end = context.asset_partitions_time_window
             dt_format = "%Y-%m-%d"
             partition_str = start.strftime(dt_format) + "--" + end.strftime(dt_format)
-            return Path(self._base_path) / key / f"{partition_str}.parquet"
-        return Path(self._base_path) / f"{key}.parquet"
+            return str(UPath(self._base_path) / key / f"{partition_str}.parquet")
+        return str(UPath(self._base_path) / f"{key}.parquet")
 
 
 class LocalPartitionedParquetIOManager(PartitionedParquetIOManager):
-    """Local-development version of the parquet IO manager which stores files locally."""
+    """Development version of the parquet IO manager which stores files locally."""
 
     base_path: str
 
@@ -108,7 +108,7 @@ class LocalPartitionedParquetIOManager(PartitionedParquetIOManager):
         "base_path": Field(
             str,
             description="Base path for local parquet storage.",
-            default_value=str(Path(os.environ.get("DATA_DIR", ".")) / "usage_metrics"),
+            default_value=str(UPath(os.environ.get("DATA_DIR", ".")) / "usage_metrics"),
         )
     }
 )
