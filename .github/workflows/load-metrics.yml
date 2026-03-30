@@ -59,11 +59,6 @@ jobs:
         id: load-data
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
-          POSTGRES_IP: ${{ secrets.POSTGRES_IP }}
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          POSTGRES_PORT: ${{ secrets.POSTGRES_PORT }}
           PARTITION: ${{ github.event.inputs.partition }}
         shell: bash -l {0}
         run: |
