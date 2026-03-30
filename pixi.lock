@@ -410,10 +410,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/06/f3/39cf3367b8107baa44f861dc802cbf16263c945b62d8265d36034fc07bea/cachetools-7.0.5-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/6b/dd/6366d7704afb701171d14b660b7ba48a35887364dd48157a7f924db05d34/ipinfo-5.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
       osx-64:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/_openmp_mutex-4.5-7_kmp_llvm.conda
@@ -759,10 +759,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-ng-2.3.3-h8bce59a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h3eecb57_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/06/f3/39cf3367b8107baa44f861dc802cbf16263c945b62d8265d36034fc07bea/cachetools-7.0.5-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/6b/dd/6366d7704afb701171d14b660b7ba48a35887364dd48157a7f924db05d34/ipinfo-5.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/_openmp_mutex-4.5-7_kmp_llvm.conda
@@ -1108,10 +1108,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-hed4e4f5_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/06/f3/39cf3367b8107baa44f861dc802cbf16263c945b62d8265d36034fc07bea/cachetools-7.0.5-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/6b/dd/6366d7704afb701171d14b660b7ba48a35887364dd48157a7f924db05d34/ipinfo-5.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
   test:
     channels:
@@ -1551,10 +1551,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zlib-ng-2.3.3-hceb46e0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/06/f3/39cf3367b8107baa44f861dc802cbf16263c945b62d8265d36034fc07bea/cachetools-7.0.5-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/6b/dd/6366d7704afb701171d14b660b7ba48a35887364dd48157a7f924db05d34/ipinfo-5.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
       osx-64:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/_openmp_mutex-4.5-7_kmp_llvm.conda
@@ -1928,10 +1928,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-ng-2.3.3-h8bce59a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h3eecb57_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/06/f3/39cf3367b8107baa44f861dc802cbf16263c945b62d8265d36034fc07bea/cachetools-7.0.5-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/6b/dd/6366d7704afb701171d14b660b7ba48a35887364dd48157a7f924db05d34/ipinfo-5.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
       osx-arm64:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/_openmp_mutex-4.5-7_kmp_llvm.conda
@@ -2305,10 +2305,10 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-hed4e4f5_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/06/f3/39cf3367b8107baa44f861dc802cbf16263c945b62d8265d36034fc07bea/cachetools-7.0.5-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/6b/dd/6366d7704afb701171d14b660b7ba48a35887364dd48157a7f924db05d34/ipinfo-5.4.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
 packages:
 - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
@@ -3772,11 +3772,11 @@ packages:
   - pkg:pypi/cached-property?source=hash-mapping
   size: 11065
   timestamp: 1615209567874
-- pypi: https://files.pythonhosted.org/packages/06/f3/39cf3367b8107baa44f861dc802cbf16263c945b62d8265d36034fc07bea/cachetools-7.0.5-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
   name: cachetools
-  version: 7.0.5
-  sha256: 46bc8ebefbe485407621d0a4264b23c080cedd913921bad7ac3ed2f26c183114
-  requires_python: '>=3.10'
+  version: 4.2.0
+  sha256: c6b07a6ded8c78bf36730b3dc452dfff7d95f2a12a2fed856b1a0cb13ca78c61
+  requires_python: ~=3.5
 - conda: https://conda.anaconda.org/conda-forge/linux-64/cairo-1.18.4-he90730b_1.conda
   sha256: 06525fa0c4e4f56e771a3b986d0fdf0f0fc5a3270830ee47e127a5105bde1b9a
   md5: bb6c4808bfa69d6f7f6b07e5846ced37
@@ -5488,14 +5488,15 @@ packages:
   - pkg:pypi/iniconfig?source=compressed-mapping
   size: 13387
   timestamp: 1760831448842
-- pypi: https://files.pythonhosted.org/packages/6b/dd/6366d7704afb701171d14b660b7ba48a35887364dd48157a7f924db05d34/ipinfo-5.4.1-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
   name: ipinfo
-  version: 5.4.1
-  sha256: c2277db92bf934d268356a1f31afef147a9d3a18780a498f888828d8eacd2c29
+  version: 5.5.0
+  sha256: 0e16ef0b895750f53c66696dd510cdeb3dcbd4e2cc0936c5803f14adce9ba0ef
   requires_dist:
-  - requests
-  - cachetools
-  - aiohttp<=4
+  - aiohttp>=3.12.14,<=4
+  - cachetools==4.2.0
+  - requests>=2.18.4
+  requires_python: '>=3.10'
 - conda: https://conda.anaconda.org/conda-forge/noarch/ipykernel-7.2.0-pyh5552912_1.conda
   sha256: 5c1f3e874adaf603449f2b135d48f168c5d510088c78c229bda0431268b43b27
   md5: 4b53d436f3fbc02ce3eeaf8ae9bebe01
@@ -10117,7 +10118,7 @@ packages:
 - pypi: ./
   name: pudl-usage-metrics
   version: 0.1.0
-  sha256: 44da341fe50a608a037c5909010ef770130094712924e6cfecdcea001b5ca2ee
+  sha256: 2a561958db65cbffcc4bdd7d9822219ca0a8ec8b84f958554a3a6956b2641503
   requires_dist:
   - cloud-sql-python-connector[pg8000]>=1.11.0
   requires_python: '>=3.12,<3.13'
