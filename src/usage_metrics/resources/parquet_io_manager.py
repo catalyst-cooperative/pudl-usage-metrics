@@ -57,7 +57,7 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
 
         if isinstance(obj, pd.DataFrame):
             row_count = len(obj)
-            context.log.info(f"Row count: {row_count}")
+            context.log.debug(f"Row count: {row_count}")
             table_name = get_table_name_from_context(context)
             assert (
                 table_name in usage_metrics_metadata.tables
@@ -69,10 +69,11 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
                 for c in table_metadata.columns
                 if c.name in obj.columns and type(c.type) in SQLALCHEMY_TO_ARROW
             }
-            # we need this astype because int nulls in string-object columns make Arrow sad
-            obj.astype(table_dtypes).to_parquet(path=path, index=False)
+            # we need the .astype because int nulls in string-object columns make Arrow sad
+            # we need the str() because passing in a remote UPath with gs protocol confuses Pandas
+            obj.astype(table_dtypes).to_parquet(path=str(path), index=False)
         else:
-            raise Exception(f"Outputs of type {type(obj)} not supported.")
+            raise ValueError(f"Outputs of type {type(obj)} not supported.")
 
         context.add_output_metadata({"row_count": row_count, "path": path})
 
@@ -81,7 +82,7 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
         path = self._get_path(context)
         return pd.read_parquet(path)
 
-    def _get_path(self, context: InputContext | OutputContext) -> str:
+    def _get_path(self, context: InputContext | OutputContext) -> UPath:
         """Compute the parquet path for this asset."""
         key = context.asset_key.path[-1]
 
@@ -89,8 +90,8 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
             start, end = context.asset_partitions_time_window
             dt_format = "%Y-%m-%d"
             partition_str = start.strftime(dt_format) + "--" + end.strftime(dt_format)
-            return str(UPath(self._base_path) / key / f"{partition_str}.parquet")
-        return str(UPath(self._base_path) / f"{key}.parquet")
+            return UPath(self._base_path) / key / f"{partition_str}.parquet"
+        return UPath(self._base_path) / f"{key}.parquet"
 
 
 class LocalPartitionedParquetIOManager(PartitionedParquetIOManager):
