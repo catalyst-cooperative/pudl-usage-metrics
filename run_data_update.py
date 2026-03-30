@@ -10,12 +10,17 @@ schedules and job launching.
 import logging
 import os
 
+import click
 import coloredlogs
 
 from usage_metrics.etl import defs
 
 
-def main():
+@click.command(
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+@click.option("-p", "--partition", type=str, default=None)
+def main(partition: str | None):
     """Load most recent partitions of data to Google Cloud SQL Postgres DB."""
     usage_metrics_logger = logging.getLogger("usage_metrics")
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
@@ -28,14 +33,19 @@ def main():
     job = defs.get_job_def(name="all_partitioned_metrics_etl")
 
     # Get last complete weekly partition
-    most_recent_partition = max(job.partitions_def.get_partition_keys())
+    if partition:
+        assert partition in job.partitions_def.get_partition_keys(), (
+            f"{partition} isn't a valid partition. Valid partitions are: {job.partitions_def.get_partition_keys()}"
+        )
+    else:
+        partition = max(job.partitions_def.get_partition_keys())
 
     # Run the jobs
     usage_metrics_logger.info(
-        f"""{job.name}: Processing partitioned data from the week of {most_recent_partition}."""
+        f"""{job.name}: Processing partitioned data from the week of {partition}."""
     )
 
-    job.execute_in_process(partition_key=most_recent_partition)
+    job.execute_in_process(partition_key=partition)
 
     # Run the non-partitioned metrics
     usage_metrics_logger.info(

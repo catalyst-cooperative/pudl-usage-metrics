@@ -26,7 +26,10 @@ def core_github_forks(
         columns=[
             col
             for col in df.columns
-            if "_url" in col or col == "fork" or col == "open_issues_count"
+            if "_url" in col
+            or col == "fork"
+            or col == "open_issues_count"
+            or col == "pull_request_creation_policy"  # always 'all'
         ]
     )
 
