@@ -27,10 +27,10 @@ from usage_metrics.helpers import get_table_name_from_context
 from usage_metrics.models import usage_metrics_metadata
 
 SQLALCHEMY_TO_ARROW = {
-    BigInteger: "int64",
+    BigInteger: "Int64",
     Boolean: "bool",
     Float: "float64",
-    Integer: "int32",
+    Integer: "Int64",
     String: "string",
 }
 """Type map so we can use the sqlalchemy metadata.
@@ -75,12 +75,12 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
         else:
             raise ValueError(f"Outputs of type {type(obj)} not supported.")
 
-        context.add_output_metadata({"row_count": row_count, "path": path})
+        context.add_output_metadata({"row_count": row_count, "path": str(path)})
 
     def load_input(self, context) -> pd.DataFrame | str:
         """Load a data frame from a parquet file."""
         path = self._get_path(context)
-        return pd.read_parquet(path)
+        return pd.read_parquet(str(path))
 
     def _get_path(self, context: InputContext | OutputContext) -> UPath:
         """Compute the parquet path for this asset."""
