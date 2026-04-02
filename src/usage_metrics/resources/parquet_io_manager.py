@@ -14,13 +14,7 @@ from dagster import (
     OutputContext,
     io_manager,
 )
-from sqlalchemy import (
-    BigInteger,
-    Boolean,
-    Float,
-    Integer,
-    String,
-)
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, Integer, String
 from upath import UPath
 
 from usage_metrics.helpers import get_table_name_from_context
@@ -32,6 +26,8 @@ SQLALCHEMY_TO_ARROW = {
     Float: "float64",
     Integer: "Int64",
     String: "string",
+    Date: "datetime64[s]",
+    DateTime: "datetime64[s]",
 }
 """Type map so we can use the sqlalchemy metadata.
 
@@ -69,6 +65,14 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
                 for c in table_metadata.columns
                 if c.name in obj.columns and type(c.type) in SQLALCHEMY_TO_ARROW
             }
+            # delocalize datetimes
+            obj = obj.assign(
+                **{
+                    c: pd.to_datetime(obj[c]).dt.tz_localize(None)
+                    for c in obj.columns
+                    if table_dtypes[c] == "datetime64[s]"
+                }
+            )
             # we need the .astype because int nulls in string-object columns make Arrow sad
             # we need the str() because passing in a remote UPath with gs protocol confuses Pandas
             obj.astype(table_dtypes).to_parquet(path=str(path), index=False)
