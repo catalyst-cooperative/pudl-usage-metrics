@@ -49,7 +49,7 @@ jobs:
           PARTITION: ${{ github.event.inputs.partition }}
         shell: bash -l {0}
         run: |
-          python run_data_update.py ${PARTITION:+--partition "$PARTITION"}
+          pixi run python run_data_update.py ${PARTITION:+--partition "$PARTITION"}
 
       - name: Post to pudl-deployments channel
         if: always()
