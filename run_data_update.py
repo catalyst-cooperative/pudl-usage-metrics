@@ -21,13 +21,13 @@ from usage_metrics.etl import defs
 )
 @click.option("-p", "--partition", type=str, default=None)
 def main(partition: str | None):
-    """Load most recent partitions of data to Google Cloud SQL Postgres DB."""
+    """Load most recent partitions of data to Google Cloud Storage."""
     usage_metrics_logger = logging.getLogger("usage_metrics")
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
     coloredlogs.install(fmt=log_format, level="INFO", logger=usage_metrics_logger)
 
     usage_metrics_logger.info(
-        f"""Saving to {os.getenv("METRICS_PROD_ENV", "local")} database."""
+        f"""Saving to {os.getenv("METRICS_PROD_ENV", "local")} storage."""
     )
     # Run the partitioned metrics
     job = defs.get_job_def(name="all_partitioned_metrics_etl")

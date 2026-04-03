@@ -173,14 +173,17 @@ def _core_eel_hole_logs(
         return pd.DataFrame()
 
     # Flatten the many nested columns and coerce them into the expected class
-    # Then drop the two columns (json_payload and json_payload_params) that we exploded
-    # into many other columns and are now empty
     models = [
         EelHoleLogs(**row).model_dump()
         for row in raw_eel_hole_logs.to_dict(orient="records")
     ]
-    converted_df = pd.json_normalize(models, sep="_").drop(
-        columns=["json_payload", "json_payload_params"]
+    converted_df = pd.json_normalize(models, sep="_")
+    # Drop any columns that we exploded into many other columns and thus are now
+    # empty. json_payload will only show up here if at least one record had its
+    # payload dropped by EelHoleLogs.drop_bad_records, so we have to check first
+    empty_candidates = ["json_payload", "json_payload_params"]
+    converted_df = converted_df.drop(
+        columns=[c for c in empty_candidates if c in converted_df.columns]
     )
 
     # Also drop some columns that just provide constant metadata about the GCS logging
@@ -301,7 +304,8 @@ def _core_eel_hole_logs(
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_log_ins(
@@ -325,7 +329,8 @@ def core_eel_hole_log_ins(
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_searches(
@@ -358,7 +363,8 @@ def core_eel_hole_searches(
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_hits(
@@ -380,7 +386,8 @@ def core_eel_hole_hits(
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_previews(
@@ -406,7 +413,8 @@ def core_eel_hole_previews(
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_downloads(
@@ -432,7 +440,8 @@ def core_eel_hole_downloads(
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
 def core_eel_hole_user_settings_updates(
