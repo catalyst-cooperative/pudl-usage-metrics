@@ -24,36 +24,23 @@ jobs:
         with:
           fetch-depth: 2
 
-      # Authentication via credentials json
-      - id: "auth"
-        uses: "google-github-actions/auth@v3"
-        with:
-          workload_identity_provider: "projects/345950277072/locations/global/workloadIdentityPools/gh-actions-pool/providers/gh-actions-provider"
-          service_account: "pudl-usage-metrics-etl@catalyst-cooperative-pudl.iam.gserviceaccount.com"
-          create_credentials_file: true
-
       - name: Install usage metrics environment using pixi
         uses: prefix-dev/setup-pixi@v0.9.4
         with:
           locked: true
           cache: true
 
-      - name: Get GitHub Action runner's IP Address
-        id: ip
-        run: ipv4=$(curl --silent --url "https://api.ipify.org"); echo "ipv4=$ipv4" >> "$GITHUB_OUTPUT"
-
-      - name: Echo IP for github runner
-        run: |
-          echo ${{ steps.ip.outputs.ipv4 }}
+      - name: Authenticate gcloud
+        id: gcloud-auth
+        continue-on-error: true
+        uses: "google-github-actions/auth@v3"
+        with:
+          credentials_json: "${{ secrets.GCP_USAGE_METRICS_ARCHIVER_KEY }}"
 
       - name: "Set up Cloud SDK"
         uses: "google-github-actions/setup-gcloud@v3"
         with:
           version: ">= 363.0.0"
-
-      - name: Whitelist Github Action and Superset IPs
-        run: |
-          gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --authorized-networks=${{ steps.ip.outputs.ipv4 }}
 
       - name: Run ETL on the latest full week of data
         id: load-data
@@ -62,12 +49,7 @@ jobs:
           PARTITION: ${{ github.event.inputs.partition }}
         shell: bash -l {0}
         run: |
-          alembic upgrade head
           python run_data_update.py ${PARTITION:+--partition "$PARTITION"}
-
-      - name: Remove Github Action runner's IP
-        run: |
-          gcloud sql instances patch ${{ secrets.GCSQL_INSTANCE_NAME }} --clear-authorized-networks
 
       - name: Post to pudl-deployments channel
         if: always()
