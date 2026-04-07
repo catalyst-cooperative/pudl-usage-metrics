@@ -93,10 +93,11 @@ In your ``DAGSTER_HOME`` folder, add a ``dagster.yaml`` file or edit your existi
 
 ```
 run_queue:
-  max_concurrent_runs: 1
+  max_concurrent_runs: 4
 ```
 
-When running backfills, this prevents you from kicking off 80 concurrent runs.
+Set this higher or lower based on your available cores and memory.
+When running backfills, it will prevent you from kicking off 80 concurrent runs.
 
 ### Dagster Daemon
 

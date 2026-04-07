@@ -72,7 +72,6 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
             table_dtypes = {
                 c.name: SQLALCHEMY_TO_PANDAS[type(c.type)]
                 for c in table_metadata.columns
-                if c.name != "insert_id"
             }
             # Make sure we have all the columns we need
             for column, dtype in table_dtypes.items():
