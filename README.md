@@ -112,8 +112,9 @@ Dagster kicks off individual runs for each [partition](https://docs.dagster.io/c
 which are sent to a queue managed by the dagster-daemon.
 
 This command simultaneously starts the dagit UI.
-This will launch dagit at [`http://localhost:3000/`](http://localhost:3000/).
-If you have another service running on port 3000 you can change the port by running:
+This will launch dagit at [`http://localhost:3000/`](http://localhost:3000/) if port 3000 is free.
+If port 3000 is unavailable, it will pick a random free port, and tell you which one it picked.
+If you wish to specify the exact port it will use, you can set it explicitly by running:
 
 ```
 pixi run METRICS_PROD_ENV="local" dagster dev -m usage_metrics.etl -p {another_cool_port}
@@ -128,8 +129,11 @@ and run partitions with specific configuration.
 There is a job in the `usage_metrics/etl` sub package for each datasource
 (e.g datasette logs, github metrics…).
 Each job module contains a series of assets that extract, transform and load the data.
-When run locally, the IO manager will write data to local partitioned parquet files for development.
-When run on Github actions, the IO manager will write data to Google Cloud Storage.
+
+* When run locally, the IO manager will write data to local partitioned parquet files for development.
+* When run in production (prod) mode or on Github actions, the IO manager will write data to Google Cloud Storage.
+  **If you configure a production run for a previously-existing partition, it will overwrite what is already there.**
+  Be sure this is what you want before you kick off the run!
 
 You can run the ETL via the dagit UI or the [dagster CLI](https://docs.dagster.io/_apidocs/cli).
 
@@ -156,11 +160,13 @@ pixi run update-prod
 
 #### Production development (Google Cloud Storage)
 
-Production runs will append new partitions to parquet files in cloud storage.
-The `load-metrics` GitHub action is responsible for updating each parquet with new partitions.
+Production runs will write partitions to parquet files in cloud storage.
+The `load-metrics` GitHub action is responsible for updating each parquet with freshly-built partitions.
+**If you configure a run for a previously-existing partition, it will overwrite what is already there.**
+Be sure this is what you want before you kick off the run!
 
 If a new column is added or data is processed in a new way,
-you'll have to run a complete backfill to update all previous partitions.
+you'll have to run a complete backfill to overwrite all previous partitions.
 
 By default prod runs will write to `metrics.catalyst.coop`.
 You can examine the contents of the default bucket at
