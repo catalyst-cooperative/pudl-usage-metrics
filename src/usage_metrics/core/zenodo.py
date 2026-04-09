@@ -12,7 +12,8 @@ from dagster import (
 
 @asset(
     partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="database_manager",
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "zenodo"},
 )
 def core_zenodo_logs(

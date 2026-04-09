@@ -20,3 +20,6 @@ dagster_home/*
 .tox/
 coverage.xml
 node_modules/
+# pixi environments
+.pixi/*
+!.pixi/config.toml

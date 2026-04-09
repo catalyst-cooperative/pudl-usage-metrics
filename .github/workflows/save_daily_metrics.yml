@@ -17,22 +17,17 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Set up conda environment for testing
-        uses: mamba-org/setup-micromamba@v2
+      - name: Install usage metrics environment using pixi
+        uses: prefix-dev/setup-pixi@v0.9.4
         with:
-          environment-file: environment.yml
-          cache-environment: true
-          condarc: |
-            channels:
-            - conda-forge
-            channel_priority: strict
+          locked: true
+          cache: true
 
-      - name: Log conda environnment information
+      - name: Log VM and environnment information
         run: |
-          conda info
-          conda list
-          conda config --show-sources
-          conda config --show
+          lscpu
+          free -h
+          pixi list
           printenv | sort
 
       - name: Authenticate gcloud
@@ -53,7 +48,7 @@ jobs:
         env:
           API_TOKEN_GITHUB: ${{ secrets.USAGE_STATS_ACCESS_TOKEN }}
         run: |
-          python src/usage_metrics/scripts/save_github_metrics.py
+          pixi run python src/usage_metrics/scripts/save_github_metrics.py
 
       - shell: bash -l {0}
         name: Save Kaggle Metrics
@@ -64,7 +59,7 @@ jobs:
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
         run: |
-          python src/usage_metrics/scripts/save_kaggle_metrics.py
+          pixi run python src/usage_metrics/scripts/save_kaggle_metrics.py
 
       - shell: bash -l {0}
         name: Save Zenodo Metrics
@@ -72,7 +67,7 @@ jobs:
         # Run even if prior metric saving fails
         if: "!cancelled()"
         run: |
-          python src/usage_metrics/scripts/save_zenodo_metrics.py
+          pixi run python src/usage_metrics/scripts/save_zenodo_metrics.py
 
       - name: Inform the Codemonkeys
         uses: 8398a7/action-slack@v3

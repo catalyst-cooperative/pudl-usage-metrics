@@ -10,7 +10,8 @@ from dagster import (
 
 
 @asset(
-    io_manager_key="database_manager",
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "github_nonpartitioned"},
 )
 def core_github_forks(
@@ -54,7 +55,8 @@ def core_github_forks(
 
 
 @asset(
-    io_manager_key="database_manager",
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "github_nonpartitioned"},
 )
 def core_github_stargazers(
