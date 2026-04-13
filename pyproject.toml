@@ -6,7 +6,7 @@ requires-python = ">=3.12,<3.13"
 
 # managed by pixi; see tool.pixi.dependencies below
 # cloud-sql-python-connector is configured here because we need extras [pg8000].
-dependencies = ["cloud-sql-python-connector[pg8000]>=1.11.0"]
+dependencies = ["cloud-sql-python-connector[pg8000]>=1.20.1"]
 
 classifiers = [
     "Development Status :: 3 - Alpha",
