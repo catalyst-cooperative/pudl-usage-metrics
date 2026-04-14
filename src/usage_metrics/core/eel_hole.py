@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 import pandas as pd
 from dagster import (
     AssetExecutionContext,
-    WeeklyPartitionsDefinition,
+    DailyPartitionsDefinition,
     asset,
 )
 from pydantic import BaseModel, BeforeValidator, field_validator, model_validator
@@ -158,7 +158,7 @@ class EelHoleLogs(BaseModel):
 
 
 @asset(
-    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     tags={"source": "eel_hole"},
 )
 def _core_eel_hole_logs(
@@ -303,7 +303,7 @@ def _core_eel_hole_logs(
 
 
 @asset(
-    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
     kinds={"parquet"},
     tags={"source": "eel_hole"},
@@ -328,7 +328,7 @@ def core_eel_hole_log_ins(
 
 
 @asset(
-    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
     kinds={"parquet"},
     tags={"source": "eel_hole"},
@@ -362,7 +362,7 @@ def core_eel_hole_searches(
 
 
 @asset(
-    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
     kinds={"parquet"},
     tags={"source": "eel_hole"},
@@ -385,7 +385,7 @@ def core_eel_hole_hits(
 
 
 @asset(
-    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
     kinds={"parquet"},
     tags={"source": "eel_hole"},
@@ -412,7 +412,7 @@ def core_eel_hole_previews(
 
 
 @asset(
-    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
     kinds={"parquet"},
     tags={"source": "eel_hole"},
@@ -439,7 +439,7 @@ def core_eel_hole_downloads(
 
 
 @asset(
-    partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     io_manager_key="parquet_manager",
     kinds={"parquet"},
     tags={"source": "eel_hole"},

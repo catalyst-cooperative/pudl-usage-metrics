@@ -8,7 +8,7 @@ on:
         required: false
 
   schedule:
-    - cron: "14 7 * * 1" # Every Monday at 7:14 AM UTC
+    - cron: "14 7 * * *" # Every day at 7:14 AM UTC
 
 env:
   METRICS_PROD_ENV: "prod"
@@ -43,7 +43,7 @@ jobs:
         with:
           version: ">= 363.0.0"
 
-      - name: Run ETL on the latest full week of data
+      - name: Run ETL on the latest day's data
         id: load-data
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
