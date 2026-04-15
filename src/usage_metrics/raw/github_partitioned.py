@@ -13,7 +13,7 @@ import pandas as pd
 from dagster import (
     AssetExecutionContext,
     AssetsDefinition,
-    WeeklyPartitionsDefinition,
+    DailyPartitionsDefinition,
     asset,
 )
 from google.api_core.page_iterator import HTTPIterator
@@ -133,7 +133,7 @@ def weekly_metrics_extraction_factory(
 
     @asset(
         name=f"raw_github_{metric}",
-        partitions_def=WeeklyPartitionsDefinition(start_date="2023-08-16"),
+        partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
         tags={"source": "github_partitioned"},
     )
     def _raw_github_logs(context: AssetExecutionContext) -> pd.DataFrame:
