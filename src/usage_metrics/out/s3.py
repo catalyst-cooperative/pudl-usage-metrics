@@ -111,8 +111,8 @@ def out_s3_logs(
 
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
-    # io_manager_key="parquet_manager",
-    # kinds={"parquet"},
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
     tags={"source": "s3"},
 )
 def out_s3_daily_summary_by_table(
@@ -123,14 +123,42 @@ def out_s3_daily_summary_by_table(
         pl.DataFrame(out_s3_logs)
         .filter(pl.col("table").str.ends_with(".parquet"))
         .sort(["time", "table"])
-        .group_by_dynamic("time", every="1d", group_by=["usage_type", "table"])
+        .group_by_dynamic(
+            "time", every="1d", group_by=["usage_type", "table", "version"]
+        )
         .agg(
-            normalized_file_downloads=pl.col("normalized_file_downloads")
-            .sum()
-            .round(0),
+            normalized_file_downloads=pl.col("normalized_file_downloads").sum(),
             request_count=pl.col("request_uri").count().alias("request_count"),
             megabytes_sent=(pl.col("megabytes_sent").sum().round(3)),
-            unique_ips=pl.col("remote_ip").n_unique(),
+        )
+    )
+    return summary_df.to_pandas()
+
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
+    tags={"source": "s3"},
+)
+def out_s3_daily_summary_by_user(
+    out_s3_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Get a daily summary by IP from out_s3_logs."""
+    summary_df = (
+        pl.DataFrame(out_s3_logs)
+        .filter(pl.col("table").str.ends_with(".parquet"))
+        .sort(["time", "table"])
+        .group_by_dynamic(
+            "time",
+            every="1d",
+            group_by=["remote_ip", "table", "remote_ip_org", "remote_ip_country_name"],
+        )
+        .agg(
+            normalized_file_downloads=pl.col("normalized_file_downloads").sum(),
+            request_count=pl.col("request_uri").count().alias("request_count"),
+            megabytes_sent=(pl.col("megabytes_sent").sum().round(3)),
+            usage_type=(pl.col("usage_type").mode().first()),
         )
     )
     return summary_df.to_pandas()
