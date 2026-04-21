@@ -1,6 +1,7 @@
 """Extract data from Kaggle logs."""
 
 import json
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -36,12 +37,13 @@ class KaggleExtractor(GCSExtractor):
         Returns:
             A list of blobs to be downloaded.
         """
-        week_start_date_str = context.partition_key
-        week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
-        partition_dates = tuple(week_date_range.strftime("%Y-%m-%d"))
-        file_name_prefixes = tuple(f"kaggle/{date}.json" for date in partition_dates)
+        day_start_date_str = context.partition_key
+        partition_date = datetime.strptime(day_start_date_str, "%Y-%m-%d").strftime(
+            "%Y-%m-%d"
+        )
+        file_name_prefix = f"kaggle/{partition_date}.json"
 
-        blobs = [blob for blob in blobs if blob.name in file_name_prefixes]
+        blobs = [blob for blob in blobs if blob.name == file_name_prefix]
         return blobs
 
     def load_file(

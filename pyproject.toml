@@ -6,7 +6,10 @@ requires-python = ">=3.12,<3.13"
 
 # managed by pixi; see tool.pixi.dependencies below
 # cloud-sql-python-connector is configured here because we need extras [pg8000].
-dependencies = ["cloud-sql-python-connector[pg8000]>=1.11.0"]
+dependencies = [
+    "cloud-sql-python-connector[pg8000]>=1.11.0",
+    "polars>=1.40.0",
+]
 
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -54,6 +57,7 @@ pg8000 = ">=1.31.1"
 google-cloud-storage = ">=2.17"
 kaggle = ">=1.6.3"
 s3fs = ">=2025.10.0"
+polars = ">=1.40.0,<2"
 
 [tool.pixi.pypi-dependencies]
 # Install the local package in editable mode. Assume dependencies are specified either

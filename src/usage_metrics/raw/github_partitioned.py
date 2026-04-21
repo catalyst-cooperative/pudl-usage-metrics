@@ -6,6 +6,7 @@ querying the Github API.
 
 import json
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -21,9 +22,9 @@ from google.cloud import storage
 
 from usage_metrics.raw.extract import GCSExtractor
 
-WEEKLY_METRIC_TYPES = ["clones", "popular_paths", "popular_referrers", "views"]
+DAILY_METRIC_TYPES = ["clones", "popular_paths", "popular_referrers", "views"]
 CUMULATIVE_METRIC_TYPES = ["stargazers", "forks"]
-GITHUB_METRIC_TYPES = WEEKLY_METRIC_TYPES + CUMULATIVE_METRIC_TYPES
+GITHUB_METRIC_TYPES = DAILY_METRIC_TYPES + CUMULATIVE_METRIC_TYPES
 
 
 class GithubExtractor(GCSExtractor):
@@ -52,16 +53,13 @@ class GithubExtractor(GCSExtractor):
         Returns:
             A list of blobs to be downloaded.
         """
-        if self.metric in WEEKLY_METRIC_TYPES:
-            week_start_date_str = context.partition_key
-            week_date_range = pd.date_range(
-                start=week_start_date_str, periods=7, freq="D"
+        if self.metric in DAILY_METRIC_TYPES:
+            day_start_date_str = context.partition_key
+            partition_date = datetime.strptime(day_start_date_str, "%Y-%m-%d").strftime(
+                "%Y-%m-%d"
             )
-            partition_dates = tuple(week_date_range.strftime("%Y-%m-%d"))
-            file_name_prefixes = tuple(
-                f"github/{self.metric}/{date}.json" for date in partition_dates
-            )
-            blobs = [blob for blob in blobs if blob.name in file_name_prefixes]
+            file_name = f"github/{self.metric}/{partition_date}.json"
+            blobs = [blob for blob in blobs if blob.name == file_name]
         else:
             blobs = [
                 blob for blob in blobs if blob.name.startswith(f"github/{self.metric}/")
@@ -126,10 +124,10 @@ class GithubExtractor(GCSExtractor):
         return gh_df
 
 
-def weekly_metrics_extraction_factory(
-    metric: Literal[*WEEKLY_METRIC_TYPES],
+def daily_metrics_extraction_factory(
+    metric: Literal[*DAILY_METRIC_TYPES],
 ) -> AssetsDefinition:
-    """Create Dagster asset for each weekly-reported metric."""
+    """Create Dagster asset for each daily-reported metric."""
 
     @asset(
         name=f"raw_github_{metric}",
@@ -137,12 +135,12 @@ def weekly_metrics_extraction_factory(
         tags={"source": "github_partitioned"},
     )
     def _raw_github_logs(context: AssetExecutionContext) -> pd.DataFrame:
-        """Extract Github logs from daily files and return one weekly DataFrame."""
+        """Extract Github logs from daily files and return one daily DataFrame."""
         return GithubExtractor(metric=metric).extract(context)
 
     return _raw_github_logs
 
 
 raw_github_partitioned_assets = [
-    weekly_metrics_extraction_factory(metric) for metric in WEEKLY_METRIC_TYPES
+    daily_metrics_extraction_factory(metric) for metric in DAILY_METRIC_TYPES
 ]

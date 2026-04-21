@@ -1,6 +1,7 @@
 """Create outputs from S3 logs."""
 
 import pandas as pd
+import polars as pl
 from dagster import (
     AssetExecutionContext,
     DailyPartitionsDefinition,
@@ -16,8 +17,8 @@ REQUESTERS_IGNORE = [
 
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="parquet_manager",
-    kinds={"parquet"},
+    # io_manager_key="parquet_manager",
+    # kinds={"parquet"},
     tags={"source": "s3"},
 )
 def out_s3_logs(
@@ -27,7 +28,8 @@ def out_s3_logs(
     """Output daily S3 logs.
 
     Filter to GET requests, drop Catalyst and AWS traffic, and add version/table
-    columns.
+    columns. Also drop old EPACEMS files, JSON files, and traffic where no
+    data is sent.
     """
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
@@ -39,12 +41,33 @@ def out_s3_logs(
         | (core_s3_logs.operation == "REST.GET.OBJECT")
     ]
 
+    # Only keep records with data sent
+    out = out.loc[out.megabytes_sent > 0]
+
     # Drop PUDL intake, AWS Registry of Open Data Checker, and PUDL logs sync
     out = out.loc[~out.requester.isin(REQUESTERS_IGNORE)]
 
     # Add columns for tables and versions
     out[["version", "table"]] = out["key"].str.split("/", expand=True, n=1)
     out["version"] = out["version"].replace(["-", ""], pd.NA)
+
+    # Drop .js files and old accidental hourly emissions data
+    out = out.loc[
+        ~(
+            out.table.str.endswith(".js")
+            | out.table.str.startswith("hourly_emissions_epacems/")
+        )
+    ]
+
+    # Drop logfiles
+    out = out[~out.table.str.endswith((".log", ".csv", "env"))]  # Clean up cruft
+
+    # Treat different zips as same format
+    out = out.replace(["sqlite.gz", "sqlite.zip"], ["sqlite", "sqlite"], regex=True)
+
+    out.loc[out.table.str.contains("hourly_emissions"), "table"] = (
+        "core_epacems__hourly_emissions.parquet"  # We renamed this table
+    )
 
     # Categorize usage types
     # Only after the eel-hole bucket was created on Nov 24th.
@@ -84,3 +107,30 @@ def out_s3_logs(
     )
 
     return out
+
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
+    # io_manager_key="parquet_manager",
+    # kinds={"parquet"},
+    tags={"source": "s3"},
+)
+def out_s3_daily_summary_by_table(
+    out_s3_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Get a daily summary by table from out_s3_logs."""
+    summary_df = (
+        pl.DataFrame(out_s3_logs)
+        .filter(pl.col("table").str.ends_with(".parquet"))
+        .sort(["time", "table"])
+        .group_by_dynamic("time", every="1d", group_by=["usage_type", "table"])
+        .agg(
+            normalized_file_downloads=pl.col("normalized_file_downloads")
+            .sum()
+            .round(0),
+            request_count=pl.col("request_uri").count().alias("request_count"),
+            megabytes_sent=(pl.col("megabytes_sent").sum().round(3)),
+            unique_ips=pl.col("remote_ip").n_unique(),
+        )
+    )
+    return summary_df.to_pandas()
