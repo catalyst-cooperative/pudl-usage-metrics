@@ -162,3 +162,35 @@ def out_s3_daily_summary_by_user(
         )
     )
     return summary_df.to_pandas()
+
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
+    tags={"source": "s3"},
+)
+def out_s3_daily_summary_by_db(
+    out_s3_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Get a daily summary by database from out_s3_logs."""
+    summary_df = (
+        pl.DataFrame(out_s3_logs)
+        .with_columns(
+            pl.when(pl.col("table").str.contains(".parquet"))
+            .then(pl.lit("parquet_file"))
+            .otherwise(pl.col("table"))
+            .alias("database")
+        )
+        .filter(~pl.col("table").str.ends_with("/"))  # Drop folders
+        .sort(["time", "database"])
+        .group_by_dynamic(
+            "time", every="1d", group_by=["usage_type", "database", "version"]
+        )
+        .agg(
+            normalized_file_downloads=pl.col("normalized_file_downloads").sum(),
+            request_count=pl.col("request_uri").count().alias("request_count"),
+            megabytes_sent=(pl.col("megabytes_sent").sum().round(3)),
+        )
+    )
+    return summary_df.to_pandas()
