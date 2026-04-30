@@ -29,6 +29,13 @@ class S3Extractor(GCSExtractor):
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
+        Note that the timestamp on the S3 file name corresponds to the end of the window
+        in which the logs were produced, meaning that logs can sometimes contain data
+        from more than one day. We read these records in based on the file name
+        and use the time column as the referent timestamp, so this can look unusual in
+        the context of examining a single partition but does not cause any issues in
+        the overall complete timeseries analysis.
+
         Args:
             context: The Dagster asset execution context
             blobs: the list of all file blobs in the bucket, returned by bucket.list_blobs()

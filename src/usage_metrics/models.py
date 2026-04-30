@@ -576,7 +576,7 @@ out_s3_daily_summary_by_db = Table(
     Column(
         "database",
         String,
-        comment="Parquet files are lumped into one parquet_file record.",
+        comment="Which type of database the record is accessing (e.g., pudl.sqlite, ferc1.duckdb). Parquet files are lumped into one parquet_file record.",
     ),
     Column("version", String),
     Column(
