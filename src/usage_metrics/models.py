@@ -473,6 +473,137 @@ out_s3_logs = Table(
     Column("partition_key", String),
 )
 
+out_s3_daily_summary_by_table = Table(
+    "out_s3_daily_summary_by_table",
+    usage_metrics_metadata,
+    Column("id", String, primary_key=True, comment="A unique ID for each log."),
+    # Query information
+    Column(
+        "time",
+        DateTime,
+        comment="The day for which metrics are reported.",
+    ),
+    Column("table", String),
+    Column("version", String),
+    Column(
+        "usage_type",
+        String,
+        comment=(
+            "The type of usage activity. Distinguishes between requests made through DuckDB via the eel hole (eel_hole_duckdb), by clicking the download Parquet button in the eel hole (eel_hole_link), by clicking a download link from the docs, or other direct S3 activity."
+        ),
+    ),
+    Column(
+        "megabytes_sent",
+        Float,
+        comment="The total size of the object in question in megabytes.",
+    ),
+    Column(
+        "normalized_file_downloads",
+        Float,
+        comment="The proportion of the file that is downloaded (0 to 1).",
+    ),
+    Column(
+        "request_count",
+        Integer,
+        comment="The number of requests made per table, usage method and day.",
+    ),
+    Column("partition_key", String),
+)
+
+out_s3_daily_summary_by_user = Table(
+    "out_s3_daily_summary_by_user",
+    usage_metrics_metadata,
+    Column("id", String, primary_key=True, comment="A unique ID for each log."),
+    # Query information
+    Column(
+        "time",
+        DateTime,
+        comment="The day for which metrics are reported.",
+    ),
+    Column("table", String),
+    Column("version", String),
+    Column(
+        "usage_type",
+        String,
+        comment=(
+            "The type of usage activity. Distinguishes between requests made through DuckDB via the eel hole (eel_hole_duckdb), by clicking the download Parquet button in the eel hole (eel_hole_link), by clicking a download link from the docs, or other direct S3 activity."
+        ),
+    ),
+    # IP location
+    Column(
+        "remote_ip",
+        String,
+        comment="The apparent IP address of the requester. Intermediate proxies and firewalls might obscure the actual IP address of the machine that's making the request.",
+    ),
+    Column(
+        "remote_ip_org",
+        String,
+        comment="IP Organization name, as determined by IPInfo.",
+    ),
+    Column(
+        "remote_ip_country_name",
+        String,
+        comment="Country where the IP is located, as determined by IPInfo.",
+    ),
+    Column(
+        "megabytes_sent",
+        Float,
+        comment="The total size of the object in question in megabytes.",
+    ),
+    Column(
+        "normalized_file_downloads",
+        Float,
+        comment="The proportion of the file that is downloaded (0 to 1).",
+    ),
+    Column(
+        "request_count",
+        Integer,
+        comment="The number of requests made per table, usage method and day.",
+    ),
+    Column("partition_key", String),
+)
+
+out_s3_daily_summary_by_db = Table(
+    "out_s3_daily_summary_by_db",
+    usage_metrics_metadata,
+    Column("id", String, primary_key=True, comment="A unique ID for each log."),
+    # Query information
+    Column(
+        "time",
+        DateTime,
+        comment="The day for which metrics are reported.",
+    ),
+    Column(
+        "database",
+        String,
+        comment="Which type of database the record is accessing (e.g., pudl.sqlite, ferc1.duckdb). Parquet files are lumped into one parquet_file record.",
+    ),
+    Column("version", String),
+    Column(
+        "usage_type",
+        String,
+        comment=(
+            "The type of usage activity. Distinguishes between requests made through DuckDB via the eel hole (eel_hole_duckdb), by clicking the download Parquet button in the eel hole (eel_hole_link), by clicking a download link from the docs, or other direct S3 activity."
+        ),
+    ),
+    Column(
+        "megabytes_sent",
+        Float,
+        comment="The total size of the object in question in megabytes.",
+    ),
+    Column(
+        "normalized_file_downloads",
+        Float,
+        comment="The proportion of the file that is downloaded (0 to 1).",
+    ),
+    Column(
+        "request_count",
+        Integer,
+        comment="The number of requests made per table, usage method and day.",
+    ),
+    Column("partition_key", String),
+)
+
 core_kaggle_logs = Table(
     "core_kaggle_logs",
     usage_metrics_metadata,

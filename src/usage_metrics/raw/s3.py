@@ -1,5 +1,6 @@
 """Extract data from S3 logs."""
 
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -28,6 +29,13 @@ class S3Extractor(GCSExtractor):
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
+        Note that the timestamp on the S3 file name corresponds to the end of the window
+        in which the logs were produced, meaning that logs can sometimes contain data
+        from more than one day. We read these records in based on the file name
+        and use the time column as the referent timestamp, so this can look unusual in
+        the context of examining a single partition but does not cause any issues in
+        the overall complete timeseries analysis.
+
         Args:
             context: The Dagster asset execution context
             blobs: the list of all file blobs in the bucket, returned by bucket.list_blobs()
@@ -35,10 +43,11 @@ class S3Extractor(GCSExtractor):
         Returns:
             A list of blobs to be downloaded.
         """
-        week_start_date_str = context.partition_key
-        week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
-        partition_dates = tuple(week_date_range.strftime("%Y-%m-%d"))
-        return [blob for blob in blobs if blob.name.startswith(partition_dates)]
+        day_start_date_str = context.partition_key
+        partition_date = datetime.strptime(day_start_date_str, "%Y-%m-%d").strftime(
+            "%Y-%m-%d"
+        )
+        return [blob for blob in blobs if blob.name.startswith(partition_date)]
 
     def load_file(self, file_path: Path) -> pd.DataFrame:
         """Read in file as dataframe."""

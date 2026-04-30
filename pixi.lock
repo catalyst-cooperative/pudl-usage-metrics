@@ -281,6 +281,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pillow-12.1.1-py312h50c33e8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pixman-0.46.4-h54a6638_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.9.4-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/polars-1.40.0-pyh58ad624_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/polars-runtime-32-1.40.0-py310hffdcd12_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/prometheus-cpp-1.3.0-ha5d0236_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prometheus_client-0.24.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prompt-toolkit-3.0.52-pyha770c72_0.conda
@@ -411,7 +413,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d0/53/e94962c964644f75cae552ed2d8162cf0404d6e7004113777f355717f9ec/cloud_sql_python_connector-1.20.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
@@ -652,6 +654,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pg8000-1.31.5-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pillow-12.1.1-py312h4985050_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.9.4-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/polars-1.40.0-pyh58ad624_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/polars-runtime-32-1.40.0-py310h428a0da_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/prometheus-cpp-1.3.0-h7802330_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prometheus_client-0.24.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prompt-toolkit-3.0.52-pyha770c72_0.conda
@@ -760,7 +764,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h3eecb57_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d0/53/e94962c964644f75cae552ed2d8162cf0404d6e7004113777f355717f9ec/cloud_sql_python_connector-1.20.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
@@ -1001,6 +1005,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pg8000-1.31.5-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pillow-12.1.1-py312h4e908a4_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.9.4-pyhcf101f3_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/polars-1.40.0-pyh58ad624_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/polars-runtime-32-1.40.0-py310h216a1ac_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/prometheus-cpp-1.3.0-h0967b3e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prometheus_client-0.24.1-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prompt-toolkit-3.0.52-pyha770c72_0.conda
@@ -1109,7 +1115,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d0/53/e94962c964644f75cae552ed2d8162cf0404d6e7004113777f355717f9ec/cloud_sql_python_connector-1.20.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
@@ -1407,6 +1413,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pixman-0.46.4-h54a6638_1.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.9.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.6.0-pyhf9edf01_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/polars-1.40.0-pyh58ad624_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/polars-runtime-32-1.40.0-py310hffdcd12_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pre-commit-4.5.1-pyha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/prometheus-cpp-1.3.0-ha5d0236_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prometheus_client-0.24.1-pyhd8ed1ab_0.conda
@@ -1552,7 +1560,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/zstd-1.5.7-hb78ec9c_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d0/53/e94962c964644f75cae552ed2d8162cf0404d6e7004113777f355717f9ec/cloud_sql_python_connector-1.20.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
@@ -1806,6 +1814,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pip-26.0.1-pyh8b19718_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.9.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.6.0-pyhf9edf01_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/polars-1.40.0-pyh58ad624_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/polars-runtime-32-1.40.0-py310h428a0da_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pre-commit-4.5.1-pyha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/prometheus-cpp-1.3.0-h7802330_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prometheus_client-0.24.1-pyhd8ed1ab_0.conda
@@ -1929,7 +1939,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h3eecb57_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d0/53/e94962c964644f75cae552ed2d8162cf0404d6e7004113777f355717f9ec/cloud_sql_python_connector-1.20.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
@@ -2183,6 +2193,8 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/pip-26.0.1-pyh8b19718_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/platformdirs-4.9.4-pyhcf101f3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pluggy-1.6.0-pyhf9edf01_1.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/polars-1.40.0-pyh58ad624_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/polars-runtime-32-1.40.0-py310h216a1ac_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/pre-commit-4.5.1-pyha770c72_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/prometheus-cpp-1.3.0-h0967b3e_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/prometheus_client-0.24.1-pyhd8ed1ab_0.conda
@@ -2306,7 +2318,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
       - pypi: https://files.pythonhosted.org/packages/bc/8a/340a1555ae33d7354dbca4faa54948d76d89a27ceef032c8c3bc661d003e/aiofiles-25.1.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/92/da/d3c94fc7c72ad9298072681ec3e8cea86949acc5c4cce4290ba21f7050a8/cachetools-4.2.0-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/d0/53/e94962c964644f75cae552ed2d8162cf0404d6e7004113777f355717f9ec/cloud_sql_python_connector-1.20.2-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/ba/5a/18ad964b0086c6e62e2e7500f7edc89e3faa45033c71c1893d34eed2b2de/dnspython-2.8.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/6e/58/de64dd860e606c78ff496d48b685583d29e2049d5facaf169ee55948cd61/ipinfo-5.5.0-py3-none-any.whl
       - pypi: ./
@@ -3896,10 +3908,10 @@ packages:
   - pkg:pypi/click?source=hash-mapping
   size: 97676
   timestamp: 1764518652276
-- pypi: https://files.pythonhosted.org/packages/56/5b/4eaf81d926b65247b3ff9376f71cf3aac287b3d8af1b2a12fd2605fd8534/cloud_sql_python_connector-1.20.1-py3-none-any.whl
+- pypi: https://files.pythonhosted.org/packages/d0/53/e94962c964644f75cae552ed2d8162cf0404d6e7004113777f355717f9ec/cloud_sql_python_connector-1.20.2-py3-none-any.whl
   name: cloud-sql-python-connector
-  version: 1.20.1
-  sha256: c00f9d81205eb658fe06f9f353e00646eb3f55d2d86de01dc1222eec1f5f2fc9
+  version: 1.20.2
+  sha256: cbd55bf58cbd5bea8e44c5768bcecc18d4ab2bc490150d90620b3fdb518d1063
   requires_dist:
   - aiofiles
   - aiohttp
@@ -9780,6 +9792,88 @@ packages:
   - pkg:pypi/pluggy?source=compressed-mapping
   size: 25877
   timestamp: 1764896838868
+- conda: https://conda.anaconda.org/conda-forge/noarch/polars-1.40.0-pyh58ad624_0.conda
+  sha256: c3da6a82313020b690b556df64062aaa440f26ef5ce5ced6e7a5f5343061893e
+  md5: fd16be490f5403adfbf27dd4901bbe34
+  depends:
+  - polars-runtime-32 ==1.40.0
+  - python >=3.10
+  - python
+  constrains:
+  - numpy >=1.16.0
+  - pyarrow >=7.0.0
+  - fastexcel >=0.9
+  - openpyxl >=3.0.0
+  - xlsx2csv >=0.8.0
+  - connectorx >=0.3.2
+  - deltalake >=1.0.0
+  - pyiceberg >=0.7.1
+  - altair >=5.4.0
+  - great_tables >=0.8.0
+  - polars-runtime-32 ==1.40.0
+  - polars-runtime-64 ==1.40.0
+  - polars-runtime-compat ==1.40.0
+  license: MIT
+  license_family: MIT
+  purls:
+  - pkg:pypi/polars?source=hash-mapping
+  size: 536257
+  timestamp: 1776563396053
+- conda: https://conda.anaconda.org/conda-forge/linux-64/polars-runtime-32-1.40.0-py310hffdcd12_0.conda
+  noarch: python
+  sha256: 4f270fd8e73b29052cbed427cf82bcdf6ff70d8b47db30250a1ea5d250a3a039
+  md5: 8eacf9ff4d4e1ca1b52f8f3ba3e0c993
+  depends:
+  - python
+  - __glibc >=2.17,<3.0.a0
+  - libstdcxx >=14
+  - libgcc >=14
+  - _python_abi3_support 1.*
+  - cpython >=3.10
+  constrains:
+  - __glibc >=2.17
+  license: MIT
+  license_family: MIT
+  purls:
+  - pkg:pypi/polars-runtime-32?source=hash-mapping
+  size: 41995503
+  timestamp: 1776563396053
+- conda: https://conda.anaconda.org/conda-forge/osx-64/polars-runtime-32-1.40.0-py310h428a0da_0.conda
+  noarch: python
+  sha256: 36632ce86ef2c33bc21022a5cf59264e11b2ab56b59506020c4e3bd4856b5e8a
+  md5: 4280f8d9b94239558f0046c23fd95632
+  depends:
+  - python
+  - __osx >=11.0
+  - libcxx >=19
+  - _python_abi3_support 1.*
+  - cpython >=3.10
+  constrains:
+  - __osx >=10.13
+  license: MIT
+  license_family: MIT
+  purls:
+  - pkg:pypi/polars-runtime-32?source=hash-mapping
+  size: 40882172
+  timestamp: 1776563288897
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/polars-runtime-32-1.40.0-py310h216a1ac_0.conda
+  noarch: python
+  sha256: 6a827be3c25fe0044a94a2437fe038a0af6ab65b3d90d3cbd513a83c9b69af39
+  md5: 1ebdb204ac27d15be71ff527cf934454
+  depends:
+  - python
+  - __osx >=11.0
+  - libcxx >=19
+  - _python_abi3_support 1.*
+  - cpython >=3.10
+  constrains:
+  - __osx >=11.0
+  license: MIT
+  license_family: MIT
+  purls:
+  - pkg:pypi/polars-runtime-32?source=hash-mapping
+  size: 35948230
+  timestamp: 1776563261192
 - conda: https://conda.anaconda.org/conda-forge/noarch/pre-commit-4.5.1-pyha770c72_0.conda
   sha256: 5b81b7516d4baf43d0c185896b245fa7384b25dc5615e7baa504b7fa4e07b706
   md5: 7f3ac694319c7eaf81a0325d6405e974
@@ -10118,9 +10212,10 @@ packages:
 - pypi: ./
   name: pudl-usage-metrics
   version: 0.1.0
-  sha256: c8c683429ddf11fbf033fbfe53cef6e4d4814e0123f1ccc0f1aa13d61950228c
+  sha256: bdbf0694659bab30b3d86f9a03e0c56ec17001226e2c6c663c47e9338d219599
   requires_dist:
   - cloud-sql-python-connector[pg8000]>=1.11.0
+  - polars>=1.40.0
   requires_python: '>=3.12,<3.13'
 - conda: https://conda.anaconda.org/conda-forge/noarch/pure_eval-0.2.3-pyhd8ed1ab_1.conda
   sha256: 71bd24600d14bb171a6321d523486f6a06f855e75e547fa0cb2a0953b02047f0
