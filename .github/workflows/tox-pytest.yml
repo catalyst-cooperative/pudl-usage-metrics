@@ -61,7 +61,7 @@ jobs:
           pixi run pytest-ci
 
       - name: Upload test coverage report to CodeCov
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
 
   ci-notify:
     runs-on: ubuntu-latest
