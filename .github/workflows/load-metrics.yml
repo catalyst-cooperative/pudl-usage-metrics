@@ -20,6 +20,17 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Notify Zulip of workflow launch
+        uses: zulip/github-actions-zulip/send-message@v2
+        with:
+          api-key: ${{ secrets.ZULIP_API_KEY }}
+          email: "build-status-bot@catalyst-cooperative.zulipchat.com"
+          organization-url: "https://catalyst-cooperative.zulipchat.com"
+          type: "stream"
+          to: "pudl-deployments"
+          topic: "pudl-usage-metrics"
+          content: |
+            # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
       - uses: actions/checkout@v6
         with:
           fetch-depth: 2
@@ -52,13 +63,16 @@ jobs:
         run: |
           pixi run python run_data_update.py ${PARTITION:+--partition "$PARTITION"}
 
-      - name: Post to pudl-deployments channel
+      - name: Notify Zulip
         if: always()
-        id: slack
-        uses: slackapi/slack-github-action@v3
+        uses: zulip/github-actions-zulip/send-message@v2
         with:
-          method: chat.postMessage
-          token: ${{ secrets.PUDL_DEPLOY_SLACK_TOKEN }}
-          payload: |
-            text: "Weekly usage metrics processing ran with status: ${{ job.status }}."
-            channel: "C03FHB9N0PQ"
+          api-key: ${{ secrets.ZULIP_API_KEY }}
+          email: "build-status-bot@catalyst-cooperative.zulipchat.com"
+          organization-url: "https://catalyst-cooperative.zulipchat.com"
+          type: "stream"
+          to: "pudl-deployments"
+          topic: "pudl-usage-metrics"
+          content: |
+            ${{ job.status == 'success' && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `load-metrics` completed with status `${{ job.status }}`.
+            [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
