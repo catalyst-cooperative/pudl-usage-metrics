@@ -13,6 +13,17 @@ jobs:
       contents: read
       id-token: write
     steps:
+      - name: Notify Zulip of workflow launch
+        uses: zulip/github-actions-zulip/send-message@v2
+        with:
+          api-key: ${{ secrets.ZULIP_API_KEY }}
+          email: "build-status-bot@catalyst-cooperative.zulipchat.com"
+          organization-url: "https://catalyst-cooperative.zulipchat.com"
+          type: "stream"
+          to: "pudl-deployments"
+          topic: "pudl-usage-metrics"
+          content: |
+            # :rocket: Launching `save-daily-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
@@ -69,22 +80,21 @@ jobs:
         run: |
           pixi run python src/usage_metrics/scripts/save_zenodo_metrics.py
 
-      - name: Inform the Codemonkeys
-        uses: 8398a7/action-slack@v3
+      - name: Notify Zulip
+        if: always()
+        uses: zulip/github-actions-zulip/send-message@v2
         with:
-          status: custom
-          fields: workflow,job,commit,repo,ref,author,took
-          custom_payload: |
-            {
-              username: 'action-slack',
-              icon_emoji: ':octocat:',
-              attachments: [{
-                color: '${{ job.status }}' === 'success' ? 'good' : '${{ job.status }}' === 'failure' ? 'danger' : 'warning',
-                text: `${process.env.AS_WORKFLOW}\n${process.env.AS_JOB} (${process.env.AS_COMMIT}) of ${process.env.AS_REPO}@${process.env.AS_REF} by ${process.env.AS_AUTHOR} ${{ job.status }} in ${process.env.AS_TOOK}`,
-              }]
-            }
-        env:
-          GITHUB_TOKEN: ${{ github.token }} # required
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }} # required
-          MATRIX_CONTEXT: ${{ toJson(matrix) }} # required
-        if: always() # Pick up events even if the job fails or is canceled.
+          api-key: ${{ secrets.ZULIP_API_KEY }}
+          email: "build-status-bot@catalyst-cooperative.zulipchat.com"
+          organization-url: "https://catalyst-cooperative.zulipchat.com"
+          type: "stream"
+          to: "pudl-deployments"
+          topic: "pudl-usage-metrics"
+          content: |
+            ${{ job.status == 'success' && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `save-daily-metrics` completed with status `${{ job.status }}`.
+            [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            Metric collection steps:
+            - github: ${{ steps.github.outcome == 'success' && ':check:' || steps.github.outcome == 'failure' && ':x:' || ':warning:' }} `${{ steps.github.outcome }}`
+            - kaggle: ${{ steps.kaggle.outcome == 'success' && ':check:' || steps.kaggle.outcome == 'failure' && ':x:' || ':warning:' }} `${{ steps.kaggle.outcome }}`
+            - zenodo: ${{ steps.zenodo.outcome == 'success' && ':check:' || steps.zenodo.outcome == 'failure' && ':x:' || ':warning:' }} `${{ steps.zenodo.outcome }}`
