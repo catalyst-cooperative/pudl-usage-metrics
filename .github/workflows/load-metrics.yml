@@ -31,7 +31,7 @@ jobs:
           topic: "pudl-usage-metrics"
           content: |
             # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
