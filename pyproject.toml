@@ -70,7 +70,7 @@ ipinfo = ">=5.0.1"
 pytest = ">8,<9.1"
 coverage = ">=5.3,<8"
 doc8 = ">=0.9,<2.1"
-pre-commit = ">=4,<5"
+prek = ">=0.4.8,<0.5.0"
 pydocstyle = ">=5.1,<7"
 pytest-asyncio = ">=0.20,<1.4"
 pytest-console-scripts = ">=1.4.1,<2"
@@ -92,16 +92,16 @@ description = "Start dagster server that stores ETL results in GCS"
 cmd = "ruff check ./"
 description = "Run the ruff linter on the whole repo"
 
-[tool.pixi.feature.test.tasks.pre-commit-run]
-cmd = "pre-commit run --all-files --show-diff-on-failure"
+[tool.pixi.feature.test.tasks.prek-run]
+cmd = "prek run --all-files --show-diff-on-failure"
 description = "Run all pre-commit hooks"
 
 [tool.pixi.feature.test.tasks.linters]
 depends-on = [
-    "pre-commit-run",
+    "prek-run",
     "ruff-check"
 ]
-description = "Run the pre-commit and ruff linters"
+description = "Run the pre-commit hooks and ruff linters"
 
 [tool.pixi.feature.test.tasks.coverage-erase]
 cmd = "coverage erase"
