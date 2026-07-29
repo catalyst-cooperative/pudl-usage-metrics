@@ -91,7 +91,7 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
 
         if len(metrics_json) <= 0:
             break
-        assert isinstance(metrics_json, dict), (
+        assert False, (
             f"Expected dict response. Received {type(metrics_json)}. "
             f"X-Accepted-GitHub-Permissions: {response.headers.get('x-accepted-github-permissions', None)}"
         )
@@ -129,6 +129,7 @@ def save_metrics():
     persistent_metrics = [Metric("stargazers", "stargazers"), Metric("forks", "forks")]
 
     for metric in biweekly_metrics:
+        break
         metric_data = get_biweekly_metrics(owner, repo, token, metric.name)
         upload_to_bucket(metric_data, metric)
 
