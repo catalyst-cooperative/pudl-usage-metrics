@@ -91,8 +91,8 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
 
         if len(metrics_json) <= 0:
             break
-        assert isinstance(metrics_json[0], dict), (
-            f"Expected dict response. Received {type(metrics_json[0])}. "
+        assert isinstance(metrics_json, dict), (
+            f"Expected dict response. Received {type(metrics_json)}. "
             f"X-Accepted-GitHub-Permissions: {response.headers.get('x-accepted-github-permissions', None)}"
         )
 
