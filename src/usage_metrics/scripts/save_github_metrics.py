@@ -92,8 +92,8 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
         if len(metrics_json) <= 0:
             break
         assert False, (
-            f"Expected dict response. Received {type(metrics_json)}. "
-            f"X-Accepted-GitHub-Permissions: {response.headers.get('x-accepted-github-permissions', None)}"
+            f"X-Accepted-GitHub-Permissions: {response.headers.get('x-accepted-github-permissions', None)}\n"
+            f"{json.dumps(metrics_json)}"
         )
 
         metrics += metrics_json

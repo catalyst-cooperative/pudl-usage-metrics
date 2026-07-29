@@ -61,40 +61,40 @@ jobs:
         run: |
           pixi run python src/usage_metrics/scripts/save_github_metrics.py
 
-      - shell: bash -l {0}
-        name: Save Kaggle Metrics
-        id: kaggle
-        # Run even if prior metric saving fails
-        if: "!cancelled()"
-        env:
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-        run: |
-          pixi run python src/usage_metrics/scripts/save_kaggle_metrics.py
+      # - shell: bash -l {0}
+      #   name: Save Kaggle Metrics
+      #   id: kaggle
+      #   # Run even if prior metric saving fails
+      #   if: "!cancelled()"
+      #   env:
+      #     KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+      #     KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+      #   run: |
+      #     pixi run python src/usage_metrics/scripts/save_kaggle_metrics.py
 
-      - shell: bash -l {0}
-        name: Save Zenodo Metrics
-        id: zenodo
-        # Run even if prior metric saving fails
-        if: "!cancelled()"
-        run: |
-          pixi run python src/usage_metrics/scripts/save_zenodo_metrics.py
+      # - shell: bash -l {0}
+      #   name: Save Zenodo Metrics
+      #   id: zenodo
+      #   # Run even if prior metric saving fails
+      #   if: "!cancelled()"
+      #   run: |
+      #     pixi run python src/usage_metrics/scripts/save_zenodo_metrics.py
 
-      - name: Notify Zulip
-        if: always()
-        uses: zulip/github-actions-zulip/send-message@v2
-        with:
-          api-key: ${{ secrets.ZULIP_API_KEY }}
-          email: "build-status-bot@catalyst-cooperative.zulipchat.com"
-          organization-url: "https://catalyst-cooperative.zulipchat.com"
-          type: "stream"
-          to: "pudl-deployments"
-          topic: "pudl-usage-metrics"
-          content: |
-            ${{ job.status == 'success' && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `save-daily-metrics` completed with status `${{ job.status }}`.
-            [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+      # - name: Notify Zulip
+      #   if: always()
+      #   uses: zulip/github-actions-zulip/send-message@v2
+      #   with:
+      #     api-key: ${{ secrets.ZULIP_API_KEY }}
+      #     email: "build-status-bot@catalyst-cooperative.zulipchat.com"
+      #     organization-url: "https://catalyst-cooperative.zulipchat.com"
+      #     type: "stream"
+      #     to: "pudl-deployments"
+      #     topic: "pudl-usage-metrics"
+      #     content: |
+      #       ${{ job.status == 'success' && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `save-daily-metrics` completed with status `${{ job.status }}`.
+      #       [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-            Metric collection steps:
-            - github: ${{ steps.github.outcome == 'success' && ':check:' || steps.github.outcome == 'failure' && ':x:' || ':warning:' }} `${{ steps.github.outcome }}`
-            - kaggle: ${{ steps.kaggle.outcome == 'success' && ':check:' || steps.kaggle.outcome == 'failure' && ':x:' || ':warning:' }} `${{ steps.kaggle.outcome }}`
-            - zenodo: ${{ steps.zenodo.outcome == 'success' && ':check:' || steps.zenodo.outcome == 'failure' && ':x:' || ':warning:' }} `${{ steps.zenodo.outcome }}`
+      #       Metric collection steps:
+      #       - github: ${{ steps.github.outcome == 'success' && ':check:' || steps.github.outcome == 'failure' && ':x:' || ':warning:' }} `${{ steps.github.outcome }}`
+      #       - kaggle: ${{ steps.kaggle.outcome == 'success' && ':check:' || steps.kaggle.outcome == 'failure' && ':x:' || ':warning:' }} `${{ steps.kaggle.outcome }}`
+      #       - zenodo: ${{ steps.zenodo.outcome == 'success' && ':check:' || steps.zenodo.outcome == 'failure' && ':x:' || ':warning:' }} `${{ steps.zenodo.outcome }}`
