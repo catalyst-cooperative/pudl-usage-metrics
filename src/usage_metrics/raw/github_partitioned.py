@@ -88,6 +88,8 @@ class GithubExtractor(GCSExtractor):
         """Extract stargazers data from stargazers JSON file."""
         trns_metric_json = []
         for stargazer in metric_json:
+            if not isinstance(stargazer, dict):
+                continue
             user = stargazer["user"]
             starred_at = stargazer["starred_at"]
             user["starred_at"] = starred_at

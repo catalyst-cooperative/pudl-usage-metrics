@@ -86,12 +86,16 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
 
     while time.time() < timeout_start + timeout:
         params = {"page": page}
-        metrics_json = requests.get(
-            url=url, headers=headers, params=params, timeout=100
-        ).json()
+        response = requests.get(url=url, headers=headers, params=params, timeout=100)
+        metrics_json = response.json()
 
         if len(metrics_json) <= 0:
             break
+        assert isinstance(metrics_json[0], dict), (
+            f"Expected dict response. Received {type(metrics_json[0])}. "
+            f"X-Accepted-GitHub-Permissions: {response.headers.get('x-accepted-github-permissions', None)}"
+        )
+
         metrics += metrics_json
         page += 1
     return json.dumps(metrics)

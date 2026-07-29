@@ -65,10 +65,12 @@ def core_github_stargazers(
 ) -> pd.DataFrame:
     """Transform the stargazers to the PUDL Github repository."""
     df = raw_github_stargazers
+    if df.empty:
+        return df
 
     # Drop fields that don't pertain to usage metrics
     df = df.rename({"size": "size_kb"}).drop(
-        columns=["gravatar_id", "avatar_url", "user_view_type"]
+        columns=["gravatar_id", "avatar_url", "user_view_type"],
     )
 
     # Convert string to datetime using Pandas
