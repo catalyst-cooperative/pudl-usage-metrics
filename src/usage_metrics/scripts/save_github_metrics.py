@@ -91,10 +91,6 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
 
         if len(metrics_json) <= 0:
             break
-        assert False, (
-            f"X-Accepted-GitHub-Permissions: {response.headers.get('x-accepted-github-permissions', None)}\n"
-            f"{json.dumps(metrics_json)}"
-        )
 
         metrics += metrics_json
         page += 1
@@ -126,7 +122,8 @@ def save_metrics():
         Metric("popular/referrers", "popular_referrers"),
         Metric("views", "views"),
     ]
-    persistent_metrics = [Metric("stargazers", "stargazers"), Metric("forks", "forks")]
+    # 2026-07-29: RIP Metric("stargazers", "stargazers")
+    persistent_metrics = [Metric("forks", "forks")]
 
     for metric in biweekly_metrics:
         break

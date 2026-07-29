@@ -57,7 +57,8 @@ def core_github_forks(
 @asset(
     io_manager_key="parquet_manager",
     kinds={"parquet"},
-    tags={"source": "github_nonpartitioned"},
+    # 2026-07-29: disabling stargazers
+    tags={"source": "github_nonpartitioned", "disabled": "true"},
 )
 def core_github_stargazers(
     context: AssetExecutionContext,
