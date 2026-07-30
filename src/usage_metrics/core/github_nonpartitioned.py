@@ -66,8 +66,6 @@ def core_github_stargazers(
 ) -> pd.DataFrame:
     """Transform the stargazers to the PUDL Github repository."""
     df = raw_github_stargazers
-    if df.empty:
-        return df
 
     # Drop fields that don't pertain to usage metrics
     df = df.rename({"size": "size_kb"}).drop(

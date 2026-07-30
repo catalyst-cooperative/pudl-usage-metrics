@@ -126,7 +126,6 @@ def save_metrics():
     persistent_metrics = [Metric("forks", "forks")]
 
     for metric in biweekly_metrics:
-        break
         metric_data = get_biweekly_metrics(owner, repo, token, metric.name)
         upload_to_bucket(metric_data, metric)
 
