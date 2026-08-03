@@ -131,7 +131,8 @@ defs: Definitions = Definitions(
         define_asset_job(
             name="all_nonpartitioned_metrics_etl",
             description="This job ETLs all non-partitioned metrics sources.",
-            selection=AssetSelection.groups("non_partitioned"),
+            selection=AssetSelection.groups("non_partitioned")
+            - AssetSelection.tag("disabled", "true"),
         ),
         define_asset_job(
             name="s3_metrics_etl",
@@ -151,7 +152,8 @@ defs: Definitions = Definitions(
         define_asset_job(
             name="github_nonpartitioned_metrics_etl",
             description="This job ETLs logs for Github non-partitioned usage logs only.",
-            selection=AssetSelection.tag("source", "github_nonpartitioned"),
+            selection=AssetSelection.tag("source", "github_nonpartitioned")
+            - AssetSelection.tag("disabled", "true"),
         ),
         define_asset_job(
             name="zenodo_metrics_etl",

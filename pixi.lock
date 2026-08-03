@@ -1,21 +1,8 @@
 version: 7
 platforms:
 - name: linux-64
-  virtual-packages:
-  - __unix=0=0
-  - __linux=4.18
-  - __glibc=2.28
-  - __archspec=0=x86_64
 - name: osx-64
-  virtual-packages:
-  - __unix=0=0
-  - __osx=13.0
-  - __archspec=0=x86_64
 - name: osx-arm64
-  virtual-packages:
-  - __unix=0=0
-  - __osx=13.0
-  - __archspec=0=m1
 environments:
   default:
     channels:
@@ -68,6 +55,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/frozenlist-1.8.0-py312h447239a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/gflags-2.2.2-h5888daf_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/glog-0.7.1-hbabe93e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/google-cloud-sdk-578.0.0-py312h7900ff3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/google-crc32c-1.8.0-py312h03f33d3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/graphite2-1.3.15-hecca717_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/greenlet-3.5.3-py312h8285ef7_0.conda
@@ -438,7 +426,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/webencodings-0.5.1-pyhd8ed1ab_3.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/websocket-client-1.9.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.0-pyhcf101f3_0.conda
-      - pypi: ./
+      - pypi: .
       - pypi: https://files.pythonhosted.org/packages/0b/38/10a95226732a3d81ebcd157e5cb750b9d52a534e017dd177cc2321aea895/cloud_sql_python_connector-1.20.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/55/f1b20ecbe50e4a18c5f580149ed6a744a38cf56f46b951fff8bc4150f7bb/ipinfo-5.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/7b/1fc1c09cc0756cf25861a3be10565915953876da48bb228fb9a672b20a42/cachetools-7.1.4-py3-none-any.whl
@@ -686,6 +674,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/frozenlist-1.8.0-py312h90c63f8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/gflags-2.2.2-hac325c4_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/glog-0.7.1-h2790a97_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/google-cloud-sdk-578.0.0-py312hb401068_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/google-crc32c-1.8.0-py312hb9001e9_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/graphite2-1.3.15-hcc62823_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/greenlet-3.5.3-py312h4075484_0.conda
@@ -809,7 +798,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-1.3.2-hbb4bfdb_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-ng-2.3.3-h8bce59a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h3eecb57_6.conda
-      - pypi: ./
+      - pypi: .
       - pypi: https://files.pythonhosted.org/packages/0b/38/10a95226732a3d81ebcd157e5cb750b9d52a534e017dd177cc2321aea895/cloud_sql_python_connector-1.20.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/55/f1b20ecbe50e4a18c5f580149ed6a744a38cf56f46b951fff8bc4150f7bb/ipinfo-5.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/7b/1fc1c09cc0756cf25861a3be10565915953876da48bb228fb9a672b20a42/cachetools-7.1.4-py3-none-any.whl
@@ -1057,6 +1046,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/frozenlist-1.8.0-py312ha0ce254_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/gflags-2.2.2-hf9b8971_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/glog-0.7.1-heb240a5_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/google-cloud-sdk-578.0.0-py312h81bd7bf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/google-crc32c-1.8.0-py312h090f823_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/graphite2-1.3.15-hf6b4638_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/greenlet-3.5.3-py312h6510ced_0.conda
@@ -1180,7 +1170,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-hed4e4f5_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
-      - pypi: ./
+      - pypi: .
       - pypi: https://files.pythonhosted.org/packages/0b/38/10a95226732a3d81ebcd157e5cb750b9d52a534e017dd177cc2321aea895/cloud_sql_python_connector-1.20.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/55/f1b20ecbe50e4a18c5f580149ed6a744a38cf56f46b951fff8bc4150f7bb/ipinfo-5.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/7b/1fc1c09cc0756cf25861a3be10565915953876da48bb228fb9a672b20a42/cachetools-7.1.4-py3-none-any.whl
@@ -1238,6 +1228,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/frozenlist-1.8.0-py312h447239a_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/gflags-2.2.2-h5888daf_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/glog-0.7.1-hbabe93e_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/google-cloud-sdk-578.0.0-py312h7900ff3_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/google-crc32c-1.8.0-py312h03f33d3_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/graphite2-1.3.15-hecca717_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/greenlet-3.5.3-py312h8285ef7_0.conda
@@ -1628,7 +1619,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/websocket-client-1.9.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/wheel-0.47.0-pyhd8ed1ab_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/zipp-4.1.0-pyhcf101f3_0.conda
-      - pypi: ./
+      - pypi: .
       - pypi: https://files.pythonhosted.org/packages/0b/38/10a95226732a3d81ebcd157e5cb750b9d52a534e017dd177cc2321aea895/cloud_sql_python_connector-1.20.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/55/f1b20ecbe50e4a18c5f580149ed6a744a38cf56f46b951fff8bc4150f7bb/ipinfo-5.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/7b/1fc1c09cc0756cf25861a3be10565915953876da48bb228fb9a672b20a42/cachetools-7.1.4-py3-none-any.whl
@@ -1895,6 +1886,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/frozenlist-1.8.0-py312h90c63f8_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/gflags-2.2.2-hac325c4_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/glog-0.7.1-h2790a97_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/google-cloud-sdk-578.0.0-py312hb401068_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/google-crc32c-1.8.0-py312hb9001e9_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/graphite2-1.3.15-hcc62823_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/greenlet-3.5.3-py312h4075484_0.conda
@@ -2020,7 +2012,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-1.3.2-hbb4bfdb_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zlib-ng-2.3.3-h8bce59a_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/zstd-1.5.7-h3eecb57_6.conda
-      - pypi: ./
+      - pypi: .
       - pypi: https://files.pythonhosted.org/packages/0b/38/10a95226732a3d81ebcd157e5cb750b9d52a534e017dd177cc2321aea895/cloud_sql_python_connector-1.20.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/55/f1b20ecbe50e4a18c5f580149ed6a744a38cf56f46b951fff8bc4150f7bb/ipinfo-5.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/7b/1fc1c09cc0756cf25861a3be10565915953876da48bb228fb9a672b20a42/cachetools-7.1.4-py3-none-any.whl
@@ -2287,6 +2279,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/frozenlist-1.8.0-py312ha0ce254_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/gflags-2.2.2-hf9b8971_1005.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/glog-0.7.1-heb240a5_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/google-cloud-sdk-578.0.0-py312h81bd7bf_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/google-crc32c-1.8.0-py312h090f823_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/graphite2-1.3.15-hf6b4638_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/greenlet-3.5.3-py312h6510ced_0.conda
@@ -2412,7 +2405,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-1.3.2-h8088a28_2.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zlib-ng-2.3.3-hed4e4f5_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/zstd-1.5.7-hbf9d68e_6.conda
-      - pypi: ./
+      - pypi: .
       - pypi: https://files.pythonhosted.org/packages/0b/38/10a95226732a3d81ebcd157e5cb750b9d52a534e017dd177cc2321aea895/cloud_sql_python_connector-1.20.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/52/55/f1b20ecbe50e4a18c5f580149ed6a744a38cf56f46b951fff8bc4150f7bb/ipinfo-5.6.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8c/7b/1fc1c09cc0756cf25861a3be10565915953876da48bb228fb9a672b20a42/cachetools-7.1.4-py3-none-any.whl
@@ -3192,6 +3185,18 @@ packages:
     - glog >=0.7.1,<0.8.0a0
   size: 143452
   timestamp: 1718284177264
+- conda: https://conda.anaconda.org/conda-forge/linux-64/google-cloud-sdk-578.0.0-py312h7900ff3_0.conda
+  sha256: ae3d55b7d23c2fc2f36d7775c1ff99a0e8013ace6cb3358caeb11048bc712196
+  md5: 5366831df8634e352676bfa34c36741c
+  depends:
+  - python >=3.12,<3.13.0a0
+  - python_abi 3.12.* *_cp312
+  license: Apache-2.0
+  license_family: Apache
+  purls: []
+  run_exports: {}
+  size: 118320840
+  timestamp: 1785267616442
 - conda: https://conda.anaconda.org/conda-forge/linux-64/google-crc32c-1.8.0-py312h03f33d3_1.conda
   sha256: 3f962b2cbdc2aac3089a5c708477657266c0a665f0eed09981a34d1ab6793065
   md5: 68f704ea294dcec9e09edd9c3d233846
@@ -7035,7 +7040,8 @@ packages:
   - python >=3.10
   license: Apache-2.0
   license_family: Apache
-  purls: []
+  purls:
+  - pkg:pypi/google-cloud-bigquery-storage?source=compressed-mapping
   run_exports: {}
   size: 11728
   timestamp: 1779475765896
@@ -10036,6 +10042,18 @@ packages:
     - glog >=0.7.1,<0.8.0a0
   size: 117017
   timestamp: 1718284325443
+- conda: https://conda.anaconda.org/conda-forge/osx-64/google-cloud-sdk-578.0.0-py312hb401068_0.conda
+  sha256: bc4970c5762e131f97c61d6925ef5783831a015544585259d09c158cbd975d9e
+  md5: 36852233526f99640c419092868812a0
+  depends:
+  - python >=3.12,<3.13.0a0
+  - python_abi 3.12.* *_cp312
+  license: Apache-2.0
+  license_family: Apache
+  purls: []
+  run_exports: {}
+  size: 87197235
+  timestamp: 1785268256835
 - conda: https://conda.anaconda.org/conda-forge/osx-64/google-crc32c-1.8.0-py312hb9001e9_1.conda
   sha256: ffd90aaf431a1a1d45f1b852aef16e56c1ce73bd443fae96d83c9d8d2b8a9af2
   md5: 558f8364bc7ccb5be86f035dadab7981
@@ -12777,6 +12795,19 @@ packages:
     - glog >=0.7.1,<0.8.0a0
   size: 112215
   timestamp: 1718284365403
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/google-cloud-sdk-578.0.0-py312h81bd7bf_0.conda
+  sha256: eea11c8cbd5856b9cfd8a51b48db976f3ee5d951a02631866eeb570e89c15b76
+  md5: 707ea0a2f8ab0f613bb7762a3f826f36
+  depends:
+  - python >=3.12,<3.13.0a0
+  - python >=3.12,<3.13.0a0 *_cpython
+  - python_abi 3.12.* *_cp312
+  license: Apache-2.0
+  license_family: Apache
+  purls: []
+  run_exports: {}
+  size: 88932047
+  timestamp: 1785268037374
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/google-crc32c-1.8.0-py312h090f823_1.conda
   sha256: cf6c1345d2c4fb4cee1128256d3a1d3fe5150c8788bc6cad12a04cbfc44bb247
   md5: 0c8ad601cdbec3be85d1c62080b388d7
@@ -13963,7 +13994,8 @@ packages:
   - tornado >=5
   license: PSF-2.0
   license_family: PSF
-  purls: []
+  purls:
+  - pkg:pypi/matplotlib?source=compressed-mapping
   run_exports: {}
   size: 14839
   timestamp: 1782829652227
@@ -14854,7 +14886,7 @@ packages:
     - zstd >=1.5.7,<1.6.0a0
   size: 433413
   timestamp: 1764777166076
-- pypi: ./
+- pypi: .
   name: pudl-usage-metrics
   requires_dist:
   - cloud-sql-python-connector[pg8000]>=1.11.0

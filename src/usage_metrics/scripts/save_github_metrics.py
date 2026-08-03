@@ -86,12 +86,12 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
 
     while time.time() < timeout_start + timeout:
         params = {"page": page}
-        metrics_json = requests.get(
-            url=url, headers=headers, params=params, timeout=100
-        ).json()
+        response = requests.get(url=url, headers=headers, params=params, timeout=100)
+        metrics_json = response.json()
 
         if len(metrics_json) <= 0:
             break
+
         metrics += metrics_json
         page += 1
     return json.dumps(metrics)
@@ -122,7 +122,8 @@ def save_metrics():
         Metric("popular/referrers", "popular_referrers"),
         Metric("views", "views"),
     ]
-    persistent_metrics = [Metric("stargazers", "stargazers"), Metric("forks", "forks")]
+    # 2026-07-29: RIP Metric("stargazers", "stargazers")
+    persistent_metrics = [Metric("forks", "forks")]
 
     for metric in biweekly_metrics:
         metric_data = get_biweekly_metrics(owner, repo, token, metric.name)

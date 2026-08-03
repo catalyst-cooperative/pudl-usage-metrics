@@ -26,7 +26,11 @@ def cumulative_metrics_extraction_factory(
 
     @asset(
         name=f"raw_github_{metric}",
-        tags={"source": "github_nonpartitioned"},
+        # 2026-07-29: disabling stargazers
+        tags={
+            "source": "github_nonpartitioned",
+            "disabled": "true" if metric == "stargazers" else "false",
+        },
     )
     def _raw_github_logs(context: AssetExecutionContext) -> pd.DataFrame:
         """Extract Github logs from the most recent files and return a DataFrame."""
