@@ -64,7 +64,7 @@ class GithubExtractor(GCSExtractor):
             blobs = [
                 blob for blob in blobs if blob.name.startswith(f"github/{self.metric}/")
             ]
-            blobs = [sorted(blobs, key=lambda x: x.time_created)[-1]]
+            blobs = [max(blobs, key=lambda x: x.time_created)]
 
         return blobs
 
