@@ -25,9 +25,9 @@ repos:
   # Formatters: hooks that re-write Python and RST files
   #####################################################################################
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.1
+    rev: v0.16.3
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
 
@@ -59,15 +59,6 @@ repos:
   ########################################################################################
   - repo: local
     hooks:
-      # clear outputs from Jupyter notebooks
-      - id: nb-output-clear
-        name: nb-output-clear
-        stages: [pre-commit]
-        language: system
-        verbose: false
-        pass_filenames: false
-        always_run: true
-        entry: find notebooks \( -name \*.ipynb -not -name \*checkpoint.ipynb \) -type f -exec jupyter nbconvert --clear-output {} \;
       # Run the unit tests
       - id: unit-tests
         name: unit-tests
