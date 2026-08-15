@@ -24,7 +24,7 @@ def core_github_popular_referrers(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if raw_github_popular_referrers.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return raw_github_popular_referrers
 
     df = raw_github_popular_referrers
@@ -56,7 +56,7 @@ def core_github_popular_paths(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if raw_github_popular_paths.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return raw_github_popular_paths
 
     df = raw_github_popular_paths
@@ -92,7 +92,7 @@ def core_github_clones(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if raw_github_clones.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return raw_github_clones
 
     df = raw_github_clones
@@ -145,7 +145,7 @@ def core_github_views(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if raw_github_views.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return raw_github_views
 
     df = raw_github_views

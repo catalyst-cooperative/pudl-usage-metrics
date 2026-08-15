@@ -24,7 +24,7 @@ def core_zenodo_logs(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if raw_zenodo_logs.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return raw_zenodo_logs
 
     # Rename columns

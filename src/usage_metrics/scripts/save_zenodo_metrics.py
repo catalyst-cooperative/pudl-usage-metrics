@@ -38,7 +38,7 @@ class CommunityMetadata(BaseModel):
     revision: int
 
     @classmethod
-    def check_empty_string(cls, doi: str):  # noqa: N805
+    def check_empty_string(cls, doi: str):
         """Sometimes zenodo returns an empty string for the `doi`. Convert to None."""
         if doi == "":
             return

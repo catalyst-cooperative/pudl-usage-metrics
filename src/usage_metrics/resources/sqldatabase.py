@@ -66,7 +66,7 @@ class SQLIOManager(IOManager):
             # Only update primary keys that aren't in the database
             df_new = df[~i1.isin(i2)]
             if df_new.empty:
-                context.log.warn(
+                context.log.warning(
                     "All records already loaded, not writing any data. Clobber the database if you want to overwrite this data."
                 )
             else:
