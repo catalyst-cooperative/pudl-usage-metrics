@@ -13,7 +13,13 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from pydantic import BaseModel, BeforeValidator, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 ALLOWABLE_EVENT_TYPES = Literal[
@@ -57,9 +63,7 @@ class DuckDBFilters(BaseModel):
     ]
     value: str | int | float | None = None
 
-    class Config:  # noqa: D106
-        alias_generator = to_camel
-        populate_by_name = True
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class DuckDBParams(BaseModel):
@@ -72,9 +76,7 @@ class DuckDBParams(BaseModel):
     page: int
     per_page: int
 
-    class Config:  # noqa: D106
-        alias_generator = to_camel
-        populate_by_name = True
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class JsonPayload(BaseModel):
@@ -100,9 +102,7 @@ class JsonPayload(BaseModel):
     newsletter: bool | None = None
     outreach: bool | None = None
 
-    class Config:  # noqa: D106
-        alias_generator = to_camel
-        populate_by_name = True
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     @field_validator("*", mode="before")
     def replace_na_with_none(cls, value, info):  # noqa: N805
@@ -152,9 +152,7 @@ class EelHoleLogs(BaseModel):
                 data.pop("jsonPayload", None)
         return data
 
-    class Config:  # noqa: D106
-        alias_generator = to_camel
-        populate_by_name = True
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 @asset(
