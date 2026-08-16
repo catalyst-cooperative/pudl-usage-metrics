@@ -4,7 +4,7 @@ import json
 import logging
 import sys
 import tempfile
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 
 from google.cloud import storage
@@ -35,7 +35,7 @@ def get_kaggle_dataset_metadata() -> str:
 
     if isinstance(metadata, str):
         metadata = json.loads(metadata)  # Fix bad formatting in original JSON file
-    metadata.update({"metrics_date": date.today().strftime("%Y-%m-%d")})
+    metadata.update({"metrics_date": datetime.now(tz=UTC).date().strftime("%Y-%m-%d")})
     return json.dumps(metadata)
 
 
@@ -45,7 +45,8 @@ def upload_to_bucket(data):
 
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
-    blob_name = f"kaggle/{date.today().strftime('%Y-%m-%d')}.json"
+    today = datetime.now(tz=UTC).date()
+    blob_name = f"kaggle/{today.strftime('%Y-%m-%d')}.json"
 
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)

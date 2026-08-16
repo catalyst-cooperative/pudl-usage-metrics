@@ -11,7 +11,7 @@ from usage_metrics.resources.postgres import postgres_manager
 from usage_metrics.resources.sqlite import sqlite_manager
 
 
-@daily_partitioned_config(start_date=datetime(2022, 1, 24))
+@daily_partitioned_config(start_date="2022-01-24")
 def datasette_daily_partition(start: datetime, end: datetime):
     """Dagster daily partition config for datasette logs."""
     return {

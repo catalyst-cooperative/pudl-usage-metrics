@@ -3,7 +3,7 @@
 import json
 import logging
 import sys
-from datetime import date, datetime
+from datetime import UTC, datetime
 from typing import Annotated
 
 import pandas as pd
@@ -107,7 +107,8 @@ def save_zenodo_logs() -> pd.DataFrame():
         versions_url = f"https://zenodo.org/api/records/{record.recid}/versions"
         record_versions_json = get_all_records(url=versions_url)
         versions_metadata = json.dumps(record_versions_json)
-        blob_name = f"zenodo/{date.today().strftime('%Y-%m-%d')}-{record.recid}.json"
+        today = datetime.now(tz=UTC).date()
+        blob_name = f"zenodo/{today.strftime('%Y-%m-%d')}-{record.recid}.json"
         upload_to_bucket(bucket=bucket, blob_name=blob_name, data=versions_metadata)
 
 

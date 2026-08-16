@@ -103,7 +103,7 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
                 ),
             )
         else:
-            raise ValueError(f"Outputs of type {type(obj)} not supported.")
+            raise TypeError(f"Outputs of type {type(obj)} not supported.")
 
         context.add_output_metadata({"row_count": row_count, "path": str(path)})
 

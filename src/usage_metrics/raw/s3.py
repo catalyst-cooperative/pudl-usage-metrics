@@ -1,6 +1,6 @@
 """Extract data from S3 logs."""
 
-from datetime import datetime
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -44,9 +44,7 @@ class S3Extractor(GCSExtractor):
             A list of blobs to be downloaded.
         """
         day_start_date_str = context.partition_key
-        partition_date = datetime.strptime(day_start_date_str, "%Y-%m-%d").strftime(
-            "%Y-%m-%d"
-        )
+        partition_date = date.fromisoformat(day_start_date_str).strftime("%Y-%m-%d")
         return [blob for blob in blobs if blob.name.startswith(partition_date)]
 
     def load_file(self, file_path: Path) -> pd.DataFrame:

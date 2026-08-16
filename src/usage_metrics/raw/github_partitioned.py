@@ -6,9 +6,9 @@ querying the Github API.
 
 import json
 import re
-from datetime import datetime
+from datetime import date
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 import pandas as pd
 from dagster import (
@@ -55,9 +55,7 @@ class GithubExtractor(GCSExtractor):
         """
         if self.metric in DAILY_METRIC_TYPES:
             day_start_date_str = context.partition_key
-            partition_date = datetime.strptime(day_start_date_str, "%Y-%m-%d").strftime(
-                "%Y-%m-%d"
-            )
+            partition_date = date.fromisoformat(day_start_date_str).strftime("%Y-%m-%d")
             file_name = f"github/{self.metric}/{partition_date}.json"
             blobs = [blob for blob in blobs if blob.name == file_name]
         else:
@@ -99,7 +97,7 @@ class GithubExtractor(GCSExtractor):
         """Extract forks data from forks JSON file."""
         return pd.DataFrame(metric_json)
 
-    extract_funcs = {
+    extract_funcs: ClassVar = {
         "clones": extract_clones,
         "views": extract_views,
         "popular_paths": extract_popular_paths,

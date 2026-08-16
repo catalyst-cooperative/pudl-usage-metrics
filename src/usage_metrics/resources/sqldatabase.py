@@ -89,7 +89,7 @@ class SQLIOManager(IOManager):
             obj: a sql query or dataframe to add to the database.
 
         Raises:
-            Exception: if an asset or op returns an unsupported datatype.
+            TypeError: if an asset or op returns an unsupported datatype.
         """
         if isinstance(obj, pd.DataFrame):
             if obj.empty:
@@ -102,7 +102,7 @@ class SQLIOManager(IOManager):
                 table_name = get_table_name_from_context(context)
                 self.append_df_to_table(context, obj, table_name)
         else:
-            raise Exception(
+            raise TypeError(
                 f"{self.__class__.__name__} only supports pandas DataFrames."
             )
 

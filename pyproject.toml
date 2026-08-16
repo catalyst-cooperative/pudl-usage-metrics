@@ -143,7 +143,7 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.ruff.lint]
-select = [
+extend-select = [
     "A", # flake8-builtins
     # "ARG", # unused arguments
     # "B",  # flake8-bugbear
@@ -183,7 +183,6 @@ ignore = [
     "PD010",  # Use of df.stack()
     "PD013",  # Use of df.unstack()
     "PD015",  # Use of pd.merge() rather than df.merge()
-    "PD901",  # df as variable name
     "RET504", # Ignore unnecessary assignment before return
     "S101",   # Use of assert
 ]

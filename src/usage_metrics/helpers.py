@@ -182,7 +182,7 @@ def retry_request(retries: int = 3, delay: int = 2, backoff: int = 2):
                     attempts += 1
                     time.sleep(delay)
                     delay *= backoff  # Exponential backoff
-            raise Exception("Max retries reached")
+            raise RuntimeError("Max retries reached")
 
         return wrapper
 
