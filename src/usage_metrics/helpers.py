@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import time
-from datetime import UTC, datetime, timezone
 from functools import wraps
 from pathlib import Path
 from urllib.parse import urlparse
@@ -145,13 +144,6 @@ def unpack_json_series(series: pd.Series) -> pd.DataFrame:
     return unpacked_df
 
 
-def str_to_datetime(
-    date: str, fmt: str = "%Y-%m-%d", tzinfo: timezone = UTC
-) -> datetime:
-    """Convert a string to a date."""
-    return datetime.strptime(date, fmt).replace(tzinfo=tzinfo)
-
-
 def get_table_name_from_context(context: OutputContext) -> str:
     """Retrieves the table name from the context object."""
     if context.has_asset_key:
@@ -182,7 +174,7 @@ def retry_request(retries: int = 3, delay: int = 2, backoff: int = 2):
                     attempts += 1
                     time.sleep(delay)
                     delay *= backoff  # Exponential backoff
-            raise Exception("Max retries reached")
+            raise RuntimeError("Max retries reached")
 
         return wrapper
 

@@ -1,4 +1,4 @@
-name: tox-pytest
+name: pytest
 
 on: [push, pull_request]
 

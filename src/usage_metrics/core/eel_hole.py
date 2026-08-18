@@ -13,7 +13,13 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from pydantic import BaseModel, BeforeValidator, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    field_validator,
+    model_validator,
+)
 from pydantic.alias_generators import to_camel
 
 ALLOWABLE_EVENT_TYPES = Literal[
@@ -57,9 +63,7 @@ class DuckDBFilters(BaseModel):
     ]
     value: str | int | float | None = None
 
-    class Config:  # noqa: D106
-        alias_generator = to_camel
-        populate_by_name = True
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class DuckDBParams(BaseModel):
@@ -72,9 +76,7 @@ class DuckDBParams(BaseModel):
     page: int
     per_page: int
 
-    class Config:  # noqa: D106
-        alias_generator = to_camel
-        populate_by_name = True
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 class JsonPayload(BaseModel):
@@ -100,9 +102,7 @@ class JsonPayload(BaseModel):
     newsletter: bool | None = None
     outreach: bool | None = None
 
-    class Config:  # noqa: D106
-        alias_generator = to_camel
-        populate_by_name = True
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     @field_validator("*", mode="before")
     def replace_na_with_none(cls, value, info):  # noqa: N805
@@ -152,9 +152,7 @@ class EelHoleLogs(BaseModel):
                 data.pop("jsonPayload", None)
         return data
 
-    class Config:  # noqa: D106
-        alias_generator = to_camel
-        populate_by_name = True
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
 @asset(
@@ -169,7 +167,7 @@ def _core_eel_hole_logs(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if raw_eel_hole_logs.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return pd.DataFrame()
 
     # Flatten the many nested columns and coerce them into the expected class
@@ -258,7 +256,7 @@ def _core_eel_hole_logs(
     converted_df.loc[converted_df.event == "log_in", "log_in_query"] = (
         converted_df.loc[converted_df.event == "log_in"]
         .text_payload.map(urlsplit)
-        .apply(lambda x: getattr(x, "query"))
+        .apply(lambda x: x.query)
         .replace(r"next=\/search(\?q%3D)?", "", regex=True)
         .str.replace("+", " ")
     )
@@ -316,7 +314,7 @@ def core_eel_hole_log_ins(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return pd.DataFrame()
 
     login_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "log_in"]
@@ -341,7 +339,7 @@ def core_eel_hole_searches(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return pd.DataFrame()
 
     search_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "search"]
@@ -375,7 +373,7 @@ def core_eel_hole_hits(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return pd.DataFrame()
 
     hit_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "hit"]
@@ -398,7 +396,7 @@ def core_eel_hole_previews(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return pd.DataFrame()
 
     preview_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_preview"]
@@ -425,7 +423,7 @@ def core_eel_hole_downloads(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return pd.DataFrame()
 
     download_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_csv"]
@@ -452,7 +450,7 @@ def core_eel_hole_user_settings_updates(
     context.log.info(f"Processing data for the week of {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warn(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for the week of {context.partition_key}")
         return pd.DataFrame()
 
     settings_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "privacy-policy"]

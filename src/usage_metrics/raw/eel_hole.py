@@ -1,6 +1,6 @@
 """Extract data from PUDL Viewer (aka "eel hole") logs."""
 
-from datetime import datetime
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -37,9 +37,7 @@ class EelHoleExtractor(GCSExtractor):
             A list of blobs to be downloaded.
         """
         day_start_date_str = context.partition_key
-        partition_date = datetime.strptime(day_start_date_str, "%Y-%m-%d").strftime(
-            "%Y/%m/%d"
-        )
+        partition_date = date.fromisoformat(day_start_date_str).strftime("%Y/%m/%d")
         file_name_prefix = f"run.googleapis.com/stdout/{partition_date}"
         blobs = [blob for blob in blobs if blob.name.startswith(file_name_prefix)]
         context.log.info(

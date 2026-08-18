@@ -6,7 +6,7 @@ import os
 import sys
 import time
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, datetime
 
 import requests
 from google.cloud import storage
@@ -102,7 +102,8 @@ def upload_to_bucket(data, metric):
     bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
-    blob_name = f"github/{metric.folder}/{date.today().strftime('%Y-%m-%d')}.json"
+    today = datetime.now(tz=UTC).date()
+    blob_name = f"github/{metric.folder}/{today.strftime('%Y-%m-%d')}.json"
 
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)

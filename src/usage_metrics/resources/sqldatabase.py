@@ -66,7 +66,7 @@ class SQLIOManager(IOManager):
             # Only update primary keys that aren't in the database
             df_new = df[~i1.isin(i2)]
             if df_new.empty:
-                context.log.warn(
+                context.log.warning(
                     "All records already loaded, not writing any data. Clobber the database if you want to overwrite this data."
                 )
             else:
@@ -89,7 +89,7 @@ class SQLIOManager(IOManager):
             obj: a sql query or dataframe to add to the database.
 
         Raises:
-            Exception: if an asset or op returns an unsupported datatype.
+            TypeError: if an asset or op returns an unsupported datatype.
         """
         if isinstance(obj, pd.DataFrame):
             if obj.empty:
@@ -102,7 +102,7 @@ class SQLIOManager(IOManager):
                 table_name = get_table_name_from_context(context)
                 self.append_df_to_table(context, obj, table_name)
         else:
-            raise Exception(
+            raise TypeError(
                 f"{self.__class__.__name__} only supports pandas DataFrames."
             )
 
