@@ -84,6 +84,11 @@ description = "Run the ruff linter on the whole repo"
 cmd = "prek run --all-files --show-diff-on-failure"
 description = "Run all pre-commit hooks"
 
+# Dependency Update tasks
+[tool.pixi.tasks.prek-update]
+cmd = "prek update"
+description = "Update pre-commit hook versions"
+
 [tool.pixi.feature.test.tasks.linters]
 depends-on = [
     "prek-run",
