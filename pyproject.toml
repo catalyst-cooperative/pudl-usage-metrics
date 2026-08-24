@@ -85,7 +85,7 @@ cmd = "prek run --all-files --show-diff-on-failure"
 description = "Run all pre-commit hooks"
 
 # Dependency Update tasks
-[tool.pixi.tasks.prek-update]
+[tool.pixi.feature.test.tasks.prek-update]
 cmd = "prek update"
 description = "Update pre-commit hook versions"
 
