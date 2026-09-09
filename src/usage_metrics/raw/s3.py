@@ -24,6 +24,10 @@ class S3Extractor(GCSExtractor):
         self.bucket_name = "pudl-s3-logs.catalyst.coop"
         super().__init__(*args, **kwargs)
 
+    def get_blob_prefix(self, context: AssetExecutionContext) -> str:
+        """Filter the bucket listing to this partition's date server-side."""
+        return date.fromisoformat(context.partition_key).strftime("%Y-%m-%d")
+
     def filter_blobs(
         self, context: AssetExecutionContext, blobs: HTTPIterator
     ) -> list[storage.Blob]:
