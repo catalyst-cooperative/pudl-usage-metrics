@@ -60,17 +60,31 @@ def _fake_download_many(
     *,
     skip_if_exists: bool = False,
     raise_exception: bool = False,
+    worker_type: str = extract.transfer_manager.THREAD,
     **_kwargs,
 ):
-    """In-process stand-in for ``transfer_manager.download_many``."""
+    """In-process stand-in for ``transfer_manager.download_many``.
+
+    Mirrors the real function's constraint that non-THREAD workers only accept
+    string filenames (they pickle the work), so a regression that passes ``Path``
+    objects with a process pool fails here too.
+    """
+    needs_pickling = worker_type != extract.transfer_manager.THREAD
     results = []
-    for blob, path in blob_file_pairs:
-        path = Path(path)
-        if skip_if_exists and path.exists():
+    for blob, path_or_file in blob_file_pairs:
+        if needs_pickling and not isinstance(path_or_file, str):
+            raise ValueError(
+                "Passing in a file object is only supported by the THREAD worker type."
+            )
+        if (
+            skip_if_exists
+            and isinstance(path_or_file, str)
+            and Path(path_or_file).is_file()
+        ):
             results.append(None)
             continue
         try:
-            blob.download_to_filename(path)
+            blob.download_to_filename(Path(path_or_file))
             results.append(None)
         except Exception as err:
             if raise_exception:
