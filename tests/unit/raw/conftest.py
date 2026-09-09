@@ -13,11 +13,14 @@ DATA_DIR = Path(__file__).parents[2] / "data"
 class FakeBlob:
     """Stand-in for ``google.cloud.storage.Blob`` backed by in-memory bytes."""
 
-    def __init__(self, name: str, data: bytes, bucket: object = None):
+    def __init__(
+        self, name: str, data: bytes, bucket: object = None, time_created=None
+    ):
         """Store the blob name and contents."""
         self.name = name
         self._data = data
         self.bucket = bucket
+        self.time_created = time_created
 
     def download_to_filename(self, filename) -> None:
         """Write the blob contents to a local path."""
@@ -89,6 +92,12 @@ def make_client():
 
 
 @pytest.fixture
+def fake_blob():
+    """Return the ``FakeBlob`` class for building blobs directly in a test."""
+    return FakeBlob
+
+
+@pytest.fixture
 def download_dir(tmp_path, monkeypatch):
     """Point extractors at a temp download directory via ``DATA_DIR``."""
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
@@ -99,6 +108,17 @@ def download_dir(tmp_path, monkeypatch):
 def partition_context():
     """Return a factory for a Dagster asset context with a partition key."""
     return lambda partition_key: build_asset_context(partition_key=partition_key)
+
+
+@pytest.fixture
+def run_extract(monkeypatch):
+    """Run ``extractor.extract`` with the download step stubbed to ``paths``."""
+
+    def _run(extractor, context, paths):
+        monkeypatch.setattr(extractor, "download_gcs_blobs", lambda *a, **k: paths)
+        return extractor.extract(context)
+
+    return _run
 
 
 @pytest.fixture
