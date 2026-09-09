@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+import polars as pl
 from dagster import (
     AssetExecutionContext,
     DailyPartitionsDefinition,
@@ -17,6 +18,8 @@ from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 
 class S3Extractor(GCSExtractor):
     """Extractor for S3 logs stored in GCS."""
+
+    concatenable_files = True
 
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
@@ -51,22 +54,35 @@ class S3Extractor(GCSExtractor):
         partition_date = date.fromisoformat(day_start_date_str).strftime("%Y-%m-%d")
         return [blob for blob in blobs if blob.name.startswith(partition_date)]
 
-    def load_file(self, file_path: Path) -> pd.DataFrame:
-        """Read a (possibly concatenated) day of S3 logs into a dataframe."""
+    def load_file(self, file_path: Path) -> pl.DataFrame:
+        """Read a (possibly concatenated) day of S3 logs into a dataframe.
+
+        Columns are read as strings; the ``core`` layer names them and coerces
+        types. An empty file raises ``pl.exceptions.NoDataError``, which
+        ``extract`` handles.
+        """
         try:
-            return pd.read_csv(file_path, delimiter=" ", header=None)
-        except pd.errors.ParserError as e:
+            return pl.read_csv(
+                file_path,
+                separator=" ",
+                has_header=False,
+                infer_schema_length=0,
+            )
+        except pl.exceptions.ComputeError as e:
             # On 2026-02-25 a new column was added mid log file, so column-count
             # inference from the first row is wrong. This affects many files that
             # day, so key off the partition rather than identifying each file and
-            # force the full 28 columns.
+            # force the full 28 columns (short rows are null-padded).
             if self.partition_key == "2026-02-25":
-                return pd.read_csv(
-                    file_path, delimiter=" ", header=None, names=range(28)
+                return pl.read_csv(
+                    file_path,
+                    separator=" ",
+                    has_header=False,
+                    infer_schema_length=0,
+                    schema={f"column_{i + 1}": pl.String for i in range(28)},
+                    truncate_ragged_lines=True,
                 )
-            e.add_note(
-                f"Extraction failed for file: {file_path}"
-            )  # Otherwise identify troublesome file
+            e.add_note(f"Extraction failed for file: {file_path}")
             raise
 
 
