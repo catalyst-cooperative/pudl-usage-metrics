@@ -52,15 +52,15 @@ class S3Extractor(GCSExtractor):
         return [blob for blob in blobs if blob.name.startswith(partition_date)]
 
     def load_file(self, file_path: Path) -> pd.DataFrame:
-        """Read in file as dataframe."""
+        """Read a (possibly concatenated) day of S3 logs into a dataframe."""
         try:
             return pd.read_csv(file_path, delimiter=" ", header=None)
         except pd.errors.ParserError as e:
-            # Handle one day of weird edge cases where new column added mid log file hrmph
-            # This happens in more than 4 files, so we filter by day rather than identifying the exact files
-            # and force these files to have 28 columns rather than the inferred and error-causing 27 found
-            # in the first row of these files.
-            if "2026-02-25" in file_path.stem:
+            # On 2026-02-25 a new column was added mid log file, so column-count
+            # inference from the first row is wrong. This affects many files that
+            # day, so key off the partition rather than identifying each file and
+            # force the full 28 columns.
+            if self.partition_key == "2026-02-25":
                 return pd.read_csv(
                     file_path, delimiter=" ", header=None, names=range(28)
                 )
