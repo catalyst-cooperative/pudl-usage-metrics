@@ -12,10 +12,19 @@ on:
 
 env:
   METRICS_PROD_ENV: "prod"
+  # Concurrent GCS blob downloads. The S3 log extract fetches >100k tiny objects
+  # per day and is latency-bound, so this is set well above the vCPU count.
+  GCS_DOWNLOAD_WORKERS: "64"
 
 jobs:
   load-metrics:
-    runs-on: ubuntu-latest
+    # Larger third-party runner: the S3 log extract is I/O-heavy and the default
+    # 4-vCPU runner is the tightest resource. Downloads scale with concurrency,
+    # not cores, so 8 vCPUs / 32 GB is plenty.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # Fast-fail: a healthy run finishes in well under an hour. If it regresses to
+    # multi-hour, kill it early instead of burning the full 6-hour default.
+    timeout-minutes: 60
     permissions:
       contents: read
       id-token: write
