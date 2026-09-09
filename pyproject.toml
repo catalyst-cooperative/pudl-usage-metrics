@@ -7,10 +7,7 @@ requires-python = ">=3.14,<3.15"
 # [tool.pixi.pypi-dependencies] below.
 
 [project.scripts]
-usage-metrics-etl = "usage_metrics.scripts.run_data_update:main"
-usage-metrics-save-github = "usage_metrics.scripts.save_github_metrics:save_metrics"
-usage-metrics-save-kaggle = "usage_metrics.scripts.save_kaggle_metrics:save_metrics"
-usage-metrics-save-zenodo = "usage_metrics.scripts.save_zenodo_metrics:save_zenodo_logs"
+usage-metrics = "usage_metrics.scripts.cli:cli"
 
 [build-system]
 build-backend = "hatchling.build"
