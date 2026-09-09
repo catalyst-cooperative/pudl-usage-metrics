@@ -3,7 +3,6 @@
 import json
 import logging
 import os
-import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -13,8 +12,7 @@ from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
 
-logger = logging.getLogger()
-logging.basicConfig(level="INFO")
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -135,7 +133,3 @@ def save_metrics():
     for metric in persistent_metrics:
         metric_data = get_persistent_metrics(owner, repo, token, metric.name)
         upload_to_bucket(metric_data, metric)
-
-
-if __name__ == "__main__":
-    sys.exit(save_metrics())
