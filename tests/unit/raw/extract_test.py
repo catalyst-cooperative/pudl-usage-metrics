@@ -6,6 +6,7 @@ from unittest import mock
 import pandas as pd
 import polars as pl
 import pytest
+from dagster import build_asset_context
 
 from usage_metrics.raw import extract
 from usage_metrics.raw.extract import GCSExtractor
@@ -118,6 +119,17 @@ def test_extract_parses_each_file_when_not_concatenable(
     )
     df = _run_extract(ext, partition_context("2024-01-01"), [f1, f2], monkeypatch)
     assert df["v"].tolist() == ["1", "2"]
+
+
+def test_extract_non_partitioned_run(monkeypatch, download_dir, tmp_path):
+    """extract() works for a non-partitioned run (e.g. cumulative GitHub metrics)."""
+    only = tmp_path / "only"
+    only.write_bytes(b"x 1\n")
+    ext = DocExtractor()
+    monkeypatch.setattr(ext, "download_gcs_blobs", lambda *a, **k: [only])
+    df = ext.extract(build_asset_context())  # no partition_key
+    assert ext.partition_key is None
+    assert not df.empty
 
 
 def test_extract_sets_partition_key_before_load(
