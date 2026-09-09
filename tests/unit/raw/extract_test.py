@@ -1,6 +1,7 @@
 """Tests for the GCSExtractor base class."""
 
 from pathlib import Path
+from unittest import mock
 
 import pandas as pd
 import polars as pl
@@ -211,16 +212,55 @@ def test_get_blobs_from_gcs_skips_existing(
     assert paths[0].read_bytes() == b"old\n"
 
 
-def test_gcs_client_is_lazy(monkeypatch):
-    """No client is constructed until first use."""
+def test_get_blobs_from_gcs_passes_string_filenames(
+    make_client, download_dir, monkeypatch
+):
+    """download_many gets (blob, str) pairs on a THREAD pool, not Path objects.
+
+    transfer_manager rejects non-str targets for its process pool and silently
+    ignores skip_if_exists for them.
+    """
+    captured = {}
+
+    def spy(pairs, **kwargs):
+        captured["pairs"] = list(pairs)
+        captured["kwargs"] = kwargs
+
+    monkeypatch.setattr(extract.transfer_manager, "download_many", spy)
+    client = make_client({"test-bucket": {"a/b": b""}})
+    ext = LineExtractor(client=client)
+    ext.get_blobs_from_gcs(client.bucket("test-bucket").list_blobs(), download_dir)
+
+    (_blob, target) = captured["pairs"][0]
+    assert isinstance(target, str)
+    assert captured["kwargs"]["worker_type"] == extract.transfer_manager.THREAD
+    assert captured["kwargs"]["max_workers"] == ext.download_workers
+
+
+def test_download_workers_resolution(monkeypatch):
+    """download_workers: explicit arg > env var > default."""
+    monkeypatch.delenv("GCS_DOWNLOAD_WORKERS", raising=False)
+    assert LineExtractor().download_workers == extract.DEFAULT_DOWNLOAD_WORKERS
+    monkeypatch.setenv("GCS_DOWNLOAD_WORKERS", "9")
+    assert LineExtractor().download_workers == 9
+    assert LineExtractor(download_workers=3).download_workers == 3
+
+
+def test_gcs_client_is_lazy_and_sizes_the_pool(monkeypatch):
+    """No client until first use; then a sized HTTPS adapter is mounted."""
+    fake = mock.Mock()
     calls = []
     monkeypatch.setattr(
-        extract.storage, "Client", lambda *a, **k: calls.append(1) or object()
+        extract.storage, "Client", lambda *a, **k: calls.append(1) or fake
     )
-    ext = LineExtractor()
+    ext = LineExtractor(download_workers=17)
     assert calls == []
-    ext.gcs_client  # noqa: B018 - triggers lazy construction
+    assert ext.gcs_client is fake
     assert calls == [1]
+    fake._http.mount.assert_called_once()
+    assert fake._http.mount.call_args.args[0] == "https://"
+    adapter = fake._http.mount.call_args.args[1]
+    assert adapter._pool_maxsize == 17
 
 
 def test_retry_policy_shape():

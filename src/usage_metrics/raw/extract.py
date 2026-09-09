@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 import polars as pl
+import requests
 from dagster import (
     AssetExecutionContext,
     Backoff,
@@ -30,18 +31,18 @@ that the client library's per-request retries don't cover. Retrying the step is
 cheap because already-downloaded blobs are skipped, and it keeps a single bad day
 from leaving a permanent gap in the partitioned output."""
 
-MAX_DOWNLOAD_WORKERS = int(os.environ.get("GCS_DOWNLOAD_WORKERS", "64"))
-"""Number of worker processes used to download blobs from GCS concurrently.
+DEFAULT_DOWNLOAD_WORKERS = 32
+"""Default number of threads used to download blobs from GCS concurrently.
 
-Downloading many small blobs is latency-bound, not CPU-bound: each worker spends
-almost all its time waiting on the network. A shared ``requests`` connection pool
-caps a single process at ~10 concurrent transfers, so ``transfer_manager`` spreads
-the work across processes (each with its own pool) rather than threads.
+Downloading many small blobs is latency-bound: each worker spends almost all its
+time waiting on the network, so threads (which release the GIL on I/O) fit well
+and avoid the pickling / spawn overhead and fragility of ``transfer_manager``'s
+process pool (which also can't run nested inside Dagster's executor).
 
-Useful concurrency is limited by per-object round-trip latency and GCS-side
-throughput (roughly 50-150 before returns diminish sharply), not by the runner's
-vCPU count, so this is a fixed default rather than a function of ``os.cpu_count``.
-Override with the ``GCS_DOWNLOAD_WORKERS`` env var to tune for a specific runner."""
+Past ~32 threads the GIL contention on TLS/response handling outweighs the added
+concurrency in local testing, so that is the default. Override per extractor via
+the ``download_workers`` argument, or globally via the ``GCS_DOWNLOAD_WORKERS``
+env var."""
 
 
 class GCSExtractor(ABC):
@@ -55,27 +56,50 @@ class GCSExtractor(ABC):
     invocations. False for whole-document JSON, where files must be parsed
     individually."""
 
-    def __init__(self, *args, client: storage.Client | None = None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        client: storage.Client | None = None,
+        download_workers: int | None = None,
+        **kwargs,
+    ):
         """Create new extractor object and load metadata.
 
         Args:
             client: A ``google.cloud.storage.Client`` to use for downloads. Left
                 unset in production (one is created lazily on first use); inject
                 a fake in tests.
+            download_workers: Number of concurrent blob-download threads. Defaults
+                to the ``GCS_DOWNLOAD_WORKERS`` env var, then
+                ``DEFAULT_DOWNLOAD_WORKERS``.
         """
         if not self.dataset_name:
             raise NotImplementedError("self.dataset_name must be set.")
         if not self.bucket_name:
             raise NotImplementedError("self.bucket_name must be set.")
         self._client = client
+        self.download_workers = download_workers or int(
+            os.environ.get("GCS_DOWNLOAD_WORKERS", DEFAULT_DOWNLOAD_WORKERS)
+        )
         # Set in extract(); lets load_file() apply partition-specific handling.
         self.partition_key: str | None = None
 
     @property
     def gcs_client(self) -> storage.Client:
-        """The GCS client, created on first use if one wasn't injected."""
+        """The GCS client, created on first use if one wasn't injected.
+
+        The HTTP connection pool is sized to ``download_workers`` so the
+        concurrent download threads don't contend on the default 10-connection
+        pool.
+        """
         if self._client is None:
-            self._client = storage.Client()
+            client = storage.Client()
+            adapter = requests.adapters.HTTPAdapter(
+                pool_connections=self.download_workers,
+                pool_maxsize=self.download_workers,
+            )
+            client._http.mount("https://", adapter)
+            self._client = client
         return self._client
 
     @abstractmethod
@@ -102,7 +126,7 @@ class GCSExtractor(ABC):
         blob names are flattened to hyphens so every file lands in a single dir.
         Downloading serially is the dominant cost for sources with many small
         files (S3 logs can be >100k blobs per day), so downloads are spread
-        across a process pool.
+        across a thread pool.
 
         Each download validates the object checksum and retries transient
         failures (``download_to_filename`` defaults), and ``raise_exception``
@@ -111,11 +135,11 @@ class GCSExtractor(ABC):
         """
         file_paths = [Path(download_dir, blob.name.replace("/", "-")) for blob in blobs]
         transfer_manager.download_many(
-            list(zip(blobs, file_paths, strict=True)),
+            [(blob, str(path)) for blob, path in zip(blobs, file_paths, strict=True)],
             skip_if_exists=True,
             raise_exception=True,
-            worker_type=transfer_manager.PROCESS,
-            max_workers=MAX_DOWNLOAD_WORKERS,
+            worker_type=transfer_manager.THREAD,
+            max_workers=self.download_workers,
         )
         return file_paths
 
