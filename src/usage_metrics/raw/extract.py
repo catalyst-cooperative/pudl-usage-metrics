@@ -55,18 +55,28 @@ class GCSExtractor(ABC):
     invocations. False for whole-document JSON, where files must be parsed
     individually."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, client: storage.Client | None = None, **kwargs):
         """Create new extractor object and load metadata.
 
         Args:
-            ds (datastore.Datastore): An initialized datastore, or subclass
+            client: A ``google.cloud.storage.Client`` to use for downloads. Left
+                unset in production (one is created lazily on first use); inject
+                a fake in tests.
         """
         if not self.dataset_name:
             raise NotImplementedError("self.dataset_name must be set.")
         if not self.bucket_name:
             raise NotImplementedError("self.bucket_name must be set.")
+        self._client = client
         # Set in extract(); lets load_file() apply partition-specific handling.
         self.partition_key: str | None = None
+
+    @property
+    def gcs_client(self) -> storage.Client:
+        """The GCS client, created on first use if one wasn't injected."""
+        if self._client is None:
+            self._client = storage.Client()
+        return self._client
 
     @abstractmethod
     def filter_blobs(
@@ -146,7 +156,7 @@ class GCSExtractor(ABC):
     ) -> list[Path]:
         """Download GCS blobs and return paths to files."""
         # Download logs from GCS
-        bucket = storage.Client().bucket(self.bucket_name)
+        bucket = self.gcs_client.bucket(self.bucket_name)
         blobs = bucket.list_blobs(prefix=self.get_blob_prefix(context))
         blobs = self.filter_blobs(context, blobs)
         context.log.info(f"Downloading {len(blobs)} blobs from {self.bucket_name}.")

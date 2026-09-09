@@ -136,7 +136,6 @@ doctest_optionflags = [
 ]
 
 [tool.ruff]
-# Assume Python 3.12
 target-version = "py314"
 line-length = 88
 indent-width = 4
