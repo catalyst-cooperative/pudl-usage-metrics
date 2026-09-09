@@ -71,7 +71,7 @@ jobs:
           PARTITION: ${{ github.event.inputs.partition }}
         shell: bash -l {0}
         run: |
-          pixi run usage-metrics-etl ${PARTITION:+--partition "$PARTITION"}
+          pixi run usage-metrics etl ${PARTITION:+--partition "$PARTITION"}
 
       - name: Notify Zulip
         if: always()
