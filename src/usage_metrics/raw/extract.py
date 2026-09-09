@@ -1,12 +1,12 @@
 """Generic extraction functionality for data from GCS."""
 
 import os
-import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
 
 import pandas as pd
+import polars as pl
 from dagster import (
     AssetExecutionContext,
     Backoff,
@@ -46,6 +46,14 @@ Override with the ``GCS_DOWNLOAD_WORKERS`` env var to tune for a specific runner
 
 class GCSExtractor(ABC):
     """Generic extractor base class for Google Cloud Storage logs."""
+
+    concatenable_files: bool = False
+    """Whether ``load_file`` can parse many source files concatenated into one.
+
+    True for line-oriented formats (space-delimited logs, newline-delimited JSON),
+    where combining the day's files and parsing once avoids >100k per-file parser
+    invocations. False for whole-document JSON, where files must be parsed
+    individually."""
 
     def __init__(self, *args, **kwargs):
         """Create new extractor object and load metadata.
@@ -102,8 +110,12 @@ class GCSExtractor(ABC):
         return file_paths
 
     @abstractmethod
-    def load_file(self, file_path: Path) -> pd.DataFrame:
-        """Read in file as dataframe."""
+    def load_file(self, file_path: Path) -> pd.DataFrame | pl.DataFrame:
+        """Read one source file (or a combined file) into a dataframe.
+
+        May return either a pandas or a polars DataFrame; ``extract`` converts
+        polars results to pandas before handing them downstream.
+        """
         ...
 
     def get_download_dir(self) -> Path:
@@ -143,23 +155,30 @@ class GCSExtractor(ABC):
     def combine_files(self, file_paths: list[Path], dest: Path) -> Path:
         """Concatenate downloaded files so a partition can be parsed in one pass.
 
-        Reading >100k tiny files one at a time (a ``load_file`` / ``pd.read_csv``
-        call each) and then ``pd.concat``-ing the results is dominated by
-        per-call overhead. Writing them into a single file instead lets
-        ``load_file`` parse the whole partition in one call. A newline is added
-        between files in case a source file doesn't end with one.
+        Reading >100k tiny files one at a time (a ``load_file`` call each) and
+        then concatenating the results is dominated by per-call overhead. Writing
+        them into a single file instead lets ``load_file`` parse the whole
+        partition in one call. Files are separated by exactly one newline and
+        empty files are skipped.
         """
         with dest.open("wb") as combined:
             for path in file_paths:
-                with path.open("rb") as part:
-                    shutil.copyfileobj(part, combined)
-                combined.write(b"\n")
+                data = path.read_bytes()
+                if not data:
+                    continue
+                combined.write(data)
+                if not data.endswith(b"\n"):
+                    combined.write(b"\n")
         return dest
 
     def extract(self, context: AssetExecutionContext) -> pd.DataFrame:
-        """Download all logs for the partition from GCS and read them into one DataFrame.
+        """Download the partition's logs from GCS and read them into one pandas DataFrame.
 
-        Blobs already present locally are not re-downloaded.
+        Line-oriented sources (``concatenable_files``) are combined and parsed in
+        a single pass; other sources are parsed one file at a time. ``load_file``
+        may return polars frames, but the asset output is always pandas so
+        downstream assets are unaffected. Blobs already present locally are not
+        re-downloaded.
         """
         self.partition_key = context.partition_key
         download_dir = self.get_download_dir()
@@ -169,15 +188,27 @@ class GCSExtractor(ABC):
             context.log.warning(f"No files found for {context.partition_key}.")
             return pd.DataFrame()
 
-        if len(file_paths) == 1:
-            source = file_paths[0]
+        if self.concatenable_files and len(file_paths) > 1:
+            sources = [
+                self.combine_files(
+                    file_paths, download_dir / f"{context.partition_key}.combined"
+                )
+            ]
         else:
-            source = self.combine_files(
-                file_paths, download_dir / f"{context.partition_key}.combined"
+            sources = file_paths
+
+        frames: list[pd.DataFrame] = []
+        for source in sources:
+            try:
+                frame = self.load_file(source)
+            except pd.errors.EmptyDataError, pl.exceptions.NoDataError:
+                context.log.warning(f"{source} contains no data, skipping.")
+                continue
+            frames.append(
+                frame.to_pandas() if isinstance(frame, pl.DataFrame) else frame
             )
 
-        try:
-            return self.load_file(source)
-        except pd.errors.EmptyDataError:
+        if not frames:
             context.log.warning(f"No data found for {context.partition_key}.")
             return pd.DataFrame()
+        return frames[0] if len(frames) == 1 else pd.concat(frames)
