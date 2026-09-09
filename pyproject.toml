@@ -3,12 +3,14 @@ name = "pudl_usage_metrics"
 version = "0.1.0"
 authors = [{name = "PUDL", email = "pudl@catalyst.coop"}]
 requires-python = ">=3.14,<3.15"
-
-# managed by pixi; see tool.pixi.dependencies below
-dependencies = []
+# Dependencies are managed by pixi; see [tool.pixi.dependencies] and
+# [tool.pixi.pypi-dependencies] below.
 
 [project.scripts]
-pudl_usage_metrics = "pudl_usage_metrics.cli:main"
+usage-metrics-etl = "usage_metrics.scripts.run_data_update:main"
+usage-metrics-save-github = "usage_metrics.scripts.save_github_metrics:save_metrics"
+usage-metrics-save-kaggle = "usage_metrics.scripts.save_kaggle_metrics:save_metrics"
+usage-metrics-save-zenodo = "usage_metrics.scripts.save_zenodo_metrics:save_zenodo_logs"
 
 [build-system]
 build-backend = "hatchling.build"
@@ -42,9 +44,8 @@ polars = ">=1.44"
 google-cloud-sdk = ">=580"
 
 [tool.pixi.pypi-dependencies]
-# Install the local package in editable mode. Assume dependencies are specified either
-# above in [tools.pixi.dependencies] (for conda packages) or in this section, if they
-# happen to only be available via PyPI.
+# The editable local package (for its console entry points), plus ipinfo, which
+# isn't on conda-forge. Everything else is a conda dep; see above.
 pudl-usage-metrics = { path = ".", editable = true }
 ipinfo = ">=5.0.1"
 # pyarrow support landed in pandera 0.33; not yet packaged on conda-forge.
