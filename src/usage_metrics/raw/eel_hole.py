@@ -13,7 +13,7 @@ from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_EEL_HOLE_LOGS_BUCKET
-from usage_metrics.raw.extract import GCSExtractor
+from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 
 
 class EelHoleExtractor(GCSExtractor):
@@ -59,6 +59,7 @@ class EelHoleExtractor(GCSExtractor):
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     tags={"source": "eel_hole"},
+    retry_policy=GCS_EXTRACT_RETRY_POLICY,
 )
 def raw_eel_hole_logs(context: AssetExecutionContext) -> pd.DataFrame:
     """Extract eel hole logs from sub-daily files and return one weekly DataFrame."""
