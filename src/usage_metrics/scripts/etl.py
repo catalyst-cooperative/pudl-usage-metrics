@@ -1,10 +1,10 @@
-"""Run the most recent partition for every job in the usage_metrics Dagster repository.
+"""The ``usage-metrics etl`` subcommand.
 
-Installed as the ``usage-metrics-etl`` console script and run daily by the
-load-metrics GitHub Action.
+Runs the most recent partition for every job in the usage_metrics Dagster
+repository. Run daily by the load-metrics GitHub Action.
 
-Note: Eventually this script should be deprecated in favor of having a long
-running Dagster instance handle schedules and job launching.
+Note: Eventually this should be deprecated in favor of a long running Dagster
+instance handling schedules and job launching.
 """
 
 import logging
@@ -15,6 +15,7 @@ import click
 import coloredlogs
 
 from usage_metrics.etl import defs
+from usage_metrics.scripts import CONTEXT_SETTINGS
 
 logger = logging.getLogger("usage_metrics")
 
@@ -27,9 +28,9 @@ def _execute(job, **execute_kwargs) -> bool:
     return result.success
 
 
-@click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.command("etl", context_settings=CONTEXT_SETTINGS)
 @click.option("-p", "--partition", type=str, default=None)
-def main(partition: str | None):
+def etl(partition: str | None):
     """Load the latest partition of every metrics source to Google Cloud Storage."""
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
     coloredlogs.install(fmt=log_format, level="INFO", logger=logger)
@@ -57,7 +58,3 @@ def main(partition: str | None):
     if failed:
         logger.error(f"Failed job(s): {', '.join(failed)}")
         sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()

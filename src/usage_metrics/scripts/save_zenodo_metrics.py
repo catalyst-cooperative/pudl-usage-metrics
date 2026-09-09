@@ -2,7 +2,6 @@
 
 import json
 import logging
-import sys
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -16,8 +15,7 @@ from usage_metrics.helpers import retry_request
 Doi = Annotated[str, StringConstraints(pattern=r"10\.5281/zenodo\.\d+")]
 SandboxDoi = Annotated[str, StringConstraints(pattern=r"10\.5072/zenodo\.\d+")]
 
-logger = logging.getLogger()
-logging.basicConfig(level="INFO")
+logger = logging.getLogger(__name__)
 
 
 class CommunityMetadata(BaseModel):
@@ -44,7 +42,7 @@ class CommunityMetadata(BaseModel):
             return
 
 
-def save_zenodo_logs() -> pd.DataFrame():
+def save_zenodo_logs() -> None:
     """Get JSONs of Zenodo metrics for all Catalyst records and upload to GCS.
 
     Get metrics for all versions in the Catalyst Cooperative Zenodo community locally,
@@ -120,7 +118,3 @@ def upload_to_bucket(
     blob.upload_from_string(data)
 
     logger.info(f"Uploaded {blob_name} to GCS bucket.")
-
-
-if __name__ == "__main__":
-    sys.exit(save_zenodo_logs())
