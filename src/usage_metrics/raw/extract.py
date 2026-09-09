@@ -80,13 +80,24 @@ class GCSExtractor(ABC):
             download_dir = Path(td)
         return download_dir
 
+    def get_blob_prefix(self, context: AssetExecutionContext) -> str | None:
+        """Return a blob name prefix to filter the bucket listing server-side.
+
+        Passing a prefix to ``list_blobs`` avoids enumerating every object in the
+        bucket on every partition, which otherwise dominates extraction time and
+        grows without bound as the bucket accumulates logs. Subclasses whose
+        relevant files share a common name prefix (e.g. a partition date) should
+        override this. ``filter_blobs`` is still applied to the narrowed listing.
+        """
+        return None
+
     def download_gcs_blobs(
         self, context: AssetExecutionContext, download_dir: Path
     ) -> list[Path]:
         """Download GCS blobs and return paths to files."""
         # Download logs from GCS
-        bucket = storage.Client().get_bucket(self.bucket_name)
-        blobs = bucket.list_blobs()
+        bucket = storage.Client().bucket(self.bucket_name)
+        blobs = bucket.list_blobs(prefix=self.get_blob_prefix(context))
         blobs = self.filter_blobs(context, blobs)
         return self.get_blobs_from_gcs(blobs=blobs, download_dir=download_dir)
 
