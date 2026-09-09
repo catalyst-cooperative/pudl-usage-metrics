@@ -1,6 +1,7 @@
 """Generic extraction functionality for data from GCS."""
 
 import os
+import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -56,6 +57,8 @@ class GCSExtractor(ABC):
             raise NotImplementedError("self.dataset_name must be set.")
         if not self.bucket_name:
             raise NotImplementedError("self.bucket_name must be set.")
+        # Set in extract(); lets load_file() apply partition-specific handling.
+        self.partition_key: str | None = None
 
     @abstractmethod
     def filter_blobs(
@@ -137,28 +140,44 @@ class GCSExtractor(ABC):
         context.log.info(f"Downloading {len(blobs)} blobs from {self.bucket_name}.")
         return self.get_blobs_from_gcs(blobs=blobs, download_dir=download_dir)
 
-    def extract_logs_into_list(
-        self, context: AssetExecutionContext, file_paths: list[Path]
-    ) -> list[pd.DataFrame]:
-        """Read files into a list of Pandas DataFrames."""
-        list_dfs = []
-        for path in file_paths:
-            try:
-                list_dfs.append(self.load_file(path))
-            except pd.errors.EmptyDataError:
-                context.log.warning(f"{path} is an empty file, couldn't read.")
-        return list_dfs
+    def combine_files(self, file_paths: list[Path], dest: Path) -> Path:
+        """Concatenate downloaded files so a partition can be parsed in one pass.
+
+        Reading >100k tiny files one at a time (a ``load_file`` / ``pd.read_csv``
+        call each) and then ``pd.concat``-ing the results is dominated by
+        per-call overhead. Writing them into a single file instead lets
+        ``load_file`` parse the whole partition in one call. A newline is added
+        between files in case a source file doesn't end with one.
+        """
+        with dest.open("wb") as combined:
+            for path in file_paths:
+                with path.open("rb") as part:
+                    shutil.copyfileobj(part, combined)
+                combined.write(b"\n")
+        return dest
 
     def extract(self, context: AssetExecutionContext) -> pd.DataFrame:
-        """Download all logs from GCS bucket.
+        """Download all logs for the partition from GCS and read them into one DataFrame.
 
-        If the file already exists locally don't download it.
+        Blobs already present locally are not re-downloaded.
         """
+        self.partition_key = context.partition_key
         download_dir = self.get_download_dir()
         file_paths = self.download_gcs_blobs(context, download_dir)
-        list_dfs = self.extract_logs_into_list(context, file_paths)
 
-        df = pd.DataFrame()
-        if list_dfs:  # If data, return concatenated DF
-            df = pd.concat(list_dfs)
-        return df
+        if not file_paths:
+            context.log.warning(f"No files found for {context.partition_key}.")
+            return pd.DataFrame()
+
+        if len(file_paths) == 1:
+            source = file_paths[0]
+        else:
+            source = self.combine_files(
+                file_paths, download_dir / f"{context.partition_key}.combined"
+            )
+
+        try:
+            return self.load_file(source)
+        except pd.errors.EmptyDataError:
+            context.log.warning(f"No data found for {context.partition_key}.")
+            return pd.DataFrame()
