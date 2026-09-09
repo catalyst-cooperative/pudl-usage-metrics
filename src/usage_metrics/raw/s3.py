@@ -12,7 +12,7 @@ from dagster import (
 from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
-from usage_metrics.raw.extract import GCSExtractor
+from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 
 
 class S3Extractor(GCSExtractor):
@@ -73,6 +73,7 @@ class S3Extractor(GCSExtractor):
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     tags={"source": "s3"},
+    retry_policy=GCS_EXTRACT_RETRY_POLICY,
 )
 def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
     """Extract S3 logs from sub-daily files and return one daily DataFrame."""
