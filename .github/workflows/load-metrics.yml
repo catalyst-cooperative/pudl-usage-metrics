@@ -12,9 +12,10 @@ on:
 
 env:
   METRICS_PROD_ENV: "prod"
-  # Concurrent GCS blob downloads. The S3 log extract fetches >100k tiny objects
-  # per day and is latency-bound, so this is set well above the vCPU count.
-  GCS_DOWNLOAD_WORKERS: "64"
+  # Concurrent GCS blob download threads. The S3 log extract fetches >100k tiny
+  # objects per day and is latency-bound. Left at the code default (32); tune
+  # here if a run's download phase is the bottleneck.
+  GCS_DOWNLOAD_WORKERS: "32"
 
 jobs:
   load-metrics:
