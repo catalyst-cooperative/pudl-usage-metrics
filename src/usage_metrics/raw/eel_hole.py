@@ -25,6 +25,11 @@ class EelHoleExtractor(GCSExtractor):
         self.bucket_name = PUDL_METRICS_EEL_HOLE_LOGS_BUCKET
         super().__init__(*args, **kwargs)
 
+    def get_blob_prefix(self, context: AssetExecutionContext) -> str:
+        """Filter the bucket listing to this partition's date server-side."""
+        partition_date = date.fromisoformat(context.partition_key).strftime("%Y/%m/%d")
+        return f"run.googleapis.com/stdout/{partition_date}"
+
     def filter_blobs(
         self, context: AssetExecutionContext, blobs: HTTPIterator
     ) -> list[storage.Blob]:
