@@ -18,6 +18,8 @@ from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 class EelHoleExtractor(GCSExtractor):
     """Extractor for eel hole logs stored in GCS."""
 
+    concatenable_files = True
+
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
         self.dataset_name = "eel_hole_logs"
