@@ -2,7 +2,6 @@
 
 import json
 import logging
-import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -12,8 +11,7 @@ from kaggle.api.kaggle_api_extended import KaggleApi
 
 from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
 
-logger = logging.getLogger()
-logging.basicConfig(level="INFO")
+logger = logging.getLogger(__name__)
 
 
 def get_kaggle_dataset_metadata() -> str:
@@ -60,7 +58,3 @@ def save_metrics():
     """Save github traffic metrics to google cloud bucket."""
     kaggle_dataset_metrics = get_kaggle_dataset_metadata()
     upload_to_bucket(kaggle_dataset_metrics)
-
-
-if __name__ == "__main__":
-    sys.exit(save_metrics())
