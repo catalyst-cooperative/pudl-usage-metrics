@@ -1,5 +1,9 @@
-"""Standalone CLI scripts, installed as console entry points.
+"""The ``usage-metrics`` command-line interface.
 
-These run outside the Dagster pipeline: ``run_data_update`` drives the ETL jobs,
-and the ``save_*_metrics`` scripts pull metrics from external APIs into GCS.
+`cli` is the top-level Click group (`usage-metrics`), wiring together the `etl`
+command (drives the Dagster jobs) and the `save` subgroup (snapshots metrics from
+external APIs into GCS). It's installed as the `usage-metrics` console script.
 """
+
+CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
+"""Shared Click context settings: accept ``-h`` as well as ``--help`` everywhere."""
