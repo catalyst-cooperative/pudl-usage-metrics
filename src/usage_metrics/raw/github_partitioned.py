@@ -37,6 +37,10 @@ class GithubExtractor(GCSExtractor):
         self.metric = metric
         super().__init__(*args, **kwargs)
 
+    def get_blob_prefix(self, context: AssetExecutionContext) -> str:
+        """Filter the bucket listing to this metric's blobs server-side."""
+        return f"github/{self.metric}/"
+
     def filter_blobs(
         self, context: AssetExecutionContext, blobs: HTTPIterator
     ) -> list[storage.Blob]:
