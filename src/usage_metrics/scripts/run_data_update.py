@@ -9,50 +9,54 @@ running Dagster instance handle schedules and job launching.
 
 import logging
 import os
+import sys
 
 import click
 import coloredlogs
 
 from usage_metrics.etl import defs
 
+logger = logging.getLogger("usage_metrics")
 
-@click.command(
-    context_settings={"help_option_names": ["-h", "--help"]},
-)
+
+def _execute(job, **execute_kwargs) -> bool:
+    """Run a job to completion without raising; log and return whether it succeeded."""
+    logger.info(f"Starting {job.name}.")
+    result = job.execute_in_process(raise_on_error=False, **execute_kwargs)
+    logger.info(f"{job.name} {'succeeded' if result.success else 'FAILED'}.")
+    return result.success
+
+
+@click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("-p", "--partition", type=str, default=None)
 def main(partition: str | None):
-    """Load most recent partitions of data to Google Cloud Storage."""
-    usage_metrics_logger = logging.getLogger("usage_metrics")
+    """Load the latest partition of every metrics source to Google Cloud Storage."""
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
-    coloredlogs.install(fmt=log_format, level="INFO", logger=usage_metrics_logger)
+    coloredlogs.install(fmt=log_format, level="INFO", logger=logger)
+    logger.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} storage.")
 
-    usage_metrics_logger.info(
-        f"""Saving to {os.getenv("METRICS_PROD_ENV", "local")} storage."""
-    )
-    # Run the partitioned metrics
-    job = defs.get_job_def(name="all_partitioned_metrics_etl")
+    partitioned = defs.get_job_def(name="all_partitioned_metrics_etl")
+    nonpartitioned = defs.get_job_def(name="all_nonpartitioned_metrics_etl")
 
-    # Get last complete weekly partition
-    if partition:
-        assert partition in job.partitions_def.get_partition_keys(), (
-            f"{partition} isn't a valid partition. Valid partitions are: {job.partitions_def.get_partition_keys()}"
+    partition_keys = partitioned.partitions_def.get_partition_keys()
+    if partition is None:
+        partition = max(partition_keys)
+    elif partition not in partition_keys:
+        raise click.BadParameter(
+            f"{partition!r} is not a valid partition "
+            f"(range: {partition_keys[0]}..{partition_keys[-1]})."
         )
-    else:
-        partition = max(job.partitions_def.get_partition_keys())
+    logger.info(f"Processing partitioned data for {partition}.")
 
-    # Run the jobs
-    usage_metrics_logger.info(
-        f"""{job.name}: Processing partitioned data from the week of {partition}."""
-    )
-
-    job.execute_in_process(partition_key=partition)
-
-    # Run the non-partitioned metrics
-    usage_metrics_logger.info(
-        f"""{job.name}: Processing the most recent non-partitioned data."""
-    )
-    job = defs.get_job_def(name="all_nonpartitioned_metrics_etl")
-    job.execute_in_process()
+    # Run both jobs regardless of the other's outcome, then fail if either did.
+    results = {
+        partitioned.name: _execute(partitioned, partition_key=partition),
+        nonpartitioned.name: _execute(nonpartitioned),
+    }
+    failed = [name for name, succeeded in results.items() if not succeeded]
+    if failed:
+        logger.error(f"Failed job(s): {', '.join(failed)}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
