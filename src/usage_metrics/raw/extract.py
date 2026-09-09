@@ -214,19 +214,22 @@ class GCSExtractor(ABC):
         downstream assets are unaffected. Blobs already present locally are not
         re-downloaded.
         """
-        self.partition_key = context.partition_key
+        # Non-partitioned assets (e.g. the cumulative GitHub metrics) also use
+        # this method, so partition_key may be unset.
+        self.partition_key = (
+            context.partition_key if context.has_partition_key else None
+        )
+        label = self.partition_key or self.dataset_name
         download_dir = self.get_download_dir()
         file_paths = self.download_gcs_blobs(context, download_dir)
 
         if not file_paths:
-            context.log.warning(f"No files found for {context.partition_key}.")
+            context.log.warning(f"No files found for {label}.")
             return pd.DataFrame()
 
         if self.concatenable_files and len(file_paths) > 1:
             sources = [
-                self.combine_files(
-                    file_paths, download_dir / f"{context.partition_key}.combined"
-                )
+                self.combine_files(file_paths, download_dir / f"{label}.combined")
             ]
         else:
             sources = file_paths
@@ -243,6 +246,6 @@ class GCSExtractor(ABC):
             )
 
         if not frames:
-            context.log.warning(f"No data found for {context.partition_key}.")
+            context.log.warning(f"No data found for {label}.")
             return pd.DataFrame()
         return frames[0] if len(frames) == 1 else pd.concat(frames)
