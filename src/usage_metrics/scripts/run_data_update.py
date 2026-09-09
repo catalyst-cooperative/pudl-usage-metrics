@@ -1,10 +1,10 @@
-"""Run the most recent partition for every job in the gcp_usage_metrics dagster repository.
+"""Run the most recent partition for every job in the usage_metrics Dagster repository.
 
-This script runs daily in the load-metrics Github Action.
+Installed as the ``usage-metrics-etl`` console script and run daily by the
+load-metrics GitHub Action.
 
-Note: Eventually this script should be deprecated in
-favor of having a long running dagster instance handle
-schedules and job launching.
+Note: Eventually this script should be deprecated in favor of having a long
+running Dagster instance handle schedules and job launching.
 """
 
 import logging
