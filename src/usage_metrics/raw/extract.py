@@ -8,10 +8,35 @@ from pathlib import Path
 import pandas as pd
 from dagster import (
     AssetExecutionContext,
+    Backoff,
+    Jitter,
+    RetryPolicy,
 )
 from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
-from tqdm import tqdm
+from google.cloud.storage import transfer_manager
+
+GCS_EXTRACT_RETRY_POLICY = RetryPolicy(
+    max_retries=2,
+    delay=30,
+    backoff=Backoff.EXPONENTIAL,
+    jitter=Jitter.PLUS_MINUS,
+)
+"""Retry the whole extract step if it fails.
+
+Downloads and reads of many small blobs occasionally fail for transient reasons
+that the client library's per-request retries don't cover. Retrying the step is
+cheap because already-downloaded blobs are skipped, and it keeps a single bad day
+from leaving a permanent gap in the partitioned output."""
+
+MAX_DOWNLOAD_WORKERS = min(32, 4 * (os.cpu_count() or 2))
+"""Number of worker processes used to download blobs from GCS concurrently.
+
+Downloads are latency-bound, and a shared ``requests`` connection pool caps a
+single process at ~10 concurrent transfers, so ``transfer_manager`` spreads the
+work across processes (each with its own pool) rather than threads. Each worker
+spends most of its time blocked on the network, so we oversubscribe the available
+CPUs; this scales automatically on a larger runner."""
 
 
 class GCSExtractor(ABC):
@@ -46,21 +71,27 @@ class GCSExtractor(ABC):
     def get_blobs_from_gcs(
         self, blobs: list[storage.Blob], download_dir: Path
     ) -> list[Path]:
-        """Download all selected blobs from GCS bucket.
+        """Download all selected blobs from GCS bucket in parallel.
 
-        If the file already exists locally don't download it.
+        Blobs whose local file already exists are skipped. Folder separators in
+        blob names are flattened to hyphens so every file lands in a single dir.
+        Downloading serially is the dominant cost for sources with many small
+        files (S3 logs can be >100k blobs per day), so downloads are spread
+        across a process pool.
+
+        Each download validates the object checksum and retries transient
+        failures (``download_to_filename`` defaults), and ``raise_exception``
+        surfaces any download that still fails so the run doesn't silently
+        proceed with missing data.
         """
-        file_paths = []
-        for blob in tqdm(blobs):
-            file_name = blob.name.replace("/", "-")  # Replace folders with prefixes
-            path_to_file = Path(download_dir, file_name)
-            if not Path.exists(path_to_file):
-                blob.download_to_filename(path_to_file)
-                if Path.stat(path_to_file).st_size == 0:
-                    # Handle download interruptions. #TODO: Less janky way to do this?
-                    blob.download_to_filename(Path(download_dir, file_name))
-
-            file_paths.append(Path(download_dir, file_name))
+        file_paths = [Path(download_dir, blob.name.replace("/", "-")) for blob in blobs]
+        transfer_manager.download_many(
+            list(zip(blobs, file_paths, strict=True)),
+            skip_if_exists=True,
+            raise_exception=True,
+            worker_type=transfer_manager.PROCESS,
+            max_workers=MAX_DOWNLOAD_WORKERS,
+        )
         return file_paths
 
     @abstractmethod
@@ -99,6 +130,7 @@ class GCSExtractor(ABC):
         bucket = storage.Client().bucket(self.bucket_name)
         blobs = bucket.list_blobs(prefix=self.get_blob_prefix(context))
         blobs = self.filter_blobs(context, blobs)
+        context.log.info(f"Downloading {len(blobs)} blobs from {self.bucket_name}.")
         return self.get_blobs_from_gcs(blobs=blobs, download_dir=download_dir)
 
     def extract_logs_into_list(
