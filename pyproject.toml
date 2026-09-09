@@ -44,7 +44,7 @@ pg8000 = ">=1.31.1"
 google-cloud-storage = ">=2.17"
 kaggle = ">=1.6.3"
 s3fs = ">=2025.10.0"
-polars = ">=1.43.2"
+polars = ">=1.44"
 google-cloud-sdk = ">=580"
 
 [tool.pixi.pypi-dependencies]
@@ -58,7 +58,7 @@ ipinfo = ">=5.0.1"
 pytest = ">=9"
 coverage = ">=7"
 doc8 = ">=2"
-prek = ">=0.4.13"
+prek = ">=0.5"
 pydocstyle = ">=6.3"
 pytest-asyncio = ">=1.4"
 pytest-console-scripts = ">=1.4.1"
@@ -101,7 +101,7 @@ cmd = "coverage erase"
 description = "Clear coverage data"
 
 [tool.pixi.feature.test.tasks.pytest-unit]
-cmd = "pytest --cov=src/usage_metrics --cov-append --cov-report=xml --doctest-modules src/usage_metrics tests"
+cmd = "pytest --cov=src/usage_metrics --cov-append --cov-report=xml tests"
 description = "Run all the software unit tests"
 
 [tool.pixi.feature.test.tasks.pytest-ci]
@@ -117,23 +117,28 @@ description = "Run all CI tests and report test coverage"
 max-line-length = 88
 ignore-path = ["docs/_build"]
 
-[tool.pytest.ini_options]
-testpaths = "./"
+[tool.pytest]
+testpaths = ["."]
 filterwarnings = [
     "ignore:distutils Version classes are deprecated:DeprecationWarning",
     "ignore:Creating a LegacyVersion:DeprecationWarning:pkg_resources[.*]",
     "ignore:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning:db_dtypes[.*]",
+    # grpcio in the locked env predates post-quantum crypto support. Upstream
+    # deprecation with an Oct 2026 deadline, nothing to fix here. Drop this once
+    # the lockfile carries grpcio >= 1.83.0.
+    "ignore:grpcio < 1.83.0 does not support Post-Quantum Cryptography:FutureWarning",
 ]
-addopts = "--verbose"
+# Default output is compact progress ("..."). Logs are captured at INFO and
+# printed only in the report for a failing test. For a live log stream while
+# debugging: pytest -o log_cli=true --log-cli-level=DEBUG <target>
 log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
 log_date_format = "%Y-%m-%d %H:%M:%S"
-log_cli = "true"
-log_cli_level = "INFO"
-doctest_optionflags = [
-    "NORMALIZE_WHITESPACE",
-    "IGNORE_EXCEPTION_DETAIL",
-    "ELLIPSIS",
-]
+log_level = "INFO"
+
+[tool.coverage.report]
+# Coverage is 44.99% today; the floor sits just under it (pytest-cov compares
+# without rounding). Raise this as test coverage grows.
+fail_under = 44
 
 [tool.ruff]
 target-version = "py314"
@@ -202,9 +207,6 @@ unfixable = ["ISC"]
 [tool.ruff.lint.pep8-naming]
 # Allow Pydantic's `@validator` decorator to trigger class method treatment.
 classmethod-decorators = ["pydantic.validator", "pydantic.root_validator"]
-
-[tool.ruff.lint.isort]
-known-first-party = ["ferc_xbrl_extractor"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
