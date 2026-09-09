@@ -5,7 +5,8 @@ venv
 
 *.DS_Store
 cache/
-data/
+# Local ETL scratch dir (DATA_DIR); test fixtures live in tests/data/ and are tracked.
+/data/
 .eggs/
 local.env
 
