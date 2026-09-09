@@ -1,3 +1,5 @@
-"""Module contains assets that extract raw data."""
+"""Standalone CLI scripts, installed as console entry points.
 
-from . import save_github_metrics, save_kaggle_metrics, save_zenodo_metrics
+These run outside the Dagster pipeline: ``run_data_update`` drives the ETL jobs,
+and the ``save_*_metrics`` scripts pull metrics from external APIs into GCS.
+"""
