@@ -29,14 +29,18 @@ that the client library's per-request retries don't cover. Retrying the step is
 cheap because already-downloaded blobs are skipped, and it keeps a single bad day
 from leaving a permanent gap in the partitioned output."""
 
-MAX_DOWNLOAD_WORKERS = min(32, 4 * (os.cpu_count() or 2))
+MAX_DOWNLOAD_WORKERS = int(os.environ.get("GCS_DOWNLOAD_WORKERS", "64"))
 """Number of worker processes used to download blobs from GCS concurrently.
 
-Downloads are latency-bound, and a shared ``requests`` connection pool caps a
-single process at ~10 concurrent transfers, so ``transfer_manager`` spreads the
-work across processes (each with its own pool) rather than threads. Each worker
-spends most of its time blocked on the network, so we oversubscribe the available
-CPUs; this scales automatically on a larger runner."""
+Downloading many small blobs is latency-bound, not CPU-bound: each worker spends
+almost all its time waiting on the network. A shared ``requests`` connection pool
+caps a single process at ~10 concurrent transfers, so ``transfer_manager`` spreads
+the work across processes (each with its own pool) rather than threads.
+
+Useful concurrency is limited by per-object round-trip latency and GCS-side
+throughput (roughly 50-150 before returns diminish sharply), not by the runner's
+vCPU count, so this is a fixed default rather than a function of ``os.cpu_count``.
+Override with the ``GCS_DOWNLOAD_WORKERS`` env var to tune for a specific runner."""
 
 
 class GCSExtractor(ABC):
