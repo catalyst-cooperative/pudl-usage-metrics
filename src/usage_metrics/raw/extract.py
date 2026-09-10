@@ -2,7 +2,11 @@
 
 import os
 import tempfile
+import threading
+import time
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pandas as pd
@@ -31,6 +35,21 @@ that the client library's per-request retries don't cover. Retrying the step is
 cheap because already-downloaded blobs are skipped, and it keeps a single bad day
 from leaving a permanent gap in the partitioned output."""
 
+DEFAULT_DOWNLOAD_PROGRESS_INTERVAL = 30.0
+"""Seconds between blob-download progress log lines.
+
+``transfer_manager.download_many`` is a single blocking call with no per-blob
+callback, so on days with hundreds of thousands of S3 log files the extraction
+step looks hung. A background thread logs one progress line per this interval
+(overridable via the ``GCS_DOWNLOAD_PROGRESS_INTERVAL`` env var) by counting the
+files that have landed in the download directory -- enough to show liveness and
+throughput without the log spam of a per-item progress bar."""
+
+DOWNLOAD_PROGRESS_MIN_BLOBS = 1000
+"""Only emit download progress lines when a partition has at least this many
+blobs. Small partitions download in well under one interval, so the heartbeat
+would just add noise."""
+
 DEFAULT_DOWNLOAD_WORKERS = 32
 """Default number of threads used to download blobs from GCS concurrently.
 
@@ -43,6 +62,51 @@ Past ~32 threads the GIL contention on TLS/response handling outweighs the added
 concurrency in local testing, so that is the default. Override per extractor via
 the ``download_workers`` argument, or globally via the ``GCS_DOWNLOAD_WORKERS``
 env var."""
+
+
+@contextmanager
+def log_download_progress(
+    context: AssetExecutionContext | None,
+    download_dir: Path,
+    total: int,
+) -> Iterator[None]:
+    """Log blob-download progress from a background thread for the enclosed block.
+
+    Counts files in ``download_dir`` (which includes blobs skipped because they
+    were already present, so the count is approximate) every
+    ``GCS_DOWNLOAD_PROGRESS_INTERVAL`` seconds and logs a single line with the
+    running total, percentage, and download rate. Does nothing when there is no
+    context to log to or when ``total`` is below ``DOWNLOAD_PROGRESS_MIN_BLOBS``.
+    """
+    if context is None or total < DOWNLOAD_PROGRESS_MIN_BLOBS:
+        yield
+        return
+
+    interval = float(
+        os.environ.get(
+            "GCS_DOWNLOAD_PROGRESS_INTERVAL", DEFAULT_DOWNLOAD_PROGRESS_INTERVAL
+        )
+    )
+    done = threading.Event()
+    start = time.monotonic()
+
+    def _report() -> None:
+        while not done.wait(interval):
+            count = sum(1 for _ in os.scandir(download_dir))
+            elapsed = time.monotonic() - start
+            rate = count / elapsed if elapsed else 0.0
+            context.log.info(
+                f"Downloaded ~{count:,}/{total:,} blobs "
+                f"({count / total:.0%}, {rate:,.0f}/s)"
+            )
+
+    watcher = threading.Thread(target=_report, name="download-progress", daemon=True)
+    watcher.start()
+    try:
+        yield
+    finally:
+        done.set()
+        watcher.join(timeout=interval)
 
 
 class GCSExtractor(ABC):
@@ -118,7 +182,10 @@ class GCSExtractor(ABC):
         ...
 
     def get_blobs_from_gcs(
-        self, blobs: list[storage.Blob], download_dir: Path
+        self,
+        blobs: list[storage.Blob],
+        download_dir: Path,
+        context: AssetExecutionContext | None = None,
     ) -> list[Path]:
         """Download all selected blobs from GCS bucket in parallel.
 
@@ -132,15 +199,22 @@ class GCSExtractor(ABC):
         failures (``download_to_filename`` defaults), and ``raise_exception``
         surfaces any download that still fails so the run doesn't silently
         proceed with missing data.
+
+        When ``context`` is provided, a background thread logs periodic download
+        progress (see ``log_download_progress``).
         """
         file_paths = [Path(download_dir, blob.name.replace("/", "-")) for blob in blobs]
-        transfer_manager.download_many(
-            [(blob, str(path)) for blob, path in zip(blobs, file_paths, strict=True)],
-            skip_if_exists=True,
-            raise_exception=True,
-            worker_type=transfer_manager.THREAD,
-            max_workers=self.download_workers,
-        )
+        with log_download_progress(context, download_dir, len(file_paths)):
+            transfer_manager.download_many(
+                [
+                    (blob, str(path))
+                    for blob, path in zip(blobs, file_paths, strict=True)
+                ],
+                skip_if_exists=True,
+                raise_exception=True,
+                worker_type=transfer_manager.THREAD,
+                max_workers=self.download_workers,
+            )
         return file_paths
 
     @abstractmethod
@@ -184,7 +258,9 @@ class GCSExtractor(ABC):
         blobs = bucket.list_blobs(prefix=self.get_blob_prefix(context))
         blobs = self.filter_blobs(context, blobs)
         context.log.info(f"Downloading {len(blobs)} blobs from {self.bucket_name}.")
-        return self.get_blobs_from_gcs(blobs=blobs, download_dir=download_dir)
+        return self.get_blobs_from_gcs(
+            blobs=blobs, download_dir=download_dir, context=context
+        )
 
     def combine_files(self, file_paths: list[Path], dest: Path) -> Path:
         """Concatenate downloaded files so a partition can be parsed in one pass.
