@@ -26,10 +26,10 @@ def core_s3_logs(
 
     Add column headers, geocode values,
     """
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_s3_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return raw_s3_logs
     # Name columns
     base_columns = [

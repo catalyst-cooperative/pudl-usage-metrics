@@ -12,17 +12,24 @@ from dagster import (
 from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
-from usage_metrics.raw.extract import GCSExtractor
+from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 
 
 class EelHoleExtractor(GCSExtractor):
     """Extractor for eel hole logs stored in GCS."""
+
+    concatenable_files = True
 
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
         self.dataset_name = "eel_hole_logs"
         self.bucket_name = "pudl-viewer-logs.catalyst.coop"
         super().__init__(*args, **kwargs)
+
+    def get_blob_prefix(self, context: AssetExecutionContext) -> str:
+        """Filter the bucket listing to this partition's date server-side."""
+        partition_date = date.fromisoformat(context.partition_key).strftime("%Y/%m/%d")
+        return f"run.googleapis.com/stdout/{partition_date}"
 
     def filter_blobs(
         self, context: AssetExecutionContext, blobs: HTTPIterator
@@ -53,6 +60,7 @@ class EelHoleExtractor(GCSExtractor):
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     tags={"source": "eel_hole"},
+    retry_policy=GCS_EXTRACT_RETRY_POLICY,
 )
 def raw_eel_hole_logs(context: AssetExecutionContext) -> pd.DataFrame:
     """Extract eel hole logs from sub-daily files and return one weekly DataFrame."""
