@@ -7,13 +7,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from google.cloud import storage
-from kaggle.api.kaggle_api_extended import KaggleApi
 
 logger = logging.getLogger(__name__)
 
 
 def get_kaggle_dataset_metadata() -> str:
     """Get PUDL project usage metadata from Kaggle site."""
+    # Imported here, not at module scope: the kaggle package authenticates on
+    # import, which breaks any caller that doesn't have Kaggle credentials set.
+    from kaggle.api.kaggle_api_extended import KaggleApi
+
     # Instantiate and authenticate to the Kaggle API
     api = KaggleApi()
     api.authenticate()
