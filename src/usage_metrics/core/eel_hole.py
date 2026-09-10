@@ -4,6 +4,8 @@ import datetime
 import json
 import math
 import os
+import re
+from collections import Counter
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal, get_args
 from urllib.parse import urlsplit
@@ -184,8 +186,69 @@ class EelHoleLogs(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+_EVENT_SLUG = re.compile(r"[a-z][a-z0-9_-]{0,40}\Z")
+
+
+def _payload_error(payload: Any) -> str:
+    """One-line summary of the first reason ``payload`` fails ``JsonPayload``."""
+    try:
+        JsonPayload.model_validate(payload)
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        loc = ".".join(str(part) for part in first["loc"]) or "(root)"
+        return f"{loc}: {first['msg']}"
+    return "(now valid)"
+
+
+def _drift_report(
+    partition_key: str, total_event_bearing: int, dropped: list[dict]
+) -> str:
+    """A copy-paste-actionable summary of the dropped event-bearing payloads."""
+    allowable = set(get_args(ALLOWABLE_EVENT_TYPES))
+    counts = Counter(str(payload["event"]) for payload in dropped)
+    samples: dict[str, dict] = {}
+    for payload in dropped:
+        samples.setdefault(str(payload["event"]), payload)
+
+    lines = [
+        f"EEL-HOLE SCHEMA DRIFT -- {partition_key}",
+        (
+            f"  {len(dropped)} of {total_event_bearing} event-bearing payloads "
+            f"({len(dropped) / total_event_bearing:.0%}) failed to parse "
+            f"(tolerance {SCHEMA_DRIFT_TOLERANCE:.0%})."
+        ),
+        "",
+        f"  {'dropped event value':<44}{'count':>7}  problem",
+        f"  {'-' * 44}{'-' * 7}  {'-' * 45}",
+    ]
+    for event_value, count in counts.most_common():
+        if event_value in allowable:
+            problem = _payload_error(samples[event_value])
+        elif _EVENT_SLUG.match(event_value):
+            problem = "not in ALLOWABLE_EVENT_TYPES (new or renamed event?)"
+        else:
+            problem = "not a slug -- likely a log message landing in `event`"
+        lines.append(f"  {event_value[:44]:<44}{count:>7}  {problem}")
+
+    lines.append("")
+    lines.append("  sample payloads:")
+    for event_value, payload in samples.items():
+        dumped = json.dumps(payload, default=str, sort_keys=True)
+        lines.append(f"    {event_value[:44]}: {dumped[:500]}")
+
+    lines += [
+        "",
+        "  to fix, in usage_metrics.core.eel_hole:",
+        "    - new/renamed real event -> add to ALLOWABLE_EVENT_TYPES, model it",
+        "    - changed field or filter on a known event -> update the model",
+        "    - benign log noise -> add the exact event value to IGNORED_EVENT_TYPES",
+        f"  then reprocess partition {partition_key}.",
+    ]
+    return "\n".join(lines)
+
+
 def _schema_drift_check(
-    partition_key: str, rows: list[dict], models: list[dict]
+    context: AssetExecutionContext, rows: list[dict], models: list[dict]
 ) -> AssetCheckResult:
     """Fail the partition when log lines that look like events no longer parse.
 
@@ -194,10 +257,13 @@ def _schema_drift_check(
     events if the viewer changed its log schema (a new/renamed event type, a
     changed field, a new filter operation). This re-inspects the payloads that
     carried an ``event`` key (other than ``IGNORED_EVENT_TYPES``) but were
-    dropped, and fails when they exceed ``SCHEMA_DRIFT_TOLERANCE`` of the parsed
-    events -- a systematic break (forgot to update parsing, upstream schema
-    change) shows up as a large fraction; a few is treated as sporadic bad lines.
+    dropped, and fails when they exceed ``SCHEMA_DRIFT_TOLERANCE`` of the
+    event-bearing payloads -- a systematic break (forgot to update parsing,
+    upstream schema change) shows up as a large fraction; a few is treated as
+    sporadic bad lines. On failure it logs a full ``_drift_report`` at ERROR so
+    the fix is obvious from the GHA logs without further digging.
     """
+    partition_key = context.partition_key
     parsed_events = sum(model["json_payload"] is not None for model in models)
     dropped = [
         row["jsonPayload"]
@@ -207,24 +273,29 @@ def _schema_drift_check(
         and str(row["jsonPayload"]["event"]) not in IGNORED_EVENT_TYPES
         and model["json_payload"] is None
     ]
-    unrecognized = sorted(
-        {str(payload["event"]) for payload in dropped}
-        - set(get_args(ALLOWABLE_EVENT_TYPES))
-    )
-    over_tolerance = len(dropped) > max(5, SCHEMA_DRIFT_TOLERANCE * parsed_events)
+    total_event_bearing = parsed_events + len(dropped)
+    over_tolerance = len(dropped) > max(5, SCHEMA_DRIFT_TOLERANCE * total_event_bearing)
+    counts = Counter(str(payload["event"]) for payload in dropped)
+    unrecognized = sorted(set(counts) - set(get_args(ALLOWABLE_EVENT_TYPES)))
+
+    if dropped:
+        report = _drift_report(partition_key, total_event_bearing, dropped)
+        (context.log.error if over_tolerance else context.log.warning)(report)
 
     if over_tolerance:
-        hint = f" Unrecognized event type(s): {unrecognized}." if unrecognized else ""
+        top = ", ".join(f"{value}×{n}" for value, n in counts.most_common(8))
         description = (
-            f"{partition_key}: {len(dropped)} of {parsed_events} event-bearing "
-            "eel-hole payloads failed to parse, over the "
-            f"{SCHEMA_DRIFT_TOLERANCE:.0%} tolerance.{hint} The viewer's log schema "
-            "likely changed -- update usage_metrics.core.eel_hole "
-            "(ALLOWABLE_EVENT_TYPES, the models, or IGNORED_EVENT_TYPES), then "
-            "reprocess this partition."
+            f"{partition_key}: {len(dropped)}/{total_event_bearing} "
+            f"({len(dropped) / total_event_bearing:.0%}) event-bearing eel-hole "
+            f"payloads failed to parse (tolerance {SCHEMA_DRIFT_TOLERANCE:.0%}). "
+            f"Dropped: {top}. See the 'EEL-HOLE SCHEMA DRIFT' block in the logs, "
+            "fix usage_metrics.core.eel_hole, then reprocess."
         )
     else:
-        description = f"{partition_key}: eel-hole schema drift within tolerance."
+        description = (
+            f"{partition_key}: eel-hole schema drift within tolerance "
+            f"({len(dropped)} dropped)."
+        )
 
     return AssetCheckResult(
         check_name=EEL_HOLE_SCHEMA_DRIFT_CHECK,
@@ -232,8 +303,16 @@ def _schema_drift_check(
         severity=AssetCheckSeverity.ERROR,
         description=description,
         metadata={
-            "parsed_events": parsed_events,
-            "event_bearing_payloads_dropped": len(dropped),
+            "event_bearing_payloads": total_event_bearing,
+            "dropped": len(dropped),
+            "dropped_fraction": (
+                round(len(dropped) / total_event_bearing, 4)
+                if total_event_bearing
+                else 0.0
+            ),
+            "dropped_event_values": (
+                ", ".join(f"{value}×{n}" for value, n in counts.most_common()) or "none"
+            ),
             "unrecognized_event_types": ", ".join(unrecognized) or "none",
         },
     )
@@ -260,7 +339,7 @@ def _core_eel_hole_logs(
     if raw_eel_hole_logs.empty:
         context.log.warning(f"No data found for {context.partition_key}")
         yield Output(pd.DataFrame())
-        yield _schema_drift_check(context.partition_key, [], [])
+        yield _schema_drift_check(context, [], [])
         return
 
     # Flatten the many nested columns and coerce them into the expected class
@@ -405,7 +484,7 @@ def _core_eel_hole_logs(
         converted_df["session_id"] = pd.NA
 
     yield Output(converted_df.reset_index(drop=True))
-    yield _schema_drift_check(context.partition_key, rows, models)
+    yield _schema_drift_check(context, rows, models)
 
 
 @asset(

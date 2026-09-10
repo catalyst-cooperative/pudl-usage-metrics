@@ -24,6 +24,16 @@ def _execute(job, **execute_kwargs) -> bool:
     """Run a job to completion without raising; log and return whether it succeeded."""
     logger.info(f"Starting {job.name}.")
     result = job.execute_in_process(raise_on_error=False, **execute_kwargs)
+    if not result.success:
+        # Surface failed asset checks (e.g. eel_hole_schema_drift) at the end of
+        # the run so a reviewer sees why without scrolling the Dagster event log.
+        for check in result.get_asset_check_evaluations():
+            if not check.passed:
+                logger.error(
+                    f"{job.name}: asset check "
+                    f"{check.asset_key.to_user_string()}.{check.check_name} FAILED "
+                    f"-- {check.description}"
+                )
     logger.info(f"{job.name} {'succeeded' if result.success else 'FAILED'}.")
     return result.success
 

@@ -8,6 +8,7 @@ from usage_metrics.core.eel_hole import (
     EEL_HOLE_SCHEMA_DRIFT_CHECK,
     EelHoleLogs,
     _core_eel_hole_logs,
+    _drift_report,
     _schema_drift_check,
     payload_is_parseable,
 )
@@ -37,7 +38,7 @@ def _check(raw: pd.DataFrame, ctx=None) -> AssetCheckResult:
 def _drift_check(rows: list[dict], partition_key: str = PARTITION) -> AssetCheckResult:
     """Run ``_schema_drift_check`` on ``rows`` (parsing them the way the asset does)."""
     models = [EelHoleLogs(**row).model_dump() for row in rows]
-    return _schema_drift_check(partition_key, rows, models)
+    return _schema_drift_check(_ctx(partition_key), rows, models)
 
 
 def _record(
@@ -336,7 +337,8 @@ def test_schema_drift_check_passes_for_clean_events():
     rows = [_record(str(i), event="search", user_id="u") for i in range(5)]
     result = _drift_check(rows)
     assert result.passed is True
-    assert result.metadata["parsed_events"].value == 5
+    assert result.metadata["event_bearing_payloads"].value == 5
+    assert result.metadata["dropped"].value == 0
 
 
 def test_schema_drift_check_passes_with_ignored_noise_event():
@@ -372,6 +374,9 @@ def test_schema_drift_check_fails_on_unrecognized_event_type():
     assert result.passed is False
     assert result.severity.value == "ERROR"
     assert "page_view" in result.metadata["unrecognized_event_types"].value
+    # the reviewer-facing surfaces name the culprit and its volume
+    assert "page_view×6" in result.metadata["dropped_event_values"].value
+    assert "page_view×6" in result.description
 
 
 def test_schema_drift_check_fails_when_known_event_breaks_in_bulk():
@@ -379,12 +384,42 @@ def test_schema_drift_check_fails_when_known_event_breaks_in_bulk():
     rows = [
         *(_record(f"good{i}", event="hit", user_id="u") for i in range(20)),
         *(
-            _record(f"bad{i}", event="search", params={}, user_id="u")
+            _record(
+                f"bad{i}",
+                event="search",
+                params={"name": "t", "page": 1, "perPage": 50, "filters": "oops"},
+                user_id="u",
+            )
             for i in range(20)
         ),
     ]
     result = _drift_check(rows)
     assert result.passed is False
+    assert "search×20" in result.metadata["dropped_event_values"].value
+
+
+def test_drift_report_is_actionable():
+    """The logged report names each bad event, its count, the field, and a sample."""
+    dropped = [
+        {"event": "preview", "timestamp": TS, "url": "/x"},
+        {"event": "preview", "timestamp": TS, "url": "/y"},
+        {
+            "event": "search",
+            "timestamp": TS,
+            "params": {"name": "t", "page": 1, "perPage": 50, "filters": "oops"},
+        },
+        {"event": "Loading prebuilt index", "timestamp": TS},
+    ]
+    report = _drift_report("2026-06-16", total_event_bearing=100, dropped=dropped)
+
+    assert "EEL-HOLE SCHEMA DRIFT -- 2026-06-16" in report
+    assert "4 of 100 event-bearing payloads (4%)" in report
+    assert "preview" in report and "2  not in ALLOWABLE_EVENT_TYPES" in report
+    assert "params.filters:" in report  # the exact failing field for the known event
+    assert "likely a log message landing in `event`" in report  # non-slug value
+    assert "sample payloads:" in report
+    assert '"filters": "oops"' in report  # a real payload to eyeball
+    assert "reprocess partition 2026-06-16" in report
 
 
 def test_core_eel_hole_logs_emits_blocking_check():
