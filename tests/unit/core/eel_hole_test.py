@@ -1,15 +1,43 @@
 """Tests for the eel hole (PUDL Viewer) log transform assets."""
 
 import pandas as pd
-from dagster import build_asset_context
+import pytest
+from dagster import AssetCheckResult, Output, build_asset_context
 
-from usage_metrics.core.eel_hole import _core_eel_hole_logs
+from usage_metrics.core.eel_hole import (
+    EEL_HOLE_SCHEMA_DRIFT_CHECK,
+    EelHoleLogs,
+    _core_eel_hole_logs,
+    _schema_drift_check,
+    payload_is_parseable,
+)
 
 PARTITION = "2026-09-06"
+TS = "2026-09-06T00:00:00Z"
+
+_UNSET = object()
 
 
 def _ctx(partition_key: str = PARTITION):
     return build_asset_context(partition_key=partition_key)
+
+
+def _run(raw: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    """Materialize ``_core_eel_hole_logs`` and return its output DataFrame."""
+    results = list(_core_eel_hole_logs(ctx or _ctx(), raw))
+    return next(r.value for r in results if isinstance(r, Output))
+
+
+def _check(raw: pd.DataFrame, ctx=None) -> AssetCheckResult:
+    """Materialize ``_core_eel_hole_logs`` and return its schema-drift check."""
+    results = list(_core_eel_hole_logs(ctx or _ctx(), raw))
+    return next(r for r in results if isinstance(r, AssetCheckResult))
+
+
+def _drift_check(rows: list[dict], partition_key: str = PARTITION) -> AssetCheckResult:
+    """Run ``_schema_drift_check`` on ``rows`` (parsing them the way the asset does)."""
+    models = [EelHoleLogs(**row).model_dump() for row in rows]
+    return _schema_drift_check(partition_key, rows, models)
 
 
 def _record(
@@ -18,16 +46,23 @@ def _record(
     event: str = "search",
     params: dict | None = None,
     user_id: str | None = None,
-    timestamp: str = "2026-09-06T00:00:00Z",
+    text_payload: str | None = None,
+    payload=_UNSET,
+    timestamp: str = TS,
 ) -> dict:
-    """Build a raw eel-hole log record shaped like the extractor output."""
-    payload: dict = {"event": event, "timestamp": timestamp}
-    if user_id is not None:
-        payload["userId"] = user_id
-    if event == "search":
-        payload["url"] = "/search?q=coal"
-    if params is not None:
-        payload["params"] = params
+    """Build a raw eel-hole log record shaped like the extractor output.
+
+    Pass ``payload`` to set ``jsonPayload`` verbatim (including to a non-dict or
+    ``None``); otherwise it is built from ``event`` / ``params`` / ``user_id``.
+    """
+    if payload is _UNSET:
+        payload = {"event": event, "timestamp": timestamp}
+        if user_id is not None:
+            payload["userId"] = user_id
+        if event == "search":
+            payload["url"] = "/search?q=coal"
+        if params is not None:
+            payload["params"] = params
     return {
         "insertId": insert_id,
         "jsonPayload": payload,
@@ -45,7 +80,7 @@ def _record(
             },
         },
         "timestamp": timestamp,
-        "textPayload": None,
+        "textPayload": text_payload,
     }
 
 
@@ -61,11 +96,138 @@ _PARAMS_WITH_FILTERS = {
     "page": 1,
     "perPage": 50,
 }
+_VALID_PARAMS = {"name": "t", "page": 0, "perPage": 25, "filters": None}
+
+
+# --- payload_is_parseable: the source of truth for "is this a usable event?" ---
+
+_PARSEABLE = [
+    pytest.param({"event": "search", "timestamp": TS}, id="minimal-search"),
+    pytest.param({"event": "hit", "timestamp": TS, "score": None}, id="hit-null-score"),
+    pytest.param({"event": "hit", "timestamp": TS, "score": 0.87}, id="hit-score"),
+    pytest.param(
+        {"event": "privacy-policy", "timestamp": TS, "accepted": True},
+        id="privacy-policy",
+    ),
+    pytest.param(
+        {"event": "duckdb_preview", "timestamp": TS, "params": _VALID_PARAMS},
+        id="preview-valid-params",
+    ),
+    pytest.param(
+        {"event": "search", "timestamp": TS, "params": _PARAMS_WITH_FILTERS},
+        id="search-with-filters",
+    ),
+    pytest.param(
+        {
+            "event": "search",
+            "timestamp": TS,
+            "params": {
+                "name": "t",
+                "page": 1,
+                "perPage": 50,
+                "filters": '[{"fieldName": "y", "fieldType": "text", '
+                '"operation": "contains", "value": "x"}]',
+            },
+        },
+        id="filters-as-json-string",
+    ),
+    pytest.param(
+        {"event": "search", "timestamp": TS, "somethingBrandNew": 123},
+        id="unknown-extra-key-ignored",
+    ),
+]
+
+_NOT_PARSEABLE = [
+    pytest.param({}, id="empty-dict"),
+    pytest.param(None, id="none"),
+    pytest.param("loading data...", id="string"),
+    pytest.param([1, 2, 3], id="list"),
+    pytest.param(5, id="int"),
+    pytest.param({"timestamp": TS}, id="missing-event"),
+    pytest.param({"event": "search"}, id="missing-timestamp"),
+    pytest.param({"event": "loading", "timestamp": TS}, id="unknown-event"),
+    pytest.param({"event": "search", "timestamp": "not-a-date"}, id="bad-timestamp"),
+    pytest.param({"event": "search", "timestamp": TS, "params": {}}, id="params-empty"),
+    pytest.param(
+        {"event": "search", "timestamp": TS, "params": {"name": "t"}},
+        id="params-partial",
+    ),
+    pytest.param(
+        {
+            "event": "search",
+            "timestamp": TS,
+            "params": {"name": "t", "page": None, "perPage": 50, "filters": None},
+        },
+        id="params-null-page",
+    ),
+    pytest.param(
+        {
+            "event": "search",
+            "timestamp": TS,
+            "params": {"name": "t", "page": 1, "perPage": 50, "filters": "nonsense"},
+        },
+        id="filters-not-json",
+    ),
+    pytest.param(
+        {
+            "event": "search",
+            "timestamp": TS,
+            "params": {"name": "t", "page": 1, "perPage": 50, "filters": "{}"},
+        },
+        id="filters-json-but-not-a-list",
+    ),
+    pytest.param(
+        {
+            "event": "search",
+            "timestamp": TS,
+            "params": {
+                "name": "t",
+                "page": 1,
+                "perPage": 50,
+                "filters": [{"fieldName": "y"}],
+            },
+        },
+        id="filter-missing-fields",
+    ),
+    pytest.param(
+        {
+            "event": "search",
+            "timestamp": TS,
+            "params": {
+                "name": "t",
+                "page": 1,
+                "perPage": 50,
+                "filters": [
+                    {
+                        "fieldName": "y",
+                        "fieldType": "text",
+                        "operation": "fuzzyMatch",
+                        "value": "z",
+                    }
+                ],
+            },
+        },
+        id="unknown-filter-operation",
+    ),
+]
+
+
+@pytest.mark.parametrize("payload", _PARSEABLE)
+def test_payload_is_parseable_true(payload):
+    assert payload_is_parseable(payload) is True
+
+
+@pytest.mark.parametrize("payload", _NOT_PARSEABLE)
+def test_payload_is_parseable_false(payload):
+    assert payload_is_parseable(payload) is False
+
+
+# --- _core_eel_hole_logs -----------------------------------------------------
 
 
 def test_returns_empty_frame_for_empty_input():
     """An empty raw partition yields an empty DataFrame rather than raising."""
-    out = _core_eel_hole_logs(_ctx(), pd.DataFrame())
+    out = _run(pd.DataFrame())
     assert out.empty
 
 
@@ -83,7 +245,7 @@ def test_handles_partition_with_no_search_filters():
         ]
     )
 
-    out = _core_eel_hole_logs(_ctx(), raw)
+    out = _run(raw)
 
     assert sorted(out["insert_id"]) == ["a", "b"]
     assert not any("filters" in col for col in out.columns)
@@ -98,9 +260,144 @@ def test_explodes_search_filters_when_present():
         ]
     )
 
-    out = _core_eel_hole_logs(_ctx(), raw)
+    out = _run(raw)
 
     assert sorted(out["insert_id"]) == ["a", "b"]
     filter_cols = [col for col in out.columns if "params_filters_" in col]
     assert filter_cols
     assert "json_payload_params_filters" not in out.columns
+
+
+@pytest.mark.parametrize(
+    "bad_payload",
+    [
+        pytest.param({}, id="empty-dict"),
+        pytest.param({"event": "search"}, id="missing-timestamp"),
+        pytest.param({"timestamp": TS}, id="missing-event"),
+        pytest.param({"event": "loading", "timestamp": TS}, id="unknown-event"),
+        pytest.param("some app log line", id="string-payload"),
+        pytest.param(
+            {"event": "duckdb_preview", "timestamp": TS, "params": {}},
+            id="empty-params",
+        ),
+    ],
+)
+def test_drops_records_with_unparseable_payload(bad_payload):
+    """An unparseable payload drops that row; the partition still processes."""
+    raw = pd.DataFrame(
+        [
+            _record("good", event="search", user_id="user-1"),
+            _record("bad", payload=bad_payload, text_payload=None),
+        ]
+    )
+
+    out = _run(raw)
+
+    assert list(out["insert_id"]) == ["good"]
+
+
+def test_partition_with_no_parseable_payloads_returns_empty():
+    """A day of nothing but app-noise log lines yields an empty DataFrame."""
+    raw = pd.DataFrame(
+        [
+            _record("a", payload="Starting server on :8080", text_payload="noise"),
+            _record("b", payload={}, text_payload="more noise"),
+            _record("c", payload=None, text_payload=None),
+        ]
+    )
+
+    out = _run(raw)
+
+    assert out.empty
+
+
+def test_synthesizes_log_in_from_callback_text_payload():
+    """A callback hit (text payload only, no JSON payload) becomes a log_in row."""
+    raw = pd.DataFrame(
+        [
+            _record(
+                "login",
+                payload=None,
+                text_payload="https://viewer.catalyst.coop/callback?next=/search?q%3Dcoal",
+            ),
+        ]
+    )
+
+    out = _run(raw)
+
+    assert list(out["event"]) == ["log_in"]
+    assert out.loc[0, "log_in_query"] == "coal"
+
+
+# --- _schema_drift_check ---------------------------------------------------
+
+
+def test_schema_drift_check_passes_for_clean_events():
+    rows = [_record(str(i), event="search", user_id="u") for i in range(5)]
+    result = _drift_check(rows)
+    assert result.passed is True
+    assert result.metadata["parsed_events"].value == 5
+
+
+def test_schema_drift_check_passes_with_ignored_noise_event():
+    """A 'loading' noise event is dropped but doesn't count toward drift."""
+    rows = [
+        *(_record(f"good{i}", event="search", user_id="u") for i in range(5)),
+        _record("noise", payload={"event": "loading", "timestamp": TS}),
+    ]
+    result = _drift_check(rows)
+    assert result.passed is True
+    assert result.metadata["unrecognized_event_types"].value == "none"
+
+
+def test_schema_drift_check_tolerates_a_few_bad_lines():
+    """Up to the floor of 5 event-bearing drops is treated as sporadic noise."""
+    rows = [
+        *(_record(f"good{i}", event="search", user_id="u") for i in range(50)),
+        *(_record(f"bad{i}", event="search", params={}, user_id="u") for i in range(4)),
+    ]
+    result = _drift_check(rows)
+    assert result.passed is True
+
+
+def test_schema_drift_check_fails_on_unrecognized_event_type():
+    rows = [
+        *(_record(f"good{i}", event="search", user_id="u") for i in range(5)),
+        *(
+            _record(f"new{i}", payload={"event": "page_view", "timestamp": TS})
+            for i in range(6)
+        ),
+    ]
+    result = _drift_check(rows)
+    assert result.passed is False
+    assert result.severity.value == "ERROR"
+    assert "page_view" in result.metadata["unrecognized_event_types"].value
+
+
+def test_schema_drift_check_fails_when_known_event_breaks_in_bulk():
+    """A field/filter change that breaks all searches trips the tolerance."""
+    rows = [
+        *(_record(f"good{i}", event="hit", user_id="u") for i in range(20)),
+        *(
+            _record(f"bad{i}", event="search", params={}, user_id="u")
+            for i in range(20)
+        ),
+    ]
+    result = _drift_check(rows)
+    assert result.passed is False
+
+
+def test_core_eel_hole_logs_emits_blocking_check():
+    """The asset yields the drift check alongside its output."""
+    raw = pd.DataFrame(
+        [
+            *(_record(f"good{i}", event="search", user_id="u") for i in range(5)),
+            *(
+                _record(f"new{i}", payload={"event": "page_view", "timestamp": TS})
+                for i in range(6)
+            ),
+        ]
+    )
+    result = _check(raw)
+    assert result.check_name == EEL_HOLE_SCHEMA_DRIFT_CHECK
+    assert result.passed is False
