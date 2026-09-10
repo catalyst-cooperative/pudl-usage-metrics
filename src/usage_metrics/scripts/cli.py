@@ -10,7 +10,7 @@ import logging
 
 import click
 
-from usage_metrics.scripts import CONTEXT_SETTINGS, etl
+from usage_metrics.scripts import CONTEXT_SETTINGS, etl, gaps
 
 
 @click.group(context_settings=CONTEXT_SETTINGS)
@@ -19,6 +19,7 @@ def cli():
 
 
 cli.add_command(etl.etl)
+cli.add_command(gaps.gaps)
 
 
 @cli.group(context_settings=CONTEXT_SETTINGS)
