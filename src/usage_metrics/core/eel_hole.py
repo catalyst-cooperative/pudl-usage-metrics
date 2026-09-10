@@ -7,7 +7,7 @@ import os
 import re
 from collections import Counter
 from collections.abc import Iterator
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Any
 from urllib.parse import urlsplit
 
 import pandas as pd
@@ -29,23 +29,38 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 
-ALLOWABLE_EVENT_TYPES = Literal[
-    "search", "hit", "duckdb_preview", "duckdb_csv", "privacy-policy"
-]
+ROUTED_EVENT_TYPES: frozenset[str] = frozenset(
+    {"search", "hit", "duckdb_preview", "duckdb_csv", "privacy-policy"}
+)
+"""``jsonPayload.event`` values that have a persisted ``core_eel_hole_*`` table.
 
-EEL_HOLE_SCHEMA_DRIFT_CHECK = "eel_hole_schema_drift"
+The models below are deliberately permissive: any slug event parses and flows
+into ``_core_eel_hole_logs``. An event *not* in this set parses fine but isn't
+written anywhere -- a coverage gap the ``eel_hole_event_coverage`` check
+surfaces (non-fatally). Add an entry here only alongside a new downstream table.
+(``log_in`` is synthesized from the ``/callback`` request log, not a payload.)"""
+
+EEL_HOLE_EVENT_COVERAGE_CHECK = "eel_hole_event_coverage"
 
 IGNORED_EVENT_TYPES: frozenset[str] = frozenset({"loading"})
-"""``jsonPayload.event`` values that are known viewer noise, not real user
-events, and shouldn't count toward schema drift. ``loading`` is a client-side
-"still loading" marker. Add benign event types here (rather than loosening the
-tolerance) as they turn up."""
+"""Slug ``jsonPayload.event`` values that are known viewer noise, not user
+events (``loading`` is a client-side "still loading" marker). These are dropped
+without counting as a coverage gap. eel-hole's non-slug operational log lines
+(``event`` is a prose message) are filtered separately, by shape."""
 
 SCHEMA_DRIFT_TOLERANCE = 0.01
-"""Fraction of parsed events that may be event-bearing-but-unparseable before
-``_schema_drift_check`` fails the partition (with a floor of 5, so tiny days
-don't trip on a single bad line). Above this, assume the viewer's log schema
-changed rather than sporadic bad log lines."""
+"""Fraction of events that may be slug-but-unparseable (bad/missing timestamp,
+non-string event) before ``_event_coverage_check`` fails the partition as ERROR
+(floor of 5). That means the eel-hole log *format* changed, not just its event
+vocabulary."""
+
+
+_EVENT_SLUG = re.compile(r"[a-z][a-z0-9_-]{0,40}\Z")
+"""What a real ``jsonPayload.event`` looks like (a lower-case identifier).
+
+eel-hole uses structlog, where ``event`` is the log message: analytics events
+are slugs (``search``, ``preview``, ``duckdb_csv``), operational log lines are
+prose (``"Loading prebuilt search index from ..."``). We only keep slugs."""
 
 
 def json_string_to_list(value: Any):
@@ -61,67 +76,64 @@ def json_string_to_list(value: Any):
     return value
 
 
-class DuckDBFilters(BaseModel):
-    """DuckDB filter format class."""
-
-    field_name: str
-    field_type: Literal["text", "number", "date"]
-    operation: Literal[
-        "equals",
-        "contains",
-        "greaterThan",
-        "greaterThanOrEqual",
-        "lessThan",
-        "lessThanOrEqual",
-        "notBlank",
-        "startsWith",
-        "notEqual",
-        "notContains",
-        "inRange",
-        "blank",
-        "false",
-        "true",
-    ]
-    value: str | int | float | None = None
-
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
 class DuckDBParams(BaseModel):
-    """DuckDB search query parameter class."""
+    """Loose container for a duckdb query's request params.
+
+    eel-hole logs these as ``dict(request.args)`` (see its ``/api/duckdb``
+    route), so the keys vary by request and change over time. Kept permissive --
+    everything optional, extra keys allowed -- so a new shape doesn't drop the
+    event. ``json_string_to_list`` still normalizes ``filters`` from its
+    JSON-string form so the downstream filter split keeps working. Filter dicts
+    themselves are not validated here; eel-hole's own ``Filter`` model
+    (``field_type``/``operation`` as free ``str``, plus ``value_to``) is the
+    reference.
+    """
 
     filters: Annotated[
-        list[DuckDBFilters] | None, BeforeValidator(json_string_to_list)
-    ]  # Convert JSON string to list before validating
-    name: str
-    page: int
-    per_page: int
+        list[dict[str, Any]] | None, BeforeValidator(json_string_to_list)
+    ] = None
+    name: str | None = None
+    page: int | None = None
+    per_page: int | None = None
 
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True, extra="allow"
+    )
 
 
 class JsonPayload(BaseModel):
-    """Portion of eel hole logs where payload is returned as a JSON."""
+    """A structlog JSON log line from the viewer.
 
-    event: ALLOWABLE_EVENT_TYPES
+    Deliberately permissive: ``event`` is any string (eel-hole uses the log
+    message as the event name), unknown ``params`` shapes are accepted as-is,
+    and only ``event`` + ``timestamp`` are required. A new event type or a
+    changed payload shape therefore flows through to ``_core_eel_hole_logs``
+    and shows up as a coverage gap rather than being dropped or crashing the
+    partition.
+    """
+
+    event: str
     timestamp: datetime.datetime
     user_id: str | None = None
     user_domain: str | None = None
-    # Fields returned for a 'hit' response
+    # 'search' / 'hit'
     name: str | None = None
     query: str | None = None
     score: float | None = None
     tags: str | None = None
-    # Fields returned for a 'search' or 'duckdb_preview' response
     url: str | None = None
-    # Fields returned for a 'duckdb_preview' or 'duckdb_csv' response
+    # 'preview' -- the /preview/<package>/<table_name> page view
+    package: str | None = None
+    table_name: str | None = None
+    partition: str | None = None
+    # 'duckdb_preview' / 'duckdb_csv' / 'duckdb_other' -- raw request args
     params: DuckDBParams | None = None
-    # Fields returned for a 'privacy-policy' event
-    # We don't persist these as they are logged in the user
-    # database, but why not validate them anyways?
+    # 'privacy-policy'
     accepted: bool | None = None
     newsletter: bool | None = None
     outreach: bool | None = None
+    # 'verify-email-failed'
+    status_code: int | None = None
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -135,16 +147,23 @@ class JsonPayload(BaseModel):
         return value
 
 
-def payload_is_parseable(value: Any) -> bool:
-    """Whether a raw ``jsonPayload`` value can be parsed as a ``JsonPayload`` event.
+def payload_is_event(value: Any) -> bool:
+    """Whether a raw ``jsonPayload`` is a usable structured event.
 
-    The single source of truth for which eel-hole log lines carry usable event
-    data. Loading messages and other non-event lines, payloads missing a valid
-    ``event`` or ``timestamp``, non-dict payloads, and malformed ``params``
-    objects (empty, partial, bad filter shapes, unknown filter operations) all
-    return ``False``; their payload is then nulled so the row falls out
-    downstream where event-less rows are filtered.
+    True for a dict whose ``event`` is a slug (see ``_EVENT_SLUG``) not in
+    ``IGNORED_EVENT_TYPES``, that parses as a ``JsonPayload``. This filters out
+    eel-hole's operational log lines (prose ``event``) and structurally broken
+    records. It deliberately does *not* filter on whether we recognize the event
+    type or its payload shape -- unknown events flow through and are surfaced as
+    coverage gaps by ``_event_coverage_check``.
     """
+    if not isinstance(value, dict):
+        return False
+    event = value.get("event")
+    if not isinstance(event, str) or not _EVENT_SLUG.match(event):
+        return False
+    if event in IGNORED_EVENT_TYPES:
+        return False
     try:
         JsonPayload.model_validate(value)
     except ValidationError:
@@ -172,21 +191,18 @@ class EelHoleLogs(BaseModel):
         return value
 
     @field_validator("json_payload", mode="before")
-    def null_unparseable_payload(cls, value):  # noqa: N805
-        """Null a JSON payload that isn't a parseable event.
+    def drop_non_event_payload(cls, value):  # noqa: N805
+        """Null a JSON payload that isn't a usable event.
 
         Nulling it here -- rather than letting ``EelHoleLogs`` validation raise
         and kill the whole partition -- lets the row fall out downstream. See
-        ``payload_is_parseable`` for exactly what counts as parseable.
+        ``payload_is_event``.
         """
-        if isinstance(value, JsonPayload) or payload_is_parseable(value):
+        if isinstance(value, JsonPayload) or payload_is_event(value):
             return value
         return None
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
-
-
-_EVENT_SLUG = re.compile(r"[a-z][a-z0-9_-]{0,40}\Z")
 
 
 def _payload_error(payload: Any) -> str:
@@ -210,160 +226,172 @@ def _keys_seen(payloads: list[dict], path: str | None = None) -> str:
     return ", ".join(sorted({key for d in dicts for key in d})) or "(none)"
 
 
-def _drift_report(
+def _coverage_report(
     partition_key: str,
-    total_event_bearing: int,
-    dropped: list[dict],
-    parsed_counts: Counter,
+    routed: Counter,
+    unrouted: dict[str, list[dict]],
+    malformed: list[dict],
 ) -> str:
-    """A copy-paste-actionable summary of the dropped event-bearing payloads.
+    """A copy-paste-actionable summary of the coverage gap.
 
-    One block per distinct ``event`` value: how many dropped vs. still parsed
-    (so you can tell a full migration from a mixed window), the diagnosis, the
-    union of top-level and ``params`` keys seen (the full field surface without
-    dumping every payload), and one sample.
+    One block per event value that parsed but has no ``core_eel_hole_*`` table
+    (or, for ``malformed``, a slug event that failed to parse at all): the count,
+    the union of top-level and ``params`` keys seen across its payloads (the full
+    field surface without dumping every payload), and one sample.
     """
-    allowable = set(get_args(ALLOWABLE_EVENT_TYPES))
-    grouped: dict[str, list[dict]] = {}
-    for payload in dropped:
-        grouped.setdefault(str(payload["event"]), []).append(payload)
+    lines = [f"EEL-HOLE EVENT COVERAGE -- {partition_key}"]
 
-    lines = [
-        f"EEL-HOLE SCHEMA DRIFT -- {partition_key}",
-        (
-            f"  {len(dropped)} of {total_event_bearing} event-bearing payloads "
-            f"({len(dropped) / total_event_bearing:.0%}) failed to parse "
-            f"(tolerance {SCHEMA_DRIFT_TOLERANCE:.0%})."
-        ),
-    ]
-    for event_value, payloads in sorted(
-        grouped.items(), key=lambda item: -len(item[1])
-    ):
-        if event_value in allowable:
-            diagnosis = (
-                f"KNOWN event, payload rejected -- {_payload_error(payloads[0])}"
-            )
-        else:
-            diagnosis = "NOT in ALLOWABLE_EVENT_TYPES (new or renamed event?)"
-        parsed = parsed_counts.get(event_value, 0)
+    if unrouted:
         lines += [
             "",
-            f"  {event_value} -- {len(payloads)} dropped, {parsed} parsed",
-            f"    {diagnosis}",
-            f"    keys seen:        {_keys_seen(payloads)}",
+            "  Parsed but NOT routed to a core_eel_hole_* table",
+            "  (these events are dropped before the parquet outputs / dashboards):",
         ]
-        if any(isinstance(p.get("params"), dict) for p in payloads):
-            lines.append(f"    params keys seen: {_keys_seen(payloads, 'params')}")
-        lines.append(
-            f"    sample: {json.dumps(payloads[0], default=str, sort_keys=True)[:500]}"
-        )
+        for event_value, payloads in sorted(
+            unrouted.items(), key=lambda item: -len(item[1])
+        ):
+            lines += [
+                "",
+                f"  {event_value} -- {len(payloads)} events",
+                f"    keys seen:        {_keys_seen(payloads)}",
+            ]
+            if any(isinstance(p.get("params"), dict) for p in payloads):
+                lines.append(f"    params keys seen: {_keys_seen(payloads, 'params')}")
+            sample = json.dumps(payloads[0], default=str, sort_keys=True)[:500]
+            lines.append(f"    sample: {sample}")
 
+    if malformed:
+        grouped: dict[str, list[dict]] = {}
+        for payload in malformed:
+            grouped.setdefault(str(payload["event"]), []).append(payload)
+        lines += [
+            "",
+            "  Slug events that FAILED to parse (the eel-hole log format may have",
+            "  changed -- this is what fails the check):",
+        ]
+        for event_value, payloads in sorted(
+            grouped.items(), key=lambda item: -len(item[1])
+        ):
+            sample = json.dumps(payloads[0], default=str, sort_keys=True)[:500]
+            lines += [
+                "",
+                (
+                    f"  {event_value} -- {len(payloads)} events -- "
+                    f"{_payload_error(payloads[0])}"
+                ),
+                f"    sample: {sample}",
+            ]
+
+    routed_summary = ", ".join(f"{e}×{n}" for e, n in routed.most_common()) or "none"
     lines += [
         "",
-        "  to fix, in usage_metrics.core.eel_hole:",
-        "    - new/renamed real event -> add to ALLOWABLE_EVENT_TYPES, model it",
-        "    - changed field or filter on a known event -> update the model",
-        "    - benign log noise -> add the exact event value to IGNORED_EVENT_TYPES",
-        f"  then reprocess partition {partition_key}.",
+        f"  Routed OK: {routed_summary}",
+        "",
+        "  To route a new event: add a core_eel_hole_<name> asset in",
+        "  usage_metrics.core.eel_hole, a Table in usage_metrics.models, and an",
+        "  Alembic migration; add it to ROUTED_EVENT_TYPES; then backfill.",
     ]
     return "\n".join(lines)
 
 
-def _schema_drift_check(
+def _event_coverage_check(
     context: AssetExecutionContext, rows: list[dict], models: list[dict]
 ) -> AssetCheckResult:
-    """Fail the partition when log lines that look like events no longer parse.
+    """Surface eel-hole events that parse but aren't routed to a persisted table.
 
-    ``null_unparseable_payload`` silently nulls any payload it can't parse, which
-    is right for the app-noise log lines but would also quietly discard real
-    events if the viewer changed its log schema (a new/renamed event type, a
-    changed field, a new filter operation). This re-inspects the payloads that
-    carried an ``event`` key (other than ``IGNORED_EVENT_TYPES``) but were
-    dropped, and fails when they exceed ``SCHEMA_DRIFT_TOLERANCE`` of the
-    event-bearing payloads -- a systematic break (forgot to update parsing,
-    upstream schema change) shows up as a large fraction; a few is treated as
-    sporadic bad lines. On failure it logs a full ``_drift_report`` at ERROR so
-    the fix is obvious from the GHA logs without further digging.
+    With the permissive models an unknown event type (or a changed payload
+    shape) is no longer dropped or fatal -- it lands in ``_core_eel_hole_logs``
+    and then goes nowhere, because each ``core_eel_hole_*`` table filters one
+    exact ``event`` string. This makes the gap loud:
+
+    * events parsed but not in ``ROUTED_EVENT_TYPES`` -> **WARN** (non-blocking):
+      real activity we aren't persisting; add a downstream table for it.
+    * slug events that failed to parse at all (bad/missing ``timestamp``, non-str
+      ``event``, ...), above ``SCHEMA_DRIFT_TOLERANCE`` -> **ERROR** (blocking):
+      the log *format* broke.
+
+    The full ``_coverage_report`` is logged (WARNING / ERROR) so a maintainer
+    reviewing the GHA run has the event names, field surface, and samples.
     """
     partition_key = context.partition_key
-    parsed_counts = Counter(
-        model["json_payload"]["event"]
-        for model in models
-        if model["json_payload"] is not None
-    )
-    parsed_events = sum(parsed_counts.values())
+    routed: Counter = Counter()
+    unrouted: dict[str, list[dict]] = {}
+    malformed: list[dict] = []
+    non_slug_nulled = 0
 
-    dropped: list[dict] = []
-    non_slug_dropped = 0
     for row, model in zip(rows, models, strict=True):
         payload = row.get("jsonPayload")
-        if (
-            not isinstance(payload, dict)
-            or "event" not in payload
-            or model["json_payload"] is not None
-        ):
+        if not isinstance(payload, dict) or not isinstance(payload.get("event"), str):
             continue
-        event_value = str(payload["event"])
-        if event_value in IGNORED_EVENT_TYPES:
+        event = payload["event"]
+        if event in IGNORED_EVENT_TYPES:
             continue
-        # A non-slug event value (e.g. "Loading prebuilt search index ...") is an
-        # internal log line, not a user event we're failing to ingest -- count it
-        # separately and don't let it fail the check.
-        if _EVENT_SLUG.match(event_value):
-            dropped.append(payload)
+        if not _EVENT_SLUG.match(event):
+            if model["json_payload"] is None:
+                non_slug_nulled += 1
+            continue
+        if model["json_payload"] is None:
+            malformed.append(payload)
+        elif event in ROUTED_EVENT_TYPES:
+            routed[event] += 1
         else:
-            non_slug_dropped += 1
+            unrouted.setdefault(event, []).append(payload)
 
-    total_event_bearing = parsed_events + len(dropped)
-    over_tolerance = len(dropped) > max(5, SCHEMA_DRIFT_TOLERANCE * total_event_bearing)
-    counts = Counter(str(payload["event"]) for payload in dropped)
-    unrecognized = sorted(set(counts) - set(get_args(ALLOWABLE_EVENT_TYPES)))
+    total = (
+        sum(routed.values()) + sum(len(v) for v in unrouted.values()) + len(malformed)
+    )
+    malformed_over_tol = len(malformed) > max(5, SCHEMA_DRIFT_TOLERANCE * total)
+    unrouted_counts = Counter({e: len(v) for e, v in unrouted.items()})
 
-    if dropped:
-        report = _drift_report(
-            partition_key, total_event_bearing, dropped, parsed_counts
+    metadata = {
+        "parsed_events": total - len(malformed),
+        "routed_events": ", ".join(f"{e}×{n}" for e, n in routed.most_common())
+        or "none",
+        "unrouted_events": ", ".join(
+            f"{e}×{n}" for e, n in unrouted_counts.most_common()
         )
-        (context.log.error if over_tolerance else context.log.warning)(report)
-    if non_slug_dropped:
-        context.log.info(
-            f"{partition_key}: also nulled {non_slug_dropped} payload(s) whose "
-            "'event' is a log message rather than a slug (not counted as drift)."
+        or "none",
+        "malformed_slug_events": len(malformed),
+        "non_slug_payloads_nulled": non_slug_nulled,
+    }
+
+    if malformed_over_tol:
+        report = _coverage_report(partition_key, routed, unrouted, malformed)
+        context.log.error(report)
+        return AssetCheckResult(
+            check_name=EEL_HOLE_EVENT_COVERAGE_CHECK,
+            passed=False,
+            severity=AssetCheckSeverity.ERROR,
+            description=(
+                f"{partition_key}: {len(malformed)} slug eel-hole events failed to "
+                "parse -- the log format may have changed. See the "
+                "'EEL-HOLE EVENT COVERAGE' block in the logs."
+            ),
+            metadata=metadata,
         )
 
-    if over_tolerance:
-        top = ", ".join(f"{value}×{n}" for value, n in counts.most_common(8))
-        description = (
-            f"{partition_key}: {len(dropped)}/{total_event_bearing} "
-            f"({len(dropped) / total_event_bearing:.0%}) event-bearing eel-hole "
-            f"payloads failed to parse (tolerance {SCHEMA_DRIFT_TOLERANCE:.0%}). "
-            f"Dropped: {top}. See the 'EEL-HOLE SCHEMA DRIFT' block in the logs, "
-            "fix usage_metrics.core.eel_hole, then reprocess."
-        )
-    else:
-        description = (
-            f"{partition_key}: eel-hole schema drift within tolerance "
-            f"({len(dropped)} dropped)."
+    if unrouted:
+        report = _coverage_report(partition_key, routed, unrouted, malformed)
+        context.log.warning(report)
+        return AssetCheckResult(
+            check_name=EEL_HOLE_EVENT_COVERAGE_CHECK,
+            passed=False,
+            severity=AssetCheckSeverity.WARN,
+            description=(
+                f"{partition_key}: parsing but NOT persisting "
+                f"{metadata['unrouted_events']} -- coverage gap, add a "
+                "core_eel_hole_* table (non-fatal). See the "
+                "'EEL-HOLE EVENT COVERAGE' block in the logs."
+            ),
+            metadata=metadata,
         )
 
     return AssetCheckResult(
-        check_name=EEL_HOLE_SCHEMA_DRIFT_CHECK,
-        passed=not over_tolerance,
-        severity=AssetCheckSeverity.ERROR,
-        description=description,
-        metadata={
-            "event_bearing_payloads": total_event_bearing,
-            "dropped": len(dropped),
-            "dropped_fraction": (
-                round(len(dropped) / total_event_bearing, 4)
-                if total_event_bearing
-                else 0.0
-            ),
-            "dropped_event_values": (
-                ", ".join(f"{value}×{n}" for value, n in counts.most_common()) or "none"
-            ),
-            "unrecognized_event_types": ", ".join(unrecognized) or "none",
-            "non_slug_event_payloads_nulled": non_slug_dropped,
-        },
+        check_name=EEL_HOLE_EVENT_COVERAGE_CHECK,
+        passed=True,
+        severity=AssetCheckSeverity.WARN,
+        description=f"{partition_key}: all parsed eel-hole events are routed to a table.",
+        metadata=metadata,
     )
 
 
@@ -372,7 +400,7 @@ def _schema_drift_check(
     tags={"source": "eel_hole"},
     check_specs=[
         AssetCheckSpec(
-            name=EEL_HOLE_SCHEMA_DRIFT_CHECK,
+            name=EEL_HOLE_EVENT_COVERAGE_CHECK,
             asset="_core_eel_hole_logs",
             blocking=True,
         )
@@ -388,7 +416,7 @@ def _core_eel_hole_logs(
     if raw_eel_hole_logs.empty:
         context.log.warning(f"No data found for {context.partition_key}")
         yield Output(pd.DataFrame())
-        yield _schema_drift_check(context, [], [])
+        yield _event_coverage_check(context, [], [])
         return
 
     # Flatten the many nested columns and coerce them into the expected class
@@ -533,7 +561,7 @@ def _core_eel_hole_logs(
         converted_df["session_id"] = pd.NA
 
     yield Output(converted_df.reset_index(drop=True))
-    yield _schema_drift_check(context, rows, models)
+    yield _event_coverage_check(context, rows, models)
 
 
 @asset(
