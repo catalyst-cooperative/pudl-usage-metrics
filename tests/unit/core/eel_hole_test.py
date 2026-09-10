@@ -1,5 +1,7 @@
 """Tests for the eel hole (PUDL Viewer) log transform assets."""
 
+from collections import Counter
+
 import pandas as pd
 import pytest
 from dagster import AssetCheckResult, Output, build_asset_context
@@ -352,6 +354,23 @@ def test_schema_drift_check_passes_with_ignored_noise_event():
     assert result.metadata["unrecognized_event_types"].value == "none"
 
 
+def test_schema_drift_check_ignores_non_slug_event_values():
+    """A log message in `event` is nulled but never fails the check."""
+    rows = [
+        *(_record(f"g{i}", event="search", user_id="u") for i in range(5)),
+        *(
+            _record(
+                f"log{i}",
+                payload={"event": "Loading prebuilt search index", "timestamp": TS},
+            )
+            for i in range(6)
+        ),
+    ]
+    result = _drift_check(rows)
+    assert result.passed is True
+    assert result.metadata["non_slug_event_payloads_nulled"].value == 6
+
+
 def test_schema_drift_check_tolerates_a_few_bad_lines():
     """Up to the floor of 5 event-bearing drops is treated as sporadic noise."""
     rows = [
@@ -399,25 +418,32 @@ def test_schema_drift_check_fails_when_known_event_breaks_in_bulk():
 
 
 def test_drift_report_is_actionable():
-    """The logged report names each bad event, its count, the field, and a sample."""
+    """One block per event value: dropped/parsed counts, diagnosis, key union, sample."""
     dropped = [
-        {"event": "preview", "timestamp": TS, "url": "/x"},
-        {"event": "preview", "timestamp": TS, "url": "/y"},
+        {"event": "preview", "timestamp": TS, "package": "pudl", "table_name": "x"},
+        {"event": "preview", "timestamp": TS, "partition": None, "table_name": "y"},
         {
             "event": "search",
             "timestamp": TS,
             "params": {"name": "t", "page": 1, "perPage": 50, "filters": "oops"},
         },
-        {"event": "Loading prebuilt index", "timestamp": TS},
     ]
-    report = _drift_report("2026-06-16", total_event_bearing=100, dropped=dropped)
+    report = _drift_report(
+        "2026-06-16",
+        total_event_bearing=53,
+        dropped=dropped,
+        parsed_counts=Counter({"search": 40, "hit": 10}),
+    )
 
     assert "EEL-HOLE SCHEMA DRIFT -- 2026-06-16" in report
-    assert "4 of 100 event-bearing payloads (4%)" in report
-    assert "preview" in report and "2  not in ALLOWABLE_EVENT_TYPES" in report
-    assert "params.filters:" in report  # the exact failing field for the known event
-    assert "likely a log message landing in `event`" in report  # non-slug value
-    assert "sample payloads:" in report
+    assert "3 of 53 event-bearing payloads (6%)" in report
+    assert "preview -- 2 dropped, 0 parsed" in report
+    assert "NOT in ALLOWABLE_EVENT_TYPES" in report
+    assert "search -- 1 dropped, 40 parsed" in report
+    assert "KNOWN event, payload rejected -- params.filters:" in report
+    # union of keys across both preview payloads
+    assert "package" in report and "partition" in report and "table_name" in report
+    assert "params keys seen:" in report
     assert '"filters": "oops"' in report  # a real payload to eyeball
     assert "reprocess partition 2026-06-16" in report
 
