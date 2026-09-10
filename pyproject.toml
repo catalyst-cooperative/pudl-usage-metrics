@@ -119,10 +119,11 @@ filterwarnings = [
     "ignore:distutils Version classes are deprecated:DeprecationWarning",
     "ignore:Creating a LegacyVersion:DeprecationWarning:pkg_resources[.*]",
     "ignore:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning:db_dtypes[.*]",
-    # grpcio in the locked env predates post-quantum crypto support. Upstream
-    # deprecation with an Oct 2026 deadline, nothing to fix here. Drop this once
-    # the lockfile carries grpcio >= 1.83.0.
-    "ignore:grpcio < 1.83.0 does not support Post-Quantum Cryptography:FutureWarning",
+    # grpcio in the locked env predates post-quantum crypto support. Also
+    # filtered at runtime in usage_metrics/__init__.py; kept here too so it's
+    # caught regardless of test import order. Drop both once grpcio >= 1.83 is
+    # installable (needs a Python 3.14 conda-forge build).
+    "ignore:.*grpcio < 1.83.0 does not support Post-Quantum Cryptography:FutureWarning",
 ]
 # Default output is compact progress ("..."). Logs are captured at INFO and
 # printed only in the report for a failing test. For a live log stream while
