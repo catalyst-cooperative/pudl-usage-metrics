@@ -200,15 +200,33 @@ def _payload_error(payload: Any) -> str:
     return "(now valid)"
 
 
+def _keys_seen(payloads: list[dict], path: str | None = None) -> str:
+    """Sorted union of keys across ``payloads`` (or their ``params`` sub-dicts)."""
+    dicts = (
+        payloads
+        if path is None
+        else [p[path] for p in payloads if isinstance(p.get(path), dict)]
+    )
+    return ", ".join(sorted({key for d in dicts for key in d})) or "(none)"
+
+
 def _drift_report(
-    partition_key: str, total_event_bearing: int, dropped: list[dict]
+    partition_key: str,
+    total_event_bearing: int,
+    dropped: list[dict],
+    parsed_counts: Counter,
 ) -> str:
-    """A copy-paste-actionable summary of the dropped event-bearing payloads."""
+    """A copy-paste-actionable summary of the dropped event-bearing payloads.
+
+    One block per distinct ``event`` value: how many dropped vs. still parsed
+    (so you can tell a full migration from a mixed window), the diagnosis, the
+    union of top-level and ``params`` keys seen (the full field surface without
+    dumping every payload), and one sample.
+    """
     allowable = set(get_args(ALLOWABLE_EVENT_TYPES))
-    counts = Counter(str(payload["event"]) for payload in dropped)
-    samples: dict[str, dict] = {}
+    grouped: dict[str, list[dict]] = {}
     for payload in dropped:
-        samples.setdefault(str(payload["event"]), payload)
+        grouped.setdefault(str(payload["event"]), []).append(payload)
 
     lines = [
         f"EEL-HOLE SCHEMA DRIFT -- {partition_key}",
@@ -217,24 +235,28 @@ def _drift_report(
             f"({len(dropped) / total_event_bearing:.0%}) failed to parse "
             f"(tolerance {SCHEMA_DRIFT_TOLERANCE:.0%})."
         ),
-        "",
-        f"  {'dropped event value':<44}{'count':>7}  problem",
-        f"  {'-' * 44}{'-' * 7}  {'-' * 45}",
     ]
-    for event_value, count in counts.most_common():
+    for event_value, payloads in sorted(
+        grouped.items(), key=lambda item: -len(item[1])
+    ):
         if event_value in allowable:
-            problem = _payload_error(samples[event_value])
-        elif _EVENT_SLUG.match(event_value):
-            problem = "not in ALLOWABLE_EVENT_TYPES (new or renamed event?)"
+            diagnosis = (
+                f"KNOWN event, payload rejected -- {_payload_error(payloads[0])}"
+            )
         else:
-            problem = "not a slug -- likely a log message landing in `event`"
-        lines.append(f"  {event_value[:44]:<44}{count:>7}  {problem}")
-
-    lines.append("")
-    lines.append("  sample payloads:")
-    for event_value, payload in samples.items():
-        dumped = json.dumps(payload, default=str, sort_keys=True)
-        lines.append(f"    {event_value[:44]}: {dumped[:500]}")
+            diagnosis = "NOT in ALLOWABLE_EVENT_TYPES (new or renamed event?)"
+        parsed = parsed_counts.get(event_value, 0)
+        lines += [
+            "",
+            f"  {event_value} -- {len(payloads)} dropped, {parsed} parsed",
+            f"    {diagnosis}",
+            f"    keys seen:        {_keys_seen(payloads)}",
+        ]
+        if any(isinstance(p.get("params"), dict) for p in payloads):
+            lines.append(f"    params keys seen: {_keys_seen(payloads, 'params')}")
+        lines.append(
+            f"    sample: {json.dumps(payloads[0], default=str, sort_keys=True)[:500]}"
+        )
 
     lines += [
         "",
@@ -264,23 +286,49 @@ def _schema_drift_check(
     the fix is obvious from the GHA logs without further digging.
     """
     partition_key = context.partition_key
-    parsed_events = sum(model["json_payload"] is not None for model in models)
-    dropped = [
-        row["jsonPayload"]
-        for row, model in zip(rows, models, strict=True)
-        if isinstance(row.get("jsonPayload"), dict)
-        and "event" in row["jsonPayload"]
-        and str(row["jsonPayload"]["event"]) not in IGNORED_EVENT_TYPES
-        and model["json_payload"] is None
-    ]
+    parsed_counts = Counter(
+        model["json_payload"]["event"]
+        for model in models
+        if model["json_payload"] is not None
+    )
+    parsed_events = sum(parsed_counts.values())
+
+    dropped: list[dict] = []
+    non_slug_dropped = 0
+    for row, model in zip(rows, models, strict=True):
+        payload = row.get("jsonPayload")
+        if (
+            not isinstance(payload, dict)
+            or "event" not in payload
+            or model["json_payload"] is not None
+        ):
+            continue
+        event_value = str(payload["event"])
+        if event_value in IGNORED_EVENT_TYPES:
+            continue
+        # A non-slug event value (e.g. "Loading prebuilt search index ...") is an
+        # internal log line, not a user event we're failing to ingest -- count it
+        # separately and don't let it fail the check.
+        if _EVENT_SLUG.match(event_value):
+            dropped.append(payload)
+        else:
+            non_slug_dropped += 1
+
     total_event_bearing = parsed_events + len(dropped)
     over_tolerance = len(dropped) > max(5, SCHEMA_DRIFT_TOLERANCE * total_event_bearing)
     counts = Counter(str(payload["event"]) for payload in dropped)
     unrecognized = sorted(set(counts) - set(get_args(ALLOWABLE_EVENT_TYPES)))
 
     if dropped:
-        report = _drift_report(partition_key, total_event_bearing, dropped)
+        report = _drift_report(
+            partition_key, total_event_bearing, dropped, parsed_counts
+        )
         (context.log.error if over_tolerance else context.log.warning)(report)
+    if non_slug_dropped:
+        context.log.info(
+            f"{partition_key}: also nulled {non_slug_dropped} payload(s) whose "
+            "'event' is a log message rather than a slug (not counted as drift)."
+        )
 
     if over_tolerance:
         top = ", ".join(f"{value}×{n}" for value, n in counts.most_common(8))
@@ -314,6 +362,7 @@ def _schema_drift_check(
                 ", ".join(f"{value}×{n}" for value, n in counts.most_common()) or "none"
             ),
             "unrecognized_event_types": ", ".join(unrecognized) or "none",
+            "non_slug_event_payloads_nulled": non_slug_dropped,
         },
     )
 
