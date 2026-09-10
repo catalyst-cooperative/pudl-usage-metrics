@@ -363,8 +363,10 @@ def test_coverage_check_warns_non_fatally_on_unrouted_event():
     result = _coverage(rows)
     assert result.passed is False
     assert result.severity.value == "WARN"  # non-blocking
-    assert "preview×903" in result.metadata["unrouted_events"].value
-    assert "preview×903" in result.description
+    # count AND percentage of the day's traffic, in both surfaces
+    assert "preview×903 (99%)" in result.metadata["unrouted_events"].value
+    assert result.metadata["unrouted_pct"].value == pytest.approx(98.9, abs=0.1)
+    assert "903 (99%)" in result.description
 
 
 def test_coverage_check_errors_when_slug_events_fail_to_parse():
@@ -383,7 +385,7 @@ def test_coverage_check_errors_when_slug_events_fail_to_parse():
 
 
 def test_coverage_report_is_actionable():
-    """One block per unrouted event: count, key union, sample; plus routed summary."""
+    """Each event shows count AND % of the day's traffic, plus keys and a sample."""
     unrouted = {
         "preview": [
             {"event": "preview", "timestamp": TS, "package": "pudl", "table_name": "x"},
@@ -399,30 +401,32 @@ def test_coverage_report_is_actionable():
     }
     report = _coverage_report(
         "2026-06-16",
-        routed=Counter({"search": 400, "duckdb_csv": 2}),
+        total=10,  # 7 routed + 2 preview + 1 duckdb_other
+        routed=Counter({"search": 7}),
         unrouted=unrouted,
         malformed=[],
     )
 
-    assert "EEL-HOLE EVENT COVERAGE -- 2026-06-16" in report
-    assert "NOT routed to a core_eel_hole_* table" in report
-    assert "preview -- 2 events" in report
-    assert "duckdb_other -- 1 events" in report
+    assert "EEL-HOLE EVENT COVERAGE -- 2026-06-16 (10 slug events)" in report
+    assert "NOT routed to a core_eel_hole_* table -- 3 (30%) of events" in report
+    assert "preview -- 2 (20%)" in report
+    assert "duckdb_other -- 1 (10%)" in report
     assert "package" in report and "partition" in report and "table_name" in report
     assert "params keys seen: name, page" in report
-    assert "Routed OK: search×400, duckdb_csv×2" in report
+    assert "Routed OK: search×7 (70%)" in report
     assert "To route a new event" in report
 
 
 def test_coverage_report_shows_malformed_events():
     report = _coverage_report(
         "2026-06-16",
-        routed=Counter({"hit": 20}),
+        total=10,
+        routed=Counter({"hit": 9}),
         unrouted={},
         malformed=[{"event": "search", "timestamp": "not-a-date"}],
     )
-    assert "FAILED to parse" in report
-    assert "search -- 1 events -- timestamp:" in report
+    assert "FAILED to parse -- 1 (10%) of events" in report
+    assert "search -- 1 (10%) -- timestamp:" in report
 
 
 def test_core_eel_hole_logs_emits_coverage_check():

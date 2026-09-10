@@ -226,33 +226,51 @@ def _keys_seen(payloads: list[dict], path: str | None = None) -> str:
     return ", ".join(sorted({key for d in dicts for key in d})) or "(none)"
 
 
+def _n_pct(n: int, total: int) -> str:
+    """``"903 (66%)"`` -- absolute count and its share of ``total`` events."""
+    return f"{n} ({n / total:.0%})" if total else f"{n}"
+
+
+def _event_summary(counts: Counter, total: int) -> str:
+    """``"preview×903 (66%), duckdb_other×4 (0%)"`` for a Counter of event -> n."""
+    parts = [f"{event}×{_n_pct(n, total)}" for event, n in counts.most_common()]
+    return ", ".join(parts) or "none"
+
+
 def _coverage_report(
     partition_key: str,
+    total: int,
     routed: Counter,
     unrouted: dict[str, list[dict]],
     malformed: list[dict],
 ) -> str:
     """A copy-paste-actionable summary of the coverage gap.
 
-    One block per event value that parsed but has no ``core_eel_hole_*`` table
-    (or, for ``malformed``, a slug event that failed to parse at all): the count,
-    the union of top-level and ``params`` keys seen across its payloads (the full
-    field surface without dumping every payload), and one sample.
+    Every count is shown as ``n (pct)`` of the partition's ``total`` slug events,
+    because eel-hole traffic swings widely day to day -- the percentage is what
+    tells you how urgent an unrouted category is. One block per event value that
+    parsed but has no ``core_eel_hole_*`` table (or, for ``malformed``, a slug
+    event that failed to parse at all): the count, the union of top-level and
+    ``params`` keys seen across its payloads, and one sample.
     """
-    lines = [f"EEL-HOLE EVENT COVERAGE -- {partition_key}"]
+    lines = [f"EEL-HOLE EVENT COVERAGE -- {partition_key} ({total} slug events)"]
 
     if unrouted:
+        unrouted_n = sum(len(v) for v in unrouted.values())
         lines += [
             "",
-            "  Parsed but NOT routed to a core_eel_hole_* table",
-            "  (these events are dropped before the parquet outputs / dashboards):",
+            (
+                "  Parsed but NOT routed to a core_eel_hole_* table -- "
+                f"{_n_pct(unrouted_n, total)} of events"
+            ),
+            "  (these are dropped before the parquet outputs / dashboards):",
         ]
         for event_value, payloads in sorted(
             unrouted.items(), key=lambda item: -len(item[1])
         ):
             lines += [
                 "",
-                f"  {event_value} -- {len(payloads)} events",
+                f"  {event_value} -- {_n_pct(len(payloads), total)}",
                 f"    keys seen:        {_keys_seen(payloads)}",
             ]
             if any(isinstance(p.get("params"), dict) for p in payloads):
@@ -266,8 +284,11 @@ def _coverage_report(
             grouped.setdefault(str(payload["event"]), []).append(payload)
         lines += [
             "",
-            "  Slug events that FAILED to parse (the eel-hole log format may have",
-            "  changed -- this is what fails the check):",
+            (
+                "  Slug events that FAILED to parse -- "
+                f"{_n_pct(len(malformed), total)} of events"
+            ),
+            "  (the eel-hole log format may have changed -- this fails the check):",
         ]
         for event_value, payloads in sorted(
             grouped.items(), key=lambda item: -len(item[1])
@@ -276,16 +297,15 @@ def _coverage_report(
             lines += [
                 "",
                 (
-                    f"  {event_value} -- {len(payloads)} events -- "
+                    f"  {event_value} -- {_n_pct(len(payloads), total)} -- "
                     f"{_payload_error(payloads[0])}"
                 ),
                 f"    sample: {sample}",
             ]
 
-    routed_summary = ", ".join(f"{e}×{n}" for e, n in routed.most_common()) or "none"
     lines += [
         "",
-        f"  Routed OK: {routed_summary}",
+        f"  Routed OK: {_event_summary(routed, total)}",
         "",
         "  To route a new event: add a core_eel_hole_<name> asset in",
         "  usage_metrics.core.eel_hole, a Table in usage_metrics.models, and an",
@@ -342,45 +362,44 @@ def _event_coverage_check(
     )
     malformed_over_tol = len(malformed) > max(5, SCHEMA_DRIFT_TOLERANCE * total)
     unrouted_counts = Counter({e: len(v) for e, v in unrouted.items()})
+    unrouted_n = sum(unrouted_counts.values())
 
     metadata = {
+        "total_slug_events": total,
         "parsed_events": total - len(malformed),
-        "routed_events": ", ".join(f"{e}×{n}" for e, n in routed.most_common())
-        or "none",
-        "unrouted_events": ", ".join(
-            f"{e}×{n}" for e, n in unrouted_counts.most_common()
-        )
-        or "none",
+        "routed_events": _event_summary(routed, total),
+        "unrouted_events": _event_summary(unrouted_counts, total),
+        "unrouted_pct": (round(100 * unrouted_n / total, 1) if total else 0.0),
         "malformed_slug_events": len(malformed),
         "non_slug_payloads_nulled": non_slug_nulled,
     }
 
     if malformed_over_tol:
-        report = _coverage_report(partition_key, routed, unrouted, malformed)
+        report = _coverage_report(partition_key, total, routed, unrouted, malformed)
         context.log.error(report)
         return AssetCheckResult(
             check_name=EEL_HOLE_EVENT_COVERAGE_CHECK,
             passed=False,
             severity=AssetCheckSeverity.ERROR,
             description=(
-                f"{partition_key}: {len(malformed)} slug eel-hole events failed to "
-                "parse -- the log format may have changed. See the "
-                "'EEL-HOLE EVENT COVERAGE' block in the logs."
+                f"{partition_key}: {_n_pct(len(malformed), total)} slug eel-hole "
+                "events failed to parse -- the log format may have changed. See "
+                "the 'EEL-HOLE EVENT COVERAGE' block in the logs."
             ),
             metadata=metadata,
         )
 
     if unrouted:
-        report = _coverage_report(partition_key, routed, unrouted, malformed)
+        report = _coverage_report(partition_key, total, routed, unrouted, malformed)
         context.log.warning(report)
         return AssetCheckResult(
             check_name=EEL_HOLE_EVENT_COVERAGE_CHECK,
             passed=False,
             severity=AssetCheckSeverity.WARN,
             description=(
-                f"{partition_key}: parsing but NOT persisting "
-                f"{metadata['unrouted_events']} -- coverage gap, add a "
-                "core_eel_hole_* table (non-fatal). See the "
+                f"{partition_key}: NOT persisting {_n_pct(unrouted_n, total)} of "
+                f"eel-hole events ({metadata['unrouted_events']}) -- coverage gap, "
+                "add a core_eel_hole_* table (non-fatal). See the "
                 "'EEL-HOLE EVENT COVERAGE' block in the logs."
             ),
             metadata=metadata,
