@@ -164,10 +164,10 @@ def _core_eel_hole_logs(
     raw_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Transform viewer.catalyst.coop logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     # Flatten the many nested columns and coerce them into the expected class
@@ -311,10 +311,10 @@ def core_eel_hole_log_ins(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of log-in events from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     login_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "log_in"]
@@ -336,10 +336,10 @@ def core_eel_hole_searches(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of search events from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     search_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "search"]
@@ -370,10 +370,10 @@ def core_eel_hole_hits(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of search hits from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     hit_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "hit"]
@@ -393,10 +393,10 @@ def core_eel_hole_previews(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of DuckDB preview requests from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     preview_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_preview"]
@@ -420,10 +420,10 @@ def core_eel_hole_downloads(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of DuckDB download requests from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     download_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_csv"]
@@ -447,10 +447,10 @@ def core_eel_hole_user_settings_updates(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of user setting updates."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     settings_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "privacy-policy"]
