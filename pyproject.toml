@@ -132,9 +132,8 @@ log_date_format = "%Y-%m-%d %H:%M:%S"
 log_level = "INFO"
 
 [tool.coverage.report]
-# Coverage is 44.99% today; the floor sits just under it (pytest-cov compares
-# without rounding). Raise this as test coverage grows.
-fail_under = 44
+# Raise this floor as test coverage grows!
+fail_under = 57
 
 [tool.ruff]
 target-version = "py314"
