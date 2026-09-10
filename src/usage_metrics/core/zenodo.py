@@ -21,10 +21,10 @@ def core_zenodo_logs(
     raw_zenodo_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Transform daily Zenodo logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_zenodo_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return raw_zenodo_logs
 
     # Rename columns

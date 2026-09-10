@@ -21,10 +21,10 @@ def core_github_popular_referrers(
     raw_github_popular_referrers: pd.DataFrame,
 ) -> pd.DataFrame:
     """Transform the popular referrers to the PUDL Github repository."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_github_popular_referrers.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return raw_github_popular_referrers
 
     df = raw_github_popular_referrers
@@ -53,10 +53,10 @@ def core_github_popular_paths(
     raw_github_popular_paths: pd.DataFrame,
 ) -> pd.DataFrame:
     """Transform the popular paths to the PUDL Github repository."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_github_popular_paths.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return raw_github_popular_paths
 
     df = raw_github_popular_paths
@@ -89,10 +89,10 @@ def core_github_clones(
     The raw data includes clones from a two week window. To avoid duplication between
     partitions, we filter the records here by the time window in the partition key.
     """
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_github_clones.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return raw_github_clones
 
     df = raw_github_clones
@@ -142,10 +142,10 @@ def core_github_views(
     The raw data includes views from a two week window. To avoid duplication between
     partitions, we filter the records here by the time window in the partition key.
     """
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_github_views.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return raw_github_views
 
     df = raw_github_views
