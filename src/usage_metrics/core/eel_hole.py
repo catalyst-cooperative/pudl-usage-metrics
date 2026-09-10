@@ -4,27 +4,46 @@ import datetime
 import json
 import math
 import os
+from collections.abc import Iterator
 from typing import Annotated, Any, Literal, cast, get_args
 from urllib.parse import urlsplit
 
 import pandas as pd
 from dagster import (
+    AssetCheckResult,
+    AssetCheckSeverity,
+    AssetCheckSpec,
     AssetExecutionContext,
     DailyPartitionsDefinition,
+    Output,
     asset,
 )
 from pydantic import (
     BaseModel,
     BeforeValidator,
     ConfigDict,
+    ValidationError,
     field_validator,
-    model_validator,
 )
 from pydantic.alias_generators import to_camel
 
 ALLOWABLE_EVENT_TYPES = Literal[
     "search", "hit", "duckdb_preview", "duckdb_csv", "privacy-policy"
 ]
+
+EEL_HOLE_SCHEMA_DRIFT_CHECK = "eel_hole_schema_drift"
+
+IGNORED_EVENT_TYPES: frozenset[str] = frozenset({"loading"})
+"""``jsonPayload.event`` values that are known viewer noise, not real user
+events, and shouldn't count toward schema drift. ``loading`` is a client-side
+"still loading" marker. Add benign event types here (rather than loosening the
+tolerance) as they turn up."""
+
+SCHEMA_DRIFT_TOLERANCE = 0.01
+"""Fraction of parsed events that may be event-bearing-but-unparseable before
+``_schema_drift_check`` fails the partition (with a floor of 5, so tiny days
+don't trip on a single bad line). Above this, assume the viewer's log schema
+changed rather than sporadic bad log lines."""
 
 
 def json_string_to_list(value: Any):
@@ -144,6 +163,23 @@ class JsonPayload(BaseModel):
         return value
 
 
+def payload_is_parseable(value: Any) -> bool:
+    """Whether a raw ``jsonPayload`` value can be parsed as a ``JsonPayload`` event.
+
+    The single source of truth for which eel-hole log lines carry usable event
+    data. Loading messages and other non-event lines, payloads missing a valid
+    ``event`` or ``timestamp``, non-dict payloads, and malformed ``params``
+    objects (empty, partial, bad filter shapes, unknown filter operations) all
+    return ``False``; their payload is then nulled so the row falls out
+    downstream where event-less rows are filtered.
+    """
+    try:
+        JsonPayload.model_validate(value)
+    except ValidationError:
+        return False
+    return True
+
+
 class EelHoleLogs(BaseModel):
     """Expected format of eel hole logs."""
 
@@ -163,62 +199,111 @@ class EelHoleLogs(BaseModel):
             return None
         return value
 
-    @model_validator(mode="before")
-    def drop_bad_records(cls, data):  # noqa: N805
-        """Where JSON payload event is a 'loading' message or params badly formatted, drop JSON payload."""
-        if isinstance(data["jsonPayload"], dict):  # noqa: SIM102
-            if (
-                (
-                    (event := data["jsonPayload"].get("event"))
-                    and event not in get_args(ALLOWABLE_EVENT_TYPES)
-                )
-                # Or if params are malformed: absent is fine (no search happened),
-                # but present and not a complete DuckDBParams -- including an
-                # empty {} -- means every required field would otherwise raise.
-                or (
-                    (params := data["jsonPayload"].get("params")) is not None
-                    and (
-                        not isinstance(params, dict)
-                        or not all(
-                            key in params
-                            for key in ("filters", "name", "page", "perPage")
-                        )
-                    )
-                )
-            ):
-                data.pop("jsonPayload", None)
-        return data
+    @field_validator("json_payload", mode="before")
+    def null_unparseable_payload(cls, value):  # noqa: N805
+        """Null a JSON payload that isn't a parseable event.
+
+        Nulling it here -- rather than letting ``EelHoleLogs`` validation raise
+        and kill the whole partition -- lets the row fall out downstream. See
+        ``payload_is_parseable`` for exactly what counts as parseable.
+        """
+        if isinstance(value, JsonPayload) or payload_is_parseable(value):
+            return value
+        return None
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+def _schema_drift_check(
+    partition_key: str, rows: list[dict], models: list[dict]
+) -> AssetCheckResult:
+    """Fail the partition when log lines that look like events no longer parse.
+
+    ``null_unparseable_payload`` silently nulls any payload it can't parse, which
+    is right for the app-noise log lines but would also quietly discard real
+    events if the viewer changed its log schema (a new/renamed event type, a
+    changed field, a new filter operation). This re-inspects the payloads that
+    carried an ``event`` key (other than ``IGNORED_EVENT_TYPES``) but were
+    dropped, and fails when they exceed ``SCHEMA_DRIFT_TOLERANCE`` of the parsed
+    events -- a systematic break (forgot to update parsing, upstream schema
+    change) shows up as a large fraction; a few is treated as sporadic bad lines.
+    """
+    parsed_events = sum(model["json_payload"] is not None for model in models)
+    dropped = [
+        row["jsonPayload"]
+        for row, model in zip(rows, models, strict=True)
+        if isinstance(row.get("jsonPayload"), dict)
+        and "event" in row["jsonPayload"]
+        and str(row["jsonPayload"]["event"]) not in IGNORED_EVENT_TYPES
+        and model["json_payload"] is None
+    ]
+    unrecognized = sorted(
+        {str(payload["event"]) for payload in dropped}
+        - set(get_args(ALLOWABLE_EVENT_TYPES))
+    )
+    over_tolerance = len(dropped) > max(5, SCHEMA_DRIFT_TOLERANCE * parsed_events)
+
+    if over_tolerance:
+        hint = f" Unrecognized event type(s): {unrecognized}." if unrecognized else ""
+        description = (
+            f"{partition_key}: {len(dropped)} of {parsed_events} event-bearing "
+            "eel-hole payloads failed to parse, over the "
+            f"{SCHEMA_DRIFT_TOLERANCE:.0%} tolerance.{hint} The viewer's log schema "
+            "likely changed -- update usage_metrics.core.eel_hole "
+            "(ALLOWABLE_EVENT_TYPES, the models, or IGNORED_EVENT_TYPES), then "
+            "reprocess this partition."
+        )
+    else:
+        description = f"{partition_key}: eel-hole schema drift within tolerance."
+
+    return AssetCheckResult(
+        check_name=EEL_HOLE_SCHEMA_DRIFT_CHECK,
+        passed=not over_tolerance,
+        severity=AssetCheckSeverity.ERROR,
+        description=description,
+        metadata={
+            "parsed_events": parsed_events,
+            "event_bearing_payloads_dropped": len(dropped),
+            "unrecognized_event_types": ", ".join(unrecognized) or "none",
+        },
+    )
 
 
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     tags={"source": "eel_hole"},
+    check_specs=[
+        AssetCheckSpec(
+            name=EEL_HOLE_SCHEMA_DRIFT_CHECK,
+            asset="_core_eel_hole_logs",
+            blocking=True,
+        )
+    ],
 )
 def _core_eel_hole_logs(
     context: AssetExecutionContext,
     raw_eel_hole_logs: pd.DataFrame,
-) -> pd.DataFrame:
+) -> Iterator[Output[pd.DataFrame] | AssetCheckResult]:
     """Transform viewer.catalyst.coop logs."""
     context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_eel_hole_logs.empty:
         context.log.warning(f"No data found for {context.partition_key}")
-        return pd.DataFrame()
+        yield Output(pd.DataFrame())
+        yield _schema_drift_check(context.partition_key, [], [])
+        return
 
     # Flatten the many nested columns and coerce them into the expected class.
     # to_dict()'s declared return type keys columns as Hashable (the general case
     # for a DataFrame index/columns), but our columns are always strings.
-    records = cast("list[dict[str, Any]]", raw_eel_hole_logs.to_dict(orient="records"))
-    models = [EelHoleLogs(**row).model_dump() for row in records]
+    rows = cast("list[dict[str, Any]]", raw_eel_hole_logs.to_dict(orient="records"))
+    models = [EelHoleLogs(**row).model_dump() for row in rows]
+
     converted_df = pd.json_normalize(models, sep="_")
-    # Drop any columns that we exploded into many other columns and thus are now
-    # empty. json_payload will only show up here if at least one record had its
-    # payload dropped by EelHoleLogs.drop_bad_records, so we have to check first
-    empty_candidates = ["json_payload", "json_payload_params"]
+    # Drop the columns for nested structures that json_normalize exploded (or, for
+    # a partition with no parseable payloads at all, never expanded).
     converted_df = converted_df.drop(
-        columns=[c for c in empty_candidates if c in converted_df.columns]
+        columns=["json_payload", "json_payload_params"], errors="ignore"
     )
 
     # If every record in the partition had its payload dropped (e.g. a day of
@@ -352,7 +437,8 @@ def _core_eel_hole_logs(
     else:
         converted_df["session_id"] = pd.NA
 
-    return converted_df.reset_index(drop=True)
+    yield Output(converted_df.reset_index(drop=True))
+    yield _schema_drift_check(context.partition_key, rows, models)
 
 
 @asset(
