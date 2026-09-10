@@ -29,7 +29,7 @@ def out_s3_logs(
     columns. Also drop old EPACEMS files, JSON files, and traffic where no
     data is sent.
     """
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if core_s3_logs.empty:
         return core_s3_logs
