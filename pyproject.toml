@@ -3,15 +3,11 @@ name = "pudl_usage_metrics"
 version = "0.1.0"
 authors = [{name = "PUDL", email = "pudl@catalyst.coop"}]
 requires-python = ">=3.14,<3.15"
-
-# managed by pixi; see tool.pixi.dependencies below
-# cloud-sql-python-connector is configured here because we need extras [pg8000].
-dependencies = [
-    "cloud-sql-python-connector[pg8000]>=1.11.0",
-]
+# Dependencies are managed by pixi; see [tool.pixi.dependencies] and
+# [tool.pixi.pypi-dependencies] below.
 
 [project.scripts]
-pudl_usage_metrics = "pudl_usage_metrics.cli:main"
+usage-metrics = "usage_metrics.scripts.cli:cli"
 
 [build-system]
 build-backend = "hatchling.build"
@@ -41,16 +37,16 @@ psycopg2-binary = ">=2.9.9"
 joblib = ">=1.4.2"
 matplotlib = ">=3.9.0"
 pg8000 = ">=1.31.1"
+cloud-sql-python-connector = ">=1.11.0"
 google-cloud-storage = ">=2.17"
 kaggle = ">=1.6.3"
 s3fs = ">=2025.10.0"
-polars = ">=1.43.2"
+polars = ">=1.44"
 google-cloud-sdk = ">=580"
 
 [tool.pixi.pypi-dependencies]
-# Install the local package in editable mode. Assume dependencies are specified either
-# above in [tools.pixi.dependencies] (for conda packages) or in this section, if they
-# happen to only be available via PyPI.
+# The editable local package (for its console entry points), plus ipinfo, which
+# isn't on conda-forge. Everything else is a conda dep; see above.
 pudl-usage-metrics = { path = ".", editable = true }
 ipinfo = ">=5.0.1"
 
@@ -58,7 +54,7 @@ ipinfo = ">=5.0.1"
 pytest = ">=9"
 coverage = ">=7"
 doc8 = ">=2"
-prek = ">=0.4.13"
+prek = ">=0.5"
 pydocstyle = ">=6.3"
 pytest-asyncio = ">=1.4"
 pytest-console-scripts = ">=1.4.1"
@@ -101,7 +97,7 @@ cmd = "coverage erase"
 description = "Clear coverage data"
 
 [tool.pixi.feature.test.tasks.pytest-unit]
-cmd = "pytest --cov=src/usage_metrics --cov-append --cov-report=xml --doctest-modules src/usage_metrics tests"
+cmd = "pytest --cov=src/usage_metrics --cov-append --cov-report=xml tests"
 description = "Run all the software unit tests"
 
 [tool.pixi.feature.test.tasks.pytest-ci]
@@ -117,26 +113,30 @@ description = "Run all CI tests and report test coverage"
 max-line-length = 88
 ignore-path = ["docs/_build"]
 
-[tool.pytest.ini_options]
-testpaths = "./"
+[tool.pytest]
+testpaths = ["."]
 filterwarnings = [
     "ignore:distutils Version classes are deprecated:DeprecationWarning",
     "ignore:Creating a LegacyVersion:DeprecationWarning:pkg_resources[.*]",
     "ignore:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning:db_dtypes[.*]",
+    # grpcio in the locked env predates post-quantum crypto support. Also
+    # filtered at runtime in usage_metrics/__init__.py; kept here too so it's
+    # caught regardless of test import order. Drop both once grpcio >= 1.83 is
+    # installable (needs a Python 3.14 conda-forge build).
+    "ignore:.*grpcio < 1.83.0 does not support Post-Quantum Cryptography:FutureWarning",
 ]
-addopts = "--verbose"
+# Default output is compact progress ("..."). Logs are captured at INFO and
+# printed only in the report for a failing test. For a live log stream while
+# debugging: pytest -o log_cli=true --log-cli-level=DEBUG <target>
 log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
 log_date_format = "%Y-%m-%d %H:%M:%S"
-log_cli = "true"
-log_cli_level = "INFO"
-doctest_optionflags = [
-    "NORMALIZE_WHITESPACE",
-    "IGNORE_EXCEPTION_DETAIL",
-    "ELLIPSIS",
-]
+log_level = "INFO"
+
+[tool.coverage.report]
+# Raise this floor as test coverage grows!
+fail_under = 57
 
 [tool.ruff]
-# Assume Python 3.12
 target-version = "py314"
 line-length = 88
 indent-width = 4
@@ -203,9 +203,6 @@ unfixable = ["ISC"]
 [tool.ruff.lint.pep8-naming]
 # Allow Pydantic's `@validator` decorator to trigger class method treatment.
 classmethod-decorators = ["pydantic.validator", "pydantic.root_validator"]
-
-[tool.ruff.lint.isort]
-known-first-party = ["ferc_xbrl_extractor"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
