@@ -21,10 +21,10 @@ def core_zenodo_logs(
     raw_zenodo_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Transform daily Zenodo logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_zenodo_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return raw_zenodo_logs
 
     # Rename columns
@@ -73,13 +73,15 @@ def core_zenodo_logs(
             # Handle older data
             df["software_hash_id"] = df["software_hash_id_legacy"]
 
-    # Drop columns
+    # Drop columns. Which of these are present varies by Zenodo archive type and
+    # API version (e.g. `software_hash_id_legacy` only exists once `swh.swhid`
+    # appears in the response), so tolerate missing ones.
     df = df.drop(
-        columns=["files", "owners", "revision", "software_hash_id_legacy"]
+        columns=["files", "owners", "revision", "software_hash_id_legacy"],
+        errors="ignore",
     ).drop(
         columns=[col for col in df.columns if col.startswith(("metadata.", "links."))]
     )
-    # Column names vary by Zenodo archive type, so we drop any remaining metadata and link columns
 
     # Convert string to date using Pandas
     for col in ["metrics_date", "version_publication_date"]:

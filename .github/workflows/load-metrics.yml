@@ -3,8 +3,11 @@ name: load-metrics
 on:
   workflow_dispatch:
     inputs:
-      partition:
-        description: "Specific date partition to ETL (defaults to latest if blank)."
+      start_partition:
+        description: "First date (YYYY-MM-DD) to ETL. Blank means latest. If end_partition differs, every date in between is backfilled in parallel."
+        required: false
+      end_partition:
+        description: "Last date (YYYY-MM-DD, inclusive) to ETL. Defaults to start_partition (a single day) if blank."
         required: false
 
   schedule:
@@ -12,14 +15,44 @@ on:
 
 env:
   METRICS_PROD_ENV: "prod"
+  # Concurrent GCS blob download threads. The S3 log extract fetches >100k tiny
+  # objects per day and is latency-bound. Left at the code default (32); tune
+  # here if a run's download phase is the bottleneck.
+  GCS_DOWNLOAD_WORKERS: "32"
 
 jobs:
-  load-metrics:
+  # Turns start_partition/end_partition into a JSON list of dates, so a backfill
+  # can fan out across matrix jobs instead of running them one workflow_dispatch
+  # at a time. A normal single-partition or scheduled run gets a one-item list,
+  # so `load-metrics` below always fans out over a matrix of at least one entry.
+  compute-partitions:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
+    outputs:
+      partitions: ${{ steps.compute.outputs.partitions }}
+      # Whether the matrix has more than one partition in it. Threaded through
+      # to load-metrics so it knows to skip all_nonpartitioned_metrics_etl (see
+      # the comment on that step for why).
+      multiple: ${{ steps.compute.outputs.multiple }}
     steps:
+      - uses: actions/checkout@v7
+
+      - name: Install usage metrics environment using pixi
+        uses: prefix-dev/setup-pixi@v0.10.2
+        with:
+          locked: true
+          cache: true
+
+      - name: Compute the list of partitions to ETL
+        id: compute
+        shell: bash -l {0}
+        run: |
+          partitions=$(pixi run usage-metrics partitions \
+            --start "${{ github.event.inputs.start_partition }}" \
+            --end "${{ github.event.inputs.end_partition }}")
+          echo "partitions=$partitions" >> "$GITHUB_OUTPUT"
+          count=$(echo "$partitions" | jq 'length')
+          echo "multiple=$([ "$count" -gt 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
       - name: Notify Zulip of workflow launch
         uses: zulip/github-actions-zulip/send-message@v2
         with:
@@ -30,7 +63,37 @@ jobs:
           to: "pudl-deployments"
           topic: "pudl-usage-metrics"
           content: |
-            # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}))
+            # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})): `${{ steps.compute.outputs.partitions }}`
+
+  load-metrics:
+    needs: compute-partitions
+    # Larger third-party runner: the S3 log extract is I/O-heavy and the default
+    # 4-vCPU runner is the tightest resource. Downloads scale with concurrency,
+    # not cores, so 8 vCPUs / 32 GB is plenty.
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # Fast-fail: a healthy run finishes in well under an hour. This applies per
+    # matrix job (i.e. per partition), not to the matrix as a whole -- each
+    # partition gets its own fresh 60-minute budget, so a month-long backfill
+    # (~30 independent jobs) is no different from this job's perspective than a
+    # single day. If a run regresses to multi-hour, kill it early instead of
+    # burning the full 6-hour default.
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      # One partition failing shouldn't cancel the rest of a backfill.
+      fail-fast: false
+      # Each partitioned asset writes to its own dated file
+      # (out_*/<table>/<start>--<end>.parquet), so partitions never touch the
+      # same object and can safely run concurrently. Capped well under GitHub's
+      # default per-workflow concurrent-job limit so a big backfill doesn't
+      # monopolize the runner queue or hammer ipinfo/GCS all at once; raise if
+      # that's not actually a bottleneck.
+      max-parallel: 5
+      matrix:
+        partition: ${{ fromJson(needs.compute-partitions.outputs.partitions) }}
+    steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 2
@@ -58,10 +121,17 @@ jobs:
         id: load-data
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
-          PARTITION: ${{ github.event.inputs.partition }}
+          PARTITION: ${{ matrix.partition }}
+          # Non-partitioned outputs (e.g. GitHub repo stats) aren't scoped to a
+          # date; running them once per backfill partition would just have
+          # concurrent jobs racing to overwrite the same file.
+          SKIP_NONPARTITIONED: ${{ needs.compute-partitions.outputs.multiple }}
         shell: bash -l {0}
         run: |
-          pixi run python run_data_update.py ${PARTITION:+--partition "$PARTITION"}
+          args=()
+          [[ -n "$PARTITION" ]] && args+=(--partition "$PARTITION")
+          [[ "$SKIP_NONPARTITIONED" == "true" ]] && args+=(--skip-nonpartitioned)
+          pixi run usage-metrics etl "${args[@]}"
 
       - name: Notify Zulip
         if: always()
@@ -74,5 +144,5 @@ jobs:
           to: "pudl-deployments"
           topic: "pudl-usage-metrics"
           content: |
-            ${{ job.status == 'success' && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `load-metrics` completed with status `${{ job.status }}`.
+            ${{ job.status == 'success' && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `load-metrics` (partition `${{ matrix.partition }}`) completed with status `${{ job.status }}`.
             [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})

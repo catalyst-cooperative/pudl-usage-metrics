@@ -7,11 +7,9 @@ import os
 import warnings
 
 from dagster import (
-    AssetKey,
     AssetsDefinition,
     AssetSelection,
     Definitions,
-    SourceAsset,
     define_asset_job,
     load_asset_checks_from_modules,
     load_assets_from_modules,
@@ -80,30 +78,28 @@ default_asset_checks = list(
 )
 
 
-def _get_keys_from_assets(
-    asset_def: AssetsDefinition | SourceAsset,
-) -> list[AssetKey]:
-    """Get a list of asset keys.
+_persisted_table_names = {
+    asset_key.to_user_string()
+    for asset_def in default_assets
+    if isinstance(asset_def, AssetsDefinition)
+    for asset_key in asset_def.keys
+    if asset_def.get_io_manager_key_for_asset_key(asset_key) == "parquet_manager"
+}
+"""Names of assets actually written to Parquet by ``PartitionedParquetIOManager``.
 
-    Most assets have one key, which can be retrieved as a list from
-    ``asset.keys``.
+Some tables in ``usage_metrics.models`` (e.g. ``out_s3_logs``, an intermediate
+asset that uses the default in-memory IO manager) document a schema without
+ever being persisted. A pandera schema check built for one of those would
+always fail with a ``FileNotFoundError`` looking for a Parquet file that's
+never written, so schema checks are limited to tables that are actually
+persisted.
+"""
 
-    Multi-assets have multiple keys, which can also be retrieved as a list from
-    ``asset.keys``.
-
-    SourceAssets always only have one key, and don't have ``asset.keys``. So we
-    look for ``asset.key`` and wrap it in a list.
-    """
-    if isinstance(asset_def, AssetsDefinition):
-        return list(asset_def.keys)
-    if isinstance(asset_def, SourceAsset):
-        return [asset_def.key]
-    return []
-
-
-_asset_keys = itertools.chain.from_iterable(
-    _get_keys_from_assets(asset_def) for asset_def in default_assets
-)
+persisted_pandera_schema_checks = [
+    check
+    for check in pandera_schema_checks
+    if check.check_key.asset_key.to_user_string() in _persisted_table_names
+]
 
 gcs_base_path = "gs://" + os.environ.get("GCS_BUCKET", "metrics.catalyst.coop")
 local_base_path = str(UPath(os.environ.get("DATA_DIR", ".")) / "usage_metrics")
@@ -123,7 +119,7 @@ resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
 
 defs: Definitions = Definitions(
     assets=default_assets,
-    asset_checks=default_asset_checks + pandera_schema_checks,
+    asset_checks=default_asset_checks + persisted_pandera_schema_checks,
     resources=resources,
     jobs=[
         define_asset_job(

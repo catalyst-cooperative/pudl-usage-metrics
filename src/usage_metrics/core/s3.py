@@ -26,10 +26,10 @@ def core_s3_logs(
 
     Add column headers, geocode values,
     """
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_s3_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return raw_s3_logs
     # Name columns
     base_columns = [
@@ -82,17 +82,6 @@ def core_s3_logs(
         raw_s3_logs["remote_ip"].eq("-"), pd.NA
     )  # Mask null IPs
     geocoded_df = geocode_ips(raw_s3_logs)
-
-    # Drop unnecessary geocoding columns
-    geocoded_df = geocoded_df.drop(
-        columns=[
-            "remote_ip_country_flag",
-            "remote_ip_country_flag_url",
-            "remote_ip_country_currency",
-            "remote_ip_continent",
-            "remote_ip_isEU",
-        ]
-    )
 
     # Convert string to datetime using Pandas
     format_string = "[%d/%b/%Y:%H:%M:%S %z]"
