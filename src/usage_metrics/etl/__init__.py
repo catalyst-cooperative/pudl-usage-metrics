@@ -16,11 +16,13 @@ from dagster import (
     load_asset_checks_from_modules,
     load_assets_from_modules,
 )
+from upath import UPath
 
 import usage_metrics
+from usage_metrics.checks import pandera_schema_checks
 from usage_metrics.resources.parquet_io_manager import (
-    gcs_parquet_manager,
-    local_parquet_manager,
+    PartitionedParquetIOManager,
+    PyArrowTableReader,
 )
 
 logger = logging.getLogger(__name__)
@@ -103,12 +105,17 @@ _asset_keys = itertools.chain.from_iterable(
     _get_keys_from_assets(asset_def) for asset_def in default_assets
 )
 
+gcs_base_path = "gs://" + os.environ.get("GCS_BUCKET", "metrics.catalyst.coop")
+local_base_path = str(UPath(os.environ.get("DATA_DIR", ".")) / "usage_metrics")
+
 resources_by_env = {
     "prod": {
-        "parquet_manager": gcs_parquet_manager,
+        "parquet_manager": PartitionedParquetIOManager(base_path=gcs_base_path),
+        "pyarrow_reader": PyArrowTableReader(base_path=gcs_base_path),
     },
     "local": {
-        "parquet_manager": local_parquet_manager,
+        "parquet_manager": PartitionedParquetIOManager(base_path=local_base_path),
+        "pyarrow_reader": PyArrowTableReader(base_path=local_base_path),
     },
 }
 
@@ -116,7 +123,7 @@ resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
 
 defs: Definitions = Definitions(
     assets=default_assets,
-    # asset_checks=default_asset_checks,
+    asset_checks=default_asset_checks + pandera_schema_checks,
     resources=resources,
     jobs=[
         define_asset_job(
