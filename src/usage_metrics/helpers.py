@@ -38,7 +38,7 @@ def geocode_ip(ip_address: str) -> dict:
         ipinfo_token = os.environ["IPINFO_TOKEN"]
     except KeyError:
         raise AssertionError("Can't find IPINFO_TOKEN.")
-    handler = ipinfo.getHandler(
+    handler = ipinfo.getHandlerLite(
         ipinfo_token, request_options={"timeout": REQUEST_TIMEOUT}
     )
 
