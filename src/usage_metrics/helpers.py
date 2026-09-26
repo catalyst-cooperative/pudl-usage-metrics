@@ -20,13 +20,27 @@ ip_address_cache = Memory(cache_dir, verbose=0)
 
 REQUEST_TIMEOUT = 10
 
+# Fields pulled from ipinfo's Lite API response (plus its client-side
+# country-name/bogon lookups) and the usage_metrics column each maps to.
+# Lite doesn't return city/region/loc/postal/timezone/hostname or a combined
+# `org` string the way the old Core API did -- it gives `asn` and `as_name`
+# as separate fields already, so no more string-splitting is needed.
+_IPINFO_FIELD_MAP = {
+    "ip": "remote_ip",
+    "country_code": "remote_ip_country",
+    "country_name": "remote_ip_country_name",
+    "as_name": "remote_ip_org",
+    "asn": "remote_ip_asn",
+    "bogon": "remote_ip_bogon",
+}
+
 
 @ip_address_cache.cache
 def geocode_ip(ip_address: str) -> dict:
-    """Geocode an ip address using ipinfo API.
+    """Geocode an ip address using ipinfo's Lite API.
 
     This function uses joblib to cache api calls so we only have to
-    call the api once for a given ip address. We get 50k free api calls.
+    call the api once for a given ip address.
 
     Args:
         ip_address: An ip address.
@@ -63,26 +77,13 @@ def geocode_ips(df: pd.DataFrame) -> pd.DataFrame:
     unique_ips = pd.Series(df.remote_ip.dropna().unique())
     geocoded_ips = unique_ips.apply(lambda ip: geocode_ip(ip))
     geocoded_ips = pd.DataFrame.from_dict(geocoded_ips.to_dict(), orient="index")
-    geocoded_ip_column_map = {
-        col: "remote_ip_" + col for col in geocoded_ips.columns if col != "ip"
-    }
-    geocoded_ip_column_map["ip"] = "remote_ip"
-    geocoded_ips = geocoded_ips.rename(columns=geocoded_ip_column_map)
 
-    # Split the org and org ASN into different columns
-    geocoded_ips["remote_ip_asn"] = geocoded_ips.remote_ip_org.str.split(" ").str[0]
-    geocoded_ips["remote_ip_org"] = (
-        geocoded_ips.remote_ip_org.str.split(" ").str[1:].str.join(sep=" ")
-    )
-
-    # Create a verbose ip location field
-    geocoded_ips["remote_ip_full_location"] = (
-        geocoded_ips.remote_ip_city
-        + ", "
-        + geocoded_ips.remote_ip_region
-        + ", "
-        + geocoded_ips.remote_ip_country
-    )
+    # Keep only the fields the Lite API actually provides (reindex adds any
+    # that are missing -- e.g. a bogon IP's response has no asn/country -- as
+    # NaN, instead of raising a KeyError) and rename them to their usage_metrics
+    # column names.
+    geocoded_ips = geocoded_ips.reindex(columns=_IPINFO_FIELD_MAP.keys())
+    geocoded_ips = geocoded_ips.rename(columns=_IPINFO_FIELD_MAP)
 
     # Add the component fields back to the logs
     # TODO: Could create a separate db table for ip information.

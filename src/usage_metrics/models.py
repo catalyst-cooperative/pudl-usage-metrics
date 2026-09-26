@@ -90,24 +90,9 @@ core_s3_logs = _table_schema(
             "The apparent IP address of the requester. Intermediate proxies and firewalls might obscure the actual IP address of the machine that's making the request.",
         ),
         _field(
-            "remote_ip_city",
-            pa.string(),
-            "City where the IP is located, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_loc",
-            pa.string(),
-            "Geospatial coordinates of the IP, as determined by IPInfo.",
-        ),
-        _field(
             "remote_ip_org",
             pa.string(),
             "IP Organization name, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_hostname",
-            pa.string(),
-            "Name of the IP host, as determined by IPInfo.",
         ),
         _field(
             "remote_ip_country_name",
@@ -128,36 +113,6 @@ core_s3_logs = _table_schema(
             "remote_ip_country",
             pa.string(),
             "ISO 3166 country code of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_timezone",
-            pa.string(),
-            "Timezone of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_latitude",
-            pa.float64(),
-            "Latitude of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_longitude",
-            pa.float64(),
-            "Longitude of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_postal",
-            pa.string(),
-            "Postcode or zipcode of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_region",
-            pa.string(),
-            "Region/state of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_full_location",
-            pa.string(),
-            "Full address of the IP address, as determined by IPInfo.",
         ),
         # Other reported context
         _field(
@@ -269,24 +224,9 @@ out_s3_logs = _table_schema(
             "The apparent IP address of the requester. Intermediate proxies and firewalls might obscure the actual IP address of the machine that's making the request.",
         ),
         _field(
-            "remote_ip_city",
-            pa.string(),
-            "City where the IP is located, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_loc",
-            pa.string(),
-            "Geospatial coordinates of the IP, as determined by IPInfo.",
-        ),
-        _field(
             "remote_ip_org",
             pa.string(),
             "IP Organization name, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_hostname",
-            pa.string(),
-            "Name of the IP host, as determined by IPInfo.",
         ),
         _field(
             "remote_ip_country_name",
@@ -307,36 +247,6 @@ out_s3_logs = _table_schema(
             "remote_ip_country",
             pa.string(),
             "ISO 3166 country code of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_timezone",
-            pa.string(),
-            "Timezone of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_latitude",
-            pa.float64(),
-            "Latitude of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_longitude",
-            pa.float64(),
-            "Longitude of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_postal",
-            pa.string(),
-            "Postcode or zipcode of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_region",
-            pa.string(),
-            "Region/state of the IP address, as determined by IPInfo.",
-        ),
-        _field(
-            "remote_ip_full_location",
-            pa.string(),
-            "Full address of the IP address, as determined by IPInfo.",
         ),
         # Other reported context
         _field(
