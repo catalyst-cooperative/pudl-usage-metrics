@@ -4,7 +4,11 @@ import polars as pl
 import pytest
 from dagster import materialize
 
-from usage_metrics.raw.s3 import S3Extractor, raw_s3_logs
+from usage_metrics.raw.s3 import (
+    S3Extractor,
+    _drop_lines_with_embedded_quotes,
+    raw_s3_logs,
+)
 
 BUCKET = "pudl-s3-logs.catalyst.coop"
 
@@ -82,6 +86,86 @@ def test_load_file_ragged_other_partition_raises_with_note(tmp_path, s3_fixture_
     with pytest.raises(pl.exceptions.ComputeError) as excinfo:
         ext.load_file(combined)
     assert any("Extraction failed" in note for note in excinfo.value.__notes__)
+
+
+# --- _drop_lines_with_embedded_quotes ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("line", "expected"),
+    [
+        pytest.param(
+            '"GET /k HTTP/1.1" 200 "-" "Mozilla/5.0 (X11; Linux)" - hid\n',
+            '"GET /k HTTP/1.1" 200 "-" "Mozilla/5.0 (X11; Linux)" - hid\n',
+            id="well_formed_fields_are_kept",
+        ),
+        pytest.param(
+            '"GET /k HTTP/1.1" 200 "-" "pip/24.3.1 {"ci":null,"cpu":"x86_64"}" - hid\n',
+            "",
+            id="pip_style_embedded_json_in_user_agent_is_dropped",
+        ),
+        pytest.param(
+            '"GET /k HTTP/1.1" 200 "https://x.com/?q="weird"" "Mozilla/5.0" - hid\n',
+            "",
+            id="embedded_quote_in_referer_not_just_user_agent_is_dropped",
+        ),
+        pytest.param(
+            '"GET /k HTTP/1.1" 200 "-" "" - hid\n',
+            '"GET /k HTTP/1.1" 200 "-" "" - hid\n',
+            id="empty_quoted_field_is_kept",
+        ),
+        pytest.param(
+            "- - - - -\n",
+            "- - - - -\n",
+            id="no_quoted_fields_at_all_is_kept",
+        ),
+    ],
+)
+def test_drop_lines_with_embedded_quotes_single_line(line, expected):
+    """A line with a malformed field is dropped whole; a clean line is kept."""
+    assert _drop_lines_with_embedded_quotes(line) == expected
+
+
+def test_drop_lines_with_embedded_quotes_keeps_good_lines_around_a_bad_one():
+    """Only the malformed line is dropped; good lines before and after survive."""
+    good_a = '"GET /a HTTP/1.1" 200 "-" "Mozilla/5.0" - hid\n'
+    bad = '"GET /b HTTP/1.1" 200 "-" "pip/1.0 {"a":1}" - hid\n'
+    good_b = '"GET /c HTTP/1.1" 200 "-" "curl/8.0" - hid\n'
+    assert _drop_lines_with_embedded_quotes(good_a + bad + good_b) == good_a + good_b
+
+
+def test_load_file_drops_line_with_embedded_json_user_agent(tmp_path):
+    """End to end: a file with one malformed line still parses, minus that line.
+
+    Regression test: pip's User-Agent embeds raw JSON, e.g.
+    ``pip/24.3.1 {"ci":null,...,"openssl_version":"OpenSSL 3.0.2"}``, with
+    literal unescaped double quotes -- and here, a space inside a JSON string
+    value -- inside a field AWS already quotes. That combination breaks CSV
+    tokenization ("not properly escaped") and used to fail the whole
+    partition (hit during the 2026-09 backfill, e.g. 2026-09-19). Rather than
+    guess at repairing inherently ambiguous content, the malformed line is
+    dropped and the rest of the day's data survives -- the same approach
+    widely-used S3-log parsers take (their quoted-field pattern just fails to
+    match these lines).
+    """
+    bad_line = (
+        "owner bkt [19/Sep/2026:00:00:00 +0000] 198.51.100.1 - RID REST.GET.OBJECT k "
+        '"GET /k HTTP/1.1" 200 - 100 200 5 4 "-" '
+        '"pip/24.3.1 {"ci":null,"openssl_version":"OpenSSL 3.0.2"}" '
+        "- hid SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
+    )
+    good_line = (
+        "owner bkt [19/Sep/2026:00:00:01 +0000] 198.51.100.2 - RID2 REST.GET.OBJECT k2 "
+        '"GET /k2 HTTP/1.1" 200 - 100 200 5 4 "-" "Mozilla/5.0 (X11; Linux)" '
+        "- hid2 SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
+    )
+    path = tmp_path / "f"
+    path.write_text(bad_line + good_line)
+    df = S3Extractor().load_file(path)
+    assert df.width == 27
+    assert df.height == 1
+    assert df.row(0)[4] == "198.51.100.2"
+    assert df.row(0)[17] == "Mozilla/5.0 (X11; Linux)"
 
 
 def test_load_file_empty_raises_no_data_error(tmp_path):
