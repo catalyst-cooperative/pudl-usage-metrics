@@ -96,6 +96,16 @@ pixi run prek install
 
 The scripts that run are configured in the .pre-commit-config.yaml file.
 
+## Type Checking
+
+This repo is fully typed and enforces it with [pyrefly](https://pyrefly.org/):
+every commit and CI run must type-check cleanly, with no baseline of
+pre-existing errors to work around. Run it locally with:
+
+```
+pixi run -e test pyrefly-check
+```
+
 ## Deploy Dagster Locally
 
 Now the environment is all set up and we can start up dagster!

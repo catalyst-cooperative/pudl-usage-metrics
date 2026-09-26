@@ -39,6 +39,9 @@ def etl(partition: str | None):
     partitioned = defs.resolve_job_def(name="all_partitioned_metrics_etl")
     nonpartitioned = defs.resolve_job_def(name="all_nonpartitioned_metrics_etl")
 
+    assert partitioned.partitions_def is not None, (
+        f"{partitioned.name} is expected to have a partitions_def."
+    )
     partition_keys = partitioned.partitions_def.get_partition_keys()
     if partition is None:
         partition = max(partition_keys)

@@ -4,8 +4,6 @@ This includes stargazer and fork data, which when queried from Github returns da
 the entire history of the repository.
 """
 
-from typing import Literal
-
 import pandas as pd
 from dagster import (
     AssetExecutionContext,
@@ -15,12 +13,13 @@ from dagster import (
 
 from usage_metrics.raw.github_partitioned import (
     CUMULATIVE_METRIC_TYPES,
+    CumulativeMetricType,
     GithubExtractor,
 )
 
 
 def cumulative_metrics_extraction_factory(
-    metric: Literal[*CUMULATIVE_METRIC_TYPES],
+    metric: CumulativeMetricType,
 ) -> AssetsDefinition:
     """Create Dagster asset for each cumulatively-reported metric."""
 

@@ -6,9 +6,10 @@ querying the Github API.
 
 import json
 import re
-from datetime import date
+from collections.abc import Iterable
+from datetime import date, datetime
 from pathlib import Path
-from typing import ClassVar, Literal
+from typing import ClassVar, Literal, get_args
 
 import pandas as pd
 from dagster import (
@@ -17,21 +18,28 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
 from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 
-DAILY_METRIC_TYPES = ["clones", "popular_paths", "popular_referrers", "views"]
-CUMULATIVE_METRIC_TYPES = ["stargazers", "forks"]
-GITHUB_METRIC_TYPES = DAILY_METRIC_TYPES + CUMULATIVE_METRIC_TYPES
+DailyMetricType = Literal["clones", "popular_paths", "popular_referrers", "views"]
+CumulativeMetricType = Literal["stargazers", "forks"]
+GithubMetricType = DailyMetricType | CumulativeMetricType
+
+DAILY_METRIC_TYPES: list[DailyMetricType] = list(get_args(DailyMetricType))
+CUMULATIVE_METRIC_TYPES: list[CumulativeMetricType] = list(
+    get_args(CumulativeMetricType)
+)
+GITHUB_METRIC_TYPES: list[GithubMetricType] = (
+    DAILY_METRIC_TYPES + CUMULATIVE_METRIC_TYPES
+)
 
 
 class GithubExtractor(GCSExtractor):
     """Extractor for Github logs."""
 
-    def __init__(self, metric: Literal[*GITHUB_METRIC_TYPES], *args, **kwargs):
+    def __init__(self, metric: GithubMetricType, *args, **kwargs):
         """Initialize the extrator."""
         self.dataset_name = "pudl_github_logs"
         self.bucket_name = PUDL_METRICS_ARCHIVES_BUCKET
@@ -43,7 +51,7 @@ class GithubExtractor(GCSExtractor):
         return f"github/{self.metric}/"
 
     def filter_blobs(
-        self, context: AssetExecutionContext, blobs: HTTPIterator
+        self, context: AssetExecutionContext, blobs: Iterable[storage.Blob]
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
@@ -62,14 +70,27 @@ class GithubExtractor(GCSExtractor):
             day_start_date_str = context.partition_key
             partition_date = date.fromisoformat(day_start_date_str).strftime("%Y-%m-%d")
             file_name = f"github/{self.metric}/{partition_date}.json"
-            blobs = [blob for blob in blobs if blob.name == file_name]
-        else:
-            blobs = [
-                blob for blob in blobs if blob.name.startswith(f"github/{self.metric}/")
+            filtered_blobs: list[storage.Blob] = [
+                blob for blob in blobs if blob.name == file_name
             ]
-            blobs = [max(blobs, key=lambda x: x.time_created)]
+        else:
+            candidate_blobs: list[storage.Blob] = [
+                blob
+                for blob in blobs
+                if blob.name is not None
+                and blob.name.startswith(f"github/{self.metric}/")
+            ]
 
-        return blobs
+            def _time_created(blob: storage.Blob) -> datetime:
+                assert blob.time_created is not None, (
+                    f"Blob {blob.name} has no time_created; it may not have been "
+                    "reloaded from the server."
+                )
+                return blob.time_created
+
+            filtered_blobs = [max(candidate_blobs, key=_time_created)]
+
+        return filtered_blobs
 
     def extract_clones(self, metric_json):
         """Extract clone data from clone JSON file."""
@@ -121,14 +142,15 @@ class GithubExtractor(GCSExtractor):
         # Add date of file as column if the extract combines multiple dataframes
         # and contains no timestamp column
         if self.metric in ["popular_paths", "popular_referrers"]:
-            gh_df["metrics_date"] = re.search(
-                r"\d{4}-\d{2}-\d{2}", str(file_path)
-            ).group()
+            date_match = re.search(r"\d{4}-\d{2}-\d{2}", str(file_path))
+            if date_match is None:
+                raise ValueError(f"Could not find a date in file path {file_path}")
+            gh_df["metrics_date"] = date_match.group()
         return gh_df
 
 
 def daily_metrics_extraction_factory(
-    metric: Literal[*DAILY_METRIC_TYPES],
+    metric: DailyMetricType,
 ) -> AssetsDefinition:
     """Create Dagster asset for each daily-reported metric."""
 

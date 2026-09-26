@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import pandas as pd
 import pytest
 
 from usage_metrics import paths
@@ -55,8 +56,11 @@ def test_extractor_download_dir(tmp_path, monkeypatch):
         dataset_name = "some_logs"
         bucket_name = "some-bucket"
 
-        def filter_blobs(self, context, blobs): ...
-        def load_file(self, file_path): ...
+        def filter_blobs(self, context, blobs):
+            return list(blobs)
+
+        def load_file(self, file_path):
+            return pd.DataFrame()
 
     download_dir = _Extractor().get_download_dir()
     assert download_dir == tmp_path.resolve() / "raw" / "some_logs"

@@ -1,5 +1,6 @@
 """Extract data from PUDL Viewer (aka "eel hole") logs."""
 
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
@@ -9,7 +10,6 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_EEL_HOLE_LOGS_BUCKET
@@ -33,7 +33,7 @@ class EelHoleExtractor(GCSExtractor):
         return f"run.googleapis.com/stdout/{partition_date}"
 
     def filter_blobs(
-        self, context: AssetExecutionContext, blobs: HTTPIterator
+        self, context: AssetExecutionContext, blobs: Iterable[storage.Blob]
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
@@ -47,11 +47,15 @@ class EelHoleExtractor(GCSExtractor):
         day_start_date_str = context.partition_key
         partition_date = date.fromisoformat(day_start_date_str).strftime("%Y/%m/%d")
         file_name_prefix = f"run.googleapis.com/stdout/{partition_date}"
-        blobs = [blob for blob in blobs if blob.name.startswith(file_name_prefix)]
+        filtered_blobs = [
+            blob
+            for blob in blobs
+            if blob.name is not None and blob.name.startswith(file_name_prefix)
+        ]
         context.log.info(
-            f"Extracting {len(blobs)} eel-hole logs for {context.partition_key}."
+            f"Extracting {len(filtered_blobs)} eel-hole logs for {context.partition_key}."
         )
-        return blobs
+        return filtered_blobs
 
     def load_file(self, file_path: Path) -> pd.DataFrame:
         """Read in file as dataframe."""
