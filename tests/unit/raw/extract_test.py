@@ -1,5 +1,6 @@
 """Tests for the GCSExtractor base class."""
 
+import time
 from pathlib import Path
 from unittest import mock
 
@@ -279,3 +280,35 @@ def test_retry_policy_shape():
     """Guard the extract retry policy against accidental changes."""
     assert extract.GCS_EXTRACT_RETRY_POLICY.max_retries == 2
     assert extract.GCS_EXTRACT_RETRY_POLICY.delay == 30
+
+
+# --- log_download_progress -------------------------------------------------
+
+
+def test_log_download_progress_noop_without_context(tmp_path):
+    """With no context to log to, the block still runs and nothing is raised."""
+    with extract.log_download_progress(None, tmp_path, total=1_000_000):
+        pass
+
+
+def test_log_download_progress_noop_below_threshold(tmp_path):
+    """Small partitions download fast enough that the heartbeat is skipped."""
+    context = mock.Mock()
+    with extract.log_download_progress(context, tmp_path, total=1):
+        pass
+    context.log.info.assert_not_called()
+
+
+def test_log_download_progress_emits_progress_lines(tmp_path, monkeypatch):
+    """A long-running download gets periodic progress lines from the watcher."""
+    monkeypatch.setenv("GCS_DOWNLOAD_PROGRESS_INTERVAL", "0.02")
+    context = mock.Mock()
+    total = extract.DOWNLOAD_PROGRESS_MIN_BLOBS
+
+    with extract.log_download_progress(context, tmp_path, total=total):
+        (tmp_path / "blob-1").write_bytes(b"x")
+        time.sleep(0.15)
+
+    assert context.log.info.called
+    message = context.log.info.call_args[0][0]
+    assert f"/{total:,} blobs" in message
