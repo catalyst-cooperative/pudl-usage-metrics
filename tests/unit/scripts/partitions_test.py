@@ -9,29 +9,29 @@ from usage_metrics.scripts.cli import cli
 from usage_metrics.scripts.partitions import compute_partitions
 
 
-def test_neither_given_means_latest():
-    assert compute_partitions(None, None) == [""]
-
-
-def test_only_start_given_is_a_single_partition():
-    assert compute_partitions("2026-09-25", None) == ["2026-09-25"]
-
-
-def test_only_end_given_is_a_single_partition():
-    assert compute_partitions(None, "2026-09-25") == ["2026-09-25"]
-
-
-def test_start_and_end_given_expands_the_range():
-    assert compute_partitions("2026-09-03", "2026-09-06") == [
-        "2026-09-03",
-        "2026-09-04",
-        "2026-09-05",
-        "2026-09-06",
-    ]
-
-
-def test_start_equals_end_is_a_single_day():
-    assert compute_partitions("2026-09-25", "2026-09-25") == ["2026-09-25"]
+@pytest.mark.parametrize(
+    ("start", "end", "expected"),
+    [
+        (None, None, [""]),
+        ("2026-09-25", None, ["2026-09-25"]),
+        (None, "2026-09-25", ["2026-09-25"]),
+        (
+            "2026-09-03",
+            "2026-09-06",
+            ["2026-09-03", "2026-09-04", "2026-09-05", "2026-09-06"],
+        ),
+        ("2026-09-25", "2026-09-25", ["2026-09-25"]),
+    ],
+    ids=[
+        "neither_given_means_latest",
+        "only_start_given_is_a_single_partition",
+        "only_end_given_is_a_single_partition",
+        "start_and_end_given_expands_the_range",
+        "start_equals_end_is_a_single_day",
+    ],
+)
+def test_compute_partitions(start, end, expected):
+    assert compute_partitions(start, end) == expected
 
 
 def test_end_before_start_raises():
