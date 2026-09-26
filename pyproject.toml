@@ -5,10 +5,7 @@ authors = [{name = "PUDL", email = "pudl@catalyst.coop"}]
 requires-python = ">=3.14,<3.15"
 
 # managed by pixi; see tool.pixi.dependencies below
-# cloud-sql-python-connector is configured here because we need extras [pg8000].
-dependencies = [
-    "cloud-sql-python-connector[pg8000]>=1.11.0",
-]
+dependencies = []
 
 [project.scripts]
 pudl_usage_metrics = "pudl_usage_metrics.cli:main"
@@ -37,10 +34,8 @@ dagster-webserver = ">=1.13"
 pandas-gbq = ">=0.23.1"
 pydata-google-auth = ">=1.8.2"
 jupyterlab = ">=4.2.3"
-psycopg2-binary = ">=2.9.9"
 joblib = ">=1.4.2"
 matplotlib = ">=3.9.0"
-pg8000 = ">=1.31.1"
 google-cloud-storage = ">=2.17"
 kaggle = ">=1.6.3"
 s3fs = ">=2025.10.0"
@@ -140,7 +135,7 @@ doctest_optionflags = [
 target-version = "py314"
 line-length = 88
 indent-width = 4
-exclude = ["migrations/versions", "*.ipynb"]
+exclude = ["*.ipynb"]
 
 [tool.ruff.format]
 quote-style = "double"
