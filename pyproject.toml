@@ -28,7 +28,6 @@ test = ["test"]
 
 [tool.pixi.dependencies]
 pandas = ">=3"
-sqlalchemy = ">=2"
 dagster = ">=1.13"
 dagster-webserver = ">=1.13"
 pandas-gbq = ">=0.23.1"
