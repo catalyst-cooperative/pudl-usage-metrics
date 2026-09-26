@@ -886,6 +886,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-24.0.0-py314hdafbbf9_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyarrow-core-24.0.0-py314h969be7f_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pydantic-core-2.46.5-py314h7e8cd81_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/pyrefly-1.3.2-hf19af3b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.14.8-hcd007b5_101_cp314.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/pyyaml-6.0.3-py314h67df5f8_1.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/re2-2025.11.05-h5301d42_1.conda
@@ -1302,6 +1303,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-24.0.0-py314hee6578b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyarrow-core-24.0.0-py314hfb10f56_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pydantic-core-2.46.5-py314h3cfb53e_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-64/pyrefly-1.3.2-he704061_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/python-3.14.8-hafa0b4b_101_cp314.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/pyyaml-6.0.3-py314h10d0514_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-64/re2-2025.11.05-h77e0585_1.conda
@@ -1571,6 +1573,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-24.0.0-py314he55896b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyarrow-core-24.0.0-py314h109bba2_0_cpu.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pydantic-core-2.46.5-py314hc05cd11_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyrefly-1.3.2-hc2d82ec_0.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/python-3.14.8-h0ae1c2c_101_cp314.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyyaml-6.0.3-py314h6e9b3f0_1.conda
       - conda: https://conda.anaconda.org/conda-forge/osx-arm64/re2-2025.11.05-ha480c28_1.conda
@@ -3408,6 +3411,20 @@ packages:
   run_exports: {}
   size: 1876209
   timestamp: 1789996107060
+- conda: https://conda.anaconda.org/conda-forge/linux-64/pyrefly-1.3.2-hf19af3b_0.conda
+  sha256: ff462929bd5e9a1f0e82b7893a059d0137a045418f6c94d7cc5f7274737a3805
+  md5: 5290628eb23718dc7d3f60b8d723d2f5
+  depends:
+  - __glibc >=2.17,<3.0.a0
+  - libgcc >=15
+  constrains:
+  - __glibc >=2.17
+  license: MIT
+  license_family: MIT
+  purls: []
+  run_exports: {}
+  size: 12693997
+  timestamp: 1790668696970
 - conda: https://conda.anaconda.org/conda-forge/linux-64/python-3.14.8-hcd007b5_101_cp314.conda
   build_number: 101
   sha256: e22f6a79d290935b2c854d325e260f70f364c7cc7ec0bc8308ded4f2f1eef7e6
@@ -7605,6 +7622,19 @@ packages:
   run_exports: {}
   size: 1862424
   timestamp: 1789996183831
+- conda: https://conda.anaconda.org/conda-forge/osx-64/pyrefly-1.3.2-he704061_0.conda
+  sha256: f129036028779b6c2e43c4cc198084175069fc8247d322e4ee8dfec96a1cc4af
+  md5: 18503e6be1946f61caddca8126c910ac
+  depends:
+  - __osx >=11.0
+  constrains:
+  - __osx >=11.0
+  license: MIT
+  license_family: MIT
+  purls: []
+  run_exports: {}
+  size: 12678868
+  timestamp: 1790668806909
 - conda: https://conda.anaconda.org/conda-forge/osx-64/python-3.14.8-hafa0b4b_101_cp314.conda
   build_number: 101
   sha256: 91874ead4971c6d3b5a2b50b25c34ce8a312f2aa6a862469547c6e4d8b5af2f6
@@ -9562,6 +9592,19 @@ packages:
   run_exports: {}
   size: 1691226
   timestamp: 1789996111805
+- conda: https://conda.anaconda.org/conda-forge/osx-arm64/pyrefly-1.3.2-hc2d82ec_0.conda
+  sha256: 8b556bbcce76003b55fc521f4ada5d286cb144edf275d9c1152121c555196815
+  md5: 6e76c4e4f2744f4277b5489502074423
+  depends:
+  - __osx >=11.0
+  constrains:
+  - __osx >=11.0
+  license: MIT
+  license_family: MIT
+  purls: []
+  run_exports: {}
+  size: 11863689
+  timestamp: 1790668707158
 - conda: https://conda.anaconda.org/conda-forge/osx-arm64/python-3.14.8-h0ae1c2c_101_cp314.conda
   build_number: 101
   sha256: 4aebb9d626b26a2f7257d3c671bac70a96fffd4706db4d61c35f7bda6bee74f3
