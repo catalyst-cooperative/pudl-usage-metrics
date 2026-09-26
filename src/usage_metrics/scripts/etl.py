@@ -36,8 +36,8 @@ def etl(partition: str | None):
     coloredlogs.install(fmt=log_format, level="INFO", logger=logger)
     logger.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} storage.")
 
-    partitioned = defs.get_job_def(name="all_partitioned_metrics_etl")
-    nonpartitioned = defs.get_job_def(name="all_nonpartitioned_metrics_etl")
+    partitioned = defs.resolve_job_def(name="all_partitioned_metrics_etl")
+    nonpartitioned = defs.resolve_job_def(name="all_nonpartitioned_metrics_etl")
 
     partition_keys = partitioned.partitions_def.get_partition_keys()
     if partition is None:
