@@ -15,6 +15,26 @@ REQUESTERS_IGNORE = [
 ]
 
 
+def _with_summary_id(df: pl.DataFrame, group_by: list[str]) -> pl.DataFrame:
+    """Add a stable, unique `id` built from the day and each group-by column.
+
+    Without this, these daily-summary tables never had an `id` column at all;
+    the Parquet IO manager backfilled one as all-null to match the declared
+    schema, which fails the schema check's uniqueness constraint on every row.
+    Group-by columns can themselves be null (e.g. `remote_ip_org` for an IP
+    that didn't resolve), so cast to string and fill nulls before
+    concatenating -- `concat_str` otherwise propagates any null component to a
+    null `id`, defeating the purpose.
+    """
+    return df.with_columns(
+        pl.concat_str(
+            [pl.col("time").cast(pl.String)]
+            + [pl.col(c).cast(pl.String).fill_null("") for c in group_by],
+            separator="_",
+        ).alias("id")
+    )
+
+
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     tags={"source": "s3"},
@@ -117,18 +137,18 @@ def out_s3_daily_summary_by_table(
     out_s3_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Get a daily summary by table from out_s3_logs."""
+    group_by = ["usage_type", "table", "version"]
     summary_df = (
         pl.DataFrame(out_s3_logs)
         .filter(pl.col("table").str.ends_with(".parquet"))
         .sort(["time", "table"])
-        .group_by_dynamic(
-            "time", every="1d", group_by=["usage_type", "table", "version"]
-        )
+        .group_by_dynamic("time", every="1d", group_by=group_by)
         .agg(
             normalized_file_downloads=pl.col("normalized_file_downloads").sum(),
             request_count=pl.col("request_uri").count().alias("request_count"),
             megabytes_sent=(pl.col("megabytes_sent").sum().round(3)),
         )
+        .pipe(_with_summary_id, group_by)
     )
     return summary_df.to_pandas()
 
@@ -143,21 +163,19 @@ def out_s3_daily_summary_by_user(
     out_s3_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Get a daily summary by IP from out_s3_logs."""
+    group_by = ["remote_ip", "table", "remote_ip_org", "remote_ip_country_name"]
     summary_df = (
         pl.DataFrame(out_s3_logs)
         .filter(pl.col("table").str.ends_with(".parquet"))
         .sort(["time", "table"])
-        .group_by_dynamic(
-            "time",
-            every="1d",
-            group_by=["remote_ip", "table", "remote_ip_org", "remote_ip_country_name"],
-        )
+        .group_by_dynamic("time", every="1d", group_by=group_by)
         .agg(
             normalized_file_downloads=pl.col("normalized_file_downloads").sum(),
             request_count=pl.col("request_uri").count().alias("request_count"),
             megabytes_sent=(pl.col("megabytes_sent").sum().round(3)),
             usage_type=(pl.col("usage_type").mode().first()),
         )
+        .pipe(_with_summary_id, group_by)
     )
     return summary_df.to_pandas()
 
@@ -172,6 +190,7 @@ def out_s3_daily_summary_by_db(
     out_s3_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Get a daily summary by database from out_s3_logs."""
+    group_by = ["usage_type", "database", "version"]
     summary_df = (
         pl.DataFrame(out_s3_logs)
         .with_columns(
@@ -182,13 +201,12 @@ def out_s3_daily_summary_by_db(
         )
         .filter(~pl.col("table").str.ends_with("/"))  # Drop folders
         .sort(["time", "database"])
-        .group_by_dynamic(
-            "time", every="1d", group_by=["usage_type", "database", "version"]
-        )
+        .group_by_dynamic("time", every="1d", group_by=group_by)
         .agg(
             normalized_file_downloads=pl.col("normalized_file_downloads").sum(),
             request_count=pl.col("request_uri").count().alias("request_count"),
             megabytes_sent=(pl.col("megabytes_sent").sum().round(3)),
         )
+        .pipe(_with_summary_id, group_by)
     )
     return summary_df.to_pandas()
