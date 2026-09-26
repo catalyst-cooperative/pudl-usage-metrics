@@ -1,6 +1,7 @@
 """Tests for usage_metrics.core.eel_hole."""
 
 import pandas as pd
+import pytest
 from dagster import build_asset_context
 
 from usage_metrics.core.eel_hole import _core_eel_hole_logs
@@ -48,3 +49,50 @@ def test_tolerates_a_partition_with_no_search_filters():
     context = build_asset_context(partition_key="2026-09-01")
     df = _core_eel_hole_logs(context, raw)
     assert list(df["event"]) == ["hit"]
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {},
+        {"name": "x"},
+        {"name": "x", "page": 1},
+    ],
+    ids=["empty", "missing_most_fields", "missing_filters_and_perPage"],
+)
+def test_drops_malformed_params_instead_of_raising(params):
+    """A `params` dict missing required DuckDBParams fields is dropped, not raised.
+
+    Regression test: `jsonPayload.params = {}` (and other incomplete shapes)
+    used to sail through to `DuckDBParams` validation, which requires every
+    field, raising a `ValidationError` and failing the whole partition. The
+    row should just fall out (no event survives to the output) instead.
+    """
+    raw = pd.DataFrame([_row("duckdb_preview", params=params)])
+    context = build_asset_context(partition_key="2026-09-01")
+    df = _core_eel_hole_logs(context, raw)
+    assert df.empty
+
+
+def test_keeps_events_with_complete_params():
+    """A fully-populated `params` dict still parses and survives."""
+    params = {"filters": "[]", "name": "x", "page": 1, "perPage": 10}
+    raw = pd.DataFrame([_row("duckdb_preview", params=params)])
+    context = build_asset_context(partition_key="2026-09-01")
+    df = _core_eel_hole_logs(context, raw)
+    assert list(df["event"]) == ["duckdb_preview"]
+
+
+def test_tolerates_a_partition_with_no_parseable_payloads():
+    """A partition of nothing but app noise (no jsonPayload) shouldn't KeyError.
+
+    Regression test: when no record in the partition has a jsonPayload at all,
+    `pd.json_normalize` never creates any `json_payload_*` column, so selecting
+    e.g. `.event` downstream raised `KeyError` instead of producing an empty
+    result.
+    """
+    noise_row = _row("hit") | {"jsonPayload": None}
+    raw = pd.DataFrame([noise_row])
+    context = build_asset_context(partition_key="2026-09-01")
+    df = _core_eel_hole_logs(context, raw)
+    assert df.empty
