@@ -75,7 +75,7 @@ default_asset_checks = list(
 
 
 def _get_keys_from_assets(
-    asset_def: AssetsDefinition | SourceAsset,
+    asset_def: object,
 ) -> list[AssetKey]:
     """Get a list of asset keys.
 
@@ -87,6 +87,8 @@ def _get_keys_from_assets(
 
     SourceAssets always only have one key, and don't have ``asset.keys``. So we
     look for ``asset.key`` and wrap it in a list.
+
+    Anything else (e.g. an ``AssetSpec``) has no keys we can list here.
     """
     if isinstance(asset_def, AssetsDefinition):
         return list(asset_def.keys)

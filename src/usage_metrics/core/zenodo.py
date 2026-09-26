@@ -84,7 +84,10 @@ def core_zenodo_logs(
     # Convert string to date using Pandas
     for col in ["metrics_date", "version_publication_date"]:
         df[col] = pd.to_datetime(df[col])
-        df[col] = df[col].dt.date
+        # pandas-stubs' overload resolution for `.dt` loses its DatetimeProperties
+        # return type when the column name comes from a loop variable; `.dt.date`
+        # is valid pandas usage regardless.
+        df[col] = df[col].dt.date  # type: ignore[missing-attribute]
 
     # Convert string to datetime using Pandas
     for col in [

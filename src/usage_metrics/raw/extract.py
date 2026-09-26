@@ -1,13 +1,13 @@
 """Generic extraction functionality for data from GCS."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from pathlib import Path
 
 import pandas as pd
 from dagster import (
     AssetExecutionContext,
 )
-from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 from tqdm import tqdm
 
@@ -16,6 +16,13 @@ from usage_metrics.paths import get_raw_dir
 
 class GCSExtractor(ABC):
     """Generic extractor base class for Google Cloud Storage logs."""
+
+    dataset_name: str
+    """Name of the dataset, set by subclasses before calling ``super().__init__()``."""
+
+    bucket_name: str
+    """Name of the GCS bucket to extract from, set by subclasses before calling
+    ``super().__init__()``."""
 
     def __init__(self, *args, **kwargs):
         """Create new extractor object and load metadata.
@@ -30,7 +37,7 @@ class GCSExtractor(ABC):
 
     @abstractmethod
     def filter_blobs(
-        self, context: AssetExecutionContext, blobs: HTTPIterator
+        self, context: AssetExecutionContext, blobs: Iterable[storage.Blob]
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
@@ -52,6 +59,7 @@ class GCSExtractor(ABC):
         """
         file_paths = []
         for blob in tqdm(blobs):
+            assert blob.name is not None, f"Blob {blob} has no name."
             file_name = blob.name.replace("/", "-")  # Replace folders with prefixes
             path_to_file = Path(download_dir, file_name)
             if not Path.exists(path_to_file):

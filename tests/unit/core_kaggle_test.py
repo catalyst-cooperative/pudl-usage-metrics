@@ -31,7 +31,9 @@ RAW_KAGGLE_RECORD = {
 
 def _transform(record: dict) -> pd.DataFrame:
     with build_asset_context(partition_key="2026-09-08") as context:
-        return core_kaggle_logs(context, pd.json_normalize(record))
+        transformed = core_kaggle_logs(context, pd.json_normalize(record))
+    assert isinstance(transformed, pd.DataFrame)
+    return transformed
 
 
 def test_transformed_columns_are_all_in_the_schema() -> None:

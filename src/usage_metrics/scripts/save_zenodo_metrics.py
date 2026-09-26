@@ -5,7 +5,6 @@ import logging
 from datetime import UTC, datetime
 from typing import Annotated
 
-import pandas as pd
 import requests
 from google.cloud import storage
 from pydantic import BaseModel, StringConstraints
@@ -25,15 +24,15 @@ class CommunityMetadata(BaseModel):
     See https://developers.zenodo.org/#representation.
     """
 
-    created: datetime = None
-    modified: datetime = None
+    created: datetime | None = None
+    modified: datetime | None = None
     recid: str
     conceptrecid: str
     doi: Doi | SandboxDoi | None = None
     conceptdoi: Doi | SandboxDoi | None = None
     doi_url: str
     title: str
-    updated: datetime = None
+    updated: datetime | None = None
     revision: int
 
     @classmethod
@@ -111,9 +110,7 @@ def save_zenodo_logs() -> None:
         upload_to_bucket(bucket=bucket, blob_name=blob_name, data=versions_metadata)
 
 
-def upload_to_bucket(
-    bucket: storage.Client.bucket, blob_name: str, data: pd.DataFrame
-) -> None:
+def upload_to_bucket(bucket: storage.Bucket, blob_name: str, data: str) -> None:
     """Upload a GCP object to a selected bucket."""
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)
