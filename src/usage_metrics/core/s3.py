@@ -83,17 +83,6 @@ def core_s3_logs(
     )  # Mask null IPs
     geocoded_df = geocode_ips(raw_s3_logs)
 
-    # Drop unnecessary geocoding columns
-    geocoded_df = geocoded_df.drop(
-        columns=[
-            "remote_ip_country_flag",
-            "remote_ip_country_flag_url",
-            "remote_ip_country_currency",
-            "remote_ip_continent",
-            "remote_ip_isEU",
-        ]
-    )
-
     # Convert string to datetime using Pandas
     format_string = "[%d/%b/%Y:%H:%M:%S %z]"
     geocoded_df["time"] = pd.to_datetime(geocoded_df.time, format=format_string)
