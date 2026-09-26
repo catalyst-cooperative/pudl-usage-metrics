@@ -40,28 +40,57 @@ def json_string_to_list(value: Any):
     return value
 
 
+ALLOWABLE_FIELD_TYPES = Literal["text", "number", "date"]
+ALLOWABLE_OPERATIONS = Literal[
+    "equals",
+    "contains",
+    "greaterThan",
+    "greaterThanOrEqual",
+    "lessThan",
+    "lessThanOrEqual",
+    "notBlank",
+    "startsWith",
+    "endsWith",
+    "notEqual",
+    "notContains",
+    "inRange",
+    "blank",
+    "false",
+    "true",
+]
+
+# The frontend's grid library is case-consistent about these values, but the
+# search UI sometimes isn't (e.g. "inrange" instead of "inRange"), so match
+# case-insensitively against the canonical casing instead of rejecting the row.
+_FIELD_TYPE_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_FIELD_TYPES)}
+_OPERATION_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_OPERATIONS)}
+# "string" shows up as a field_type synonym for "text", apparently from some
+# code path that reports a JS `typeof` instead of the grid's column type.
+_FIELD_TYPE_ALIASES = {"string": "text"}
+
+
+def normalize_field_type(value: Any):
+    """Canonicalize field_type casing and known synonyms."""
+    if isinstance(value, str):
+        lower = value.lower()
+        lower = _FIELD_TYPE_ALIASES.get(lower, lower)
+        return _FIELD_TYPE_BY_LOWER.get(lower, value)
+    return value
+
+
+def normalize_operation(value: Any):
+    """Canonicalize operation casing."""
+    if isinstance(value, str):
+        return _OPERATION_BY_LOWER.get(value.lower(), value)
+    return value
+
+
 class DuckDBFilters(BaseModel):
     """DuckDB filter format class."""
 
     field_name: str
-    field_type: Literal["text", "number", "date"]
-    operation: Literal[
-        "equals",
-        "contains",
-        "greaterThan",
-        "greaterThanOrEqual",
-        "lessThan",
-        "lessThanOrEqual",
-        "notBlank",
-        "startsWith",
-        "endsWith",
-        "notEqual",
-        "notContains",
-        "inRange",
-        "blank",
-        "false",
-        "true",
-    ]
+    field_type: Annotated[ALLOWABLE_FIELD_TYPES, BeforeValidator(normalize_field_type)]
+    operation: Annotated[ALLOWABLE_OPERATIONS, BeforeValidator(normalize_operation)]
     value: str | int | float | None = None
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
