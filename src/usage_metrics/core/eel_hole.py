@@ -55,6 +55,7 @@ class DuckDBFilters(BaseModel):
         "lessThanOrEqual",
         "notBlank",
         "startsWith",
+        "endsWith",
         "notEqual",
         "notContains",
         "inRange",
