@@ -111,6 +111,36 @@ def test_accepts_ends_with_filter_operation():
     assert list(df["event"]) == ["duckdb_preview"]
 
 
+def test_accepts_mismatched_case_filter_values():
+    """Filters with unexpectedly-cased `operation`/`field_type` values still parse.
+
+    Regression test: the viewer's search UI doesn't consistently match the
+    casing used elsewhere (e.g. `inrange` instead of `inRange`), and has been
+    observed sending `field_type: "string"` where `"text"` was expected. These
+    used to raise a `ValidationError` and fail the whole partition instead of
+    just being normalized.
+    """
+    params = {
+        "filters": [
+            {
+                "fieldName": "utility_name",
+                "fieldType": "STRING",
+                "operation": "inrange",
+                "value": "Co",
+            }
+        ],
+        "name": "x",
+        "page": 1,
+        "perPage": 10,
+    }
+    raw = pd.DataFrame([_row("duckdb_preview", params=params)])
+    context = build_asset_context(partition_key="2026-08-28")
+    df = _core_eel_hole_logs(context, raw)
+    assert list(df["event"]) == ["duckdb_preview"]
+    assert df["params_filters_field_type"].iloc[0] == "text"
+    assert df["params_filters_operation"].iloc[0] == "inRange"
+
+
 def test_tolerates_a_partition_with_no_parseable_payloads():
     """A partition of nothing but app noise (no jsonPayload) shouldn't KeyError.
 
