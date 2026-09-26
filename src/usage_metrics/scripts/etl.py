@@ -30,14 +30,23 @@ def _execute(job, **execute_kwargs) -> bool:
 
 @click.command("etl", context_settings=CONTEXT_SETTINGS)
 @click.option("-p", "--partition", type=str, default=None)
-def etl(partition: str | None):
+@click.option(
+    "--skip-nonpartitioned",
+    is_flag=True,
+    default=False,
+    help=(
+        "Skip all_nonpartitioned_metrics_etl. Its outputs (e.g. GitHub repo "
+        "stats) aren't partitioned by date, so backfilling several historical "
+        "partitions in parallel would just run it redundantly once per job."
+    ),
+)
+def etl(partition: str | None, skip_nonpartitioned: bool):
     """Load the latest partition of every metrics source to Google Cloud Storage."""
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
     coloredlogs.install(fmt=log_format, level="INFO", logger=logger)
     logger.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} storage.")
 
     partitioned = defs.resolve_job_def(name="all_partitioned_metrics_etl")
-    nonpartitioned = defs.resolve_job_def(name="all_nonpartitioned_metrics_etl")
 
     partition_keys = partitioned.partitions_def.get_partition_keys()
     if partition is None:
@@ -49,11 +58,12 @@ def etl(partition: str | None):
         )
     logger.info(f"Processing partitioned data for {partition}.")
 
-    # Run both jobs regardless of the other's outcome, then fail if either did.
-    results = {
-        partitioned.name: _execute(partitioned, partition_key=partition),
-        nonpartitioned.name: _execute(nonpartitioned),
-    }
+    # Run all jobs regardless of the others' outcomes, then fail if any did.
+    results = {partitioned.name: _execute(partitioned, partition_key=partition)}
+    if not skip_nonpartitioned:
+        nonpartitioned = defs.resolve_job_def(name="all_nonpartitioned_metrics_etl")
+        results[nonpartitioned.name] = _execute(nonpartitioned)
+
     failed = [name for name, succeeded in results.items() if not succeeded]
     if failed:
         logger.error(f"Failed job(s): {', '.join(failed)}")
