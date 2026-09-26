@@ -47,6 +47,8 @@ google-cloud-sdk = ">=580"
 # happen to only be available via PyPI.
 pudl-usage-metrics = { path = ".", editable = true }
 ipinfo = ">=5.0.1"
+# pyarrow support landed in pandera 0.33; not yet packaged on conda-forge.
+pandera = { version = ">=0.33.0", extras = ["pyarrow"] }
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=9"
