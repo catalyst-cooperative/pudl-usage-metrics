@@ -2,27 +2,23 @@
 
 import polars as pl
 import pytest
-from dagster import build_asset_context, materialize
+from dagster import materialize
 
 from usage_metrics.raw.s3 import S3Extractor, raw_s3_logs
 
 BUCKET = "pudl-s3-logs.catalyst.coop"
 
 
-def _ctx(partition_key: str):
-    return build_asset_context(partition_key=partition_key)
-
-
 # --- get_blob_prefix / filter_blobs ----------------------------------------
 
 
-def test_get_blob_prefix_is_partition_date():
+def test_get_blob_prefix_is_partition_date(partition_context):
     """The listing prefix is the partition's ISO date."""
     ext = S3Extractor()
-    assert ext.get_blob_prefix(_ctx("2024-06-15")) == "2024-06-15"
+    assert ext.get_blob_prefix(partition_context("2024-06-15")) == "2024-06-15"
 
 
-def test_filter_blobs_keeps_only_matching_date(make_client):
+def test_filter_blobs_keeps_only_matching_date(make_client, partition_context):
     """filter_blobs keeps blobs whose name starts with the partition date."""
     blobs = {
         "2024-06-15-00-00-00-a": b"",
@@ -32,7 +28,7 @@ def test_filter_blobs_keeps_only_matching_date(make_client):
     client = make_client({BUCKET: blobs})
     ext = S3Extractor(client=client)
     listed = client.bucket(BUCKET).list_blobs()
-    kept = {b.name for b in ext.filter_blobs(_ctx("2024-06-15"), listed)}
+    kept = {b.name for b in ext.filter_blobs(partition_context("2024-06-15"), listed)}
     assert kept == {"2024-06-15-00-00-00-a", "2024-06-15"}
 
 

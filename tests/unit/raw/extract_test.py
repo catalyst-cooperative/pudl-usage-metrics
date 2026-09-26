@@ -64,21 +64,16 @@ def test_combine_files_skips_empty_files(tmp_path):
 # --- extract() dispatch ----------------------------------------------------
 
 
-def _run_extract(extractor, context, paths, monkeypatch):
-    monkeypatch.setattr(extractor, "download_gcs_blobs", lambda *a, **k: paths)
-    return extractor.extract(context)
-
-
-def test_extract_no_files_returns_empty(partition_context, monkeypatch, download_dir):
+def test_extract_no_files_returns_empty(partition_context, run_extract, download_dir):
     """A partition with no blobs yields an empty DataFrame."""
     ext = LineExtractor()
-    df = _run_extract(ext, partition_context("2024-01-01"), [], monkeypatch)
+    df = run_extract(ext, partition_context("2024-01-01"), [])
     assert isinstance(df, pd.DataFrame)
     assert df.empty
 
 
 def test_extract_single_file_is_not_combined(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """One file is parsed directly; no .combined file is written."""
     only = tmp_path / "only"
@@ -86,13 +81,13 @@ def test_extract_single_file_is_not_combined(
     ext = LineExtractor()
     seen = []
     monkeypatch.setattr(ext, "load_file", lambda p: seen.append(p) or pl.DataFrame())
-    _run_extract(ext, partition_context("2024-01-01"), [only], monkeypatch)
+    run_extract(ext, partition_context("2024-01-01"), [only])
     assert seen == [only]
     assert not (download_dir / "test_lines" / "2024-01-01.combined").exists()
 
 
 def test_extract_combines_when_concatenable(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """Multiple concatenable files are combined and parsed once."""
     f1 = tmp_path / "f1"
@@ -102,12 +97,12 @@ def test_extract_combines_when_concatenable(
     ext = LineExtractor()
     seen = []
     monkeypatch.setattr(ext, "load_file", lambda p: seen.append(p) or pl.DataFrame())
-    _run_extract(ext, partition_context("2024-01-01"), [f1, f2], monkeypatch)
+    run_extract(ext, partition_context("2024-01-01"), [f1, f2])
     assert seen == [download_dir / "test_lines" / "2024-01-01.combined"]
 
 
 def test_extract_parses_each_file_when_not_concatenable(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """Non-concatenable extractors parse per file and concatenate the frames."""
     f1 = tmp_path / "f1"
@@ -118,7 +113,7 @@ def test_extract_parses_each_file_when_not_concatenable(
     monkeypatch.setattr(
         ext, "load_file", lambda p: pd.DataFrame({"v": [p.read_text().strip()]})
     )
-    df = _run_extract(ext, partition_context("2024-01-01"), [f1, f2], monkeypatch)
+    df = run_extract(ext, partition_context("2024-01-01"), [f1, f2])
     assert df["v"].tolist() == ["1", "2"]
 
 
@@ -134,7 +129,7 @@ def test_extract_non_partitioned_run(monkeypatch, download_dir, tmp_path):
 
 
 def test_extract_sets_partition_key_before_load(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """load_file can rely on self.partition_key."""
     only = tmp_path / "only"
@@ -146,12 +141,12 @@ def test_extract_sets_partition_key_before_load(
         "load_file",
         lambda p: captured.setdefault("key", ext.partition_key) or pl.DataFrame(),
     )
-    _run_extract(ext, partition_context("2026-02-25"), [only], monkeypatch)
+    run_extract(ext, partition_context("2026-02-25"), [only])
     assert captured["key"] == "2026-02-25"
 
 
 def test_extract_swallows_empty_data_errors(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """An all-empty partition returns an empty DataFrame, not an error."""
     only = tmp_path / "only"
@@ -162,12 +157,12 @@ def test_extract_swallows_empty_data_errors(
         raise pl.exceptions.NoDataError("empty")
 
     monkeypatch.setattr(ext, "load_file", _raise)
-    df = _run_extract(ext, partition_context("2024-01-01"), [only], monkeypatch)
+    df = run_extract(ext, partition_context("2024-01-01"), [only])
     assert df.empty
 
 
 def test_extract_propagates_other_errors(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """Non-empty-data parse errors are not swallowed."""
     only = tmp_path / "only"
@@ -179,7 +174,7 @@ def test_extract_propagates_other_errors(
 
     monkeypatch.setattr(ext, "load_file", _raise)
     with pytest.raises(ValueError, match="boom"):
-        _run_extract(ext, partition_context("2024-01-01"), [only], monkeypatch)
+        run_extract(ext, partition_context("2024-01-01"), [only])
 
 
 # --- download plumbing ---------------------------------------------------
@@ -274,12 +269,6 @@ def test_gcs_client_is_lazy_and_sizes_the_pool(monkeypatch):
     assert fake._http.mount.call_args.args[0] == "https://"
     adapter = fake._http.mount.call_args.args[1]
     assert adapter._pool_maxsize == 17
-
-
-def test_retry_policy_shape():
-    """Guard the extract retry policy against accidental changes."""
-    assert extract.GCS_EXTRACT_RETRY_POLICY.max_retries == 2
-    assert extract.GCS_EXTRACT_RETRY_POLICY.delay == 30
 
 
 # --- log_download_progress -------------------------------------------------

@@ -2,25 +2,18 @@
 
 import json
 
-from dagster import build_asset_context
-
 from usage_metrics.raw.github_partitioned import GithubExtractor
 
 BUCKET = "pudl-usage-metrics-archives.catalyst.coop"
 
 
-def _ctx(partition_key: str):
-    return build_asset_context(partition_key=partition_key)
-
-
-def test_get_blob_prefix_is_metric_folder():
+def test_get_blob_prefix_is_metric_folder(partition_context):
     """The prefix narrows the listing to one metric's folder."""
-    assert GithubExtractor(metric="clones").get_blob_prefix(_ctx("2024-06-15")) == (
-        "github/clones/"
-    )
+    ext = GithubExtractor(metric="clones")
+    assert ext.get_blob_prefix(partition_context("2024-06-15")) == "github/clones/"
 
 
-def test_filter_blobs_daily_metric_matches_exact_file(make_client):
+def test_filter_blobs_daily_metric_matches_exact_file(make_client, partition_context):
     """A daily metric keeps only ``github/<metric>/<date>.json``."""
     blobs = {
         "github/clones/2024-06-15.json": b"{}",
@@ -30,11 +23,13 @@ def test_filter_blobs_daily_metric_matches_exact_file(make_client):
     client = make_client({BUCKET: blobs})
     ext = GithubExtractor(metric="clones", client=client)
     listed = client.bucket(BUCKET).list_blobs()
-    kept = [blob.name for blob in ext.filter_blobs(_ctx("2024-06-15"), listed)]
+    kept = [
+        blob.name for blob in ext.filter_blobs(partition_context("2024-06-15"), listed)
+    ]
     assert kept == ["github/clones/2024-06-15.json"]
 
 
-def test_filter_blobs_cumulative_metric_takes_newest(fake_blob):
+def test_filter_blobs_cumulative_metric_takes_newest(fake_blob, partition_context):
     """A cumulative metric keeps only the most recently created file."""
     blobs = [
         fake_blob("github/stargazers/2024-01-01.json", b"[]", time_created=1),
@@ -42,7 +37,7 @@ def test_filter_blobs_cumulative_metric_takes_newest(fake_blob):
         fake_blob("github/stargazers/2024-02-01.json", b"[]", time_created=2),
     ]
     ext = GithubExtractor(metric="stargazers")
-    kept = ext.filter_blobs(_ctx("2024-06-15"), blobs)
+    kept = ext.filter_blobs(partition_context("2024-06-15"), blobs)
     assert [blob.name for blob in kept] == ["github/stargazers/2024-03-01.json"]
 
 
