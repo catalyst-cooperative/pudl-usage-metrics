@@ -1,10 +1,23 @@
 """Tests for usage_metrics.core.eel_hole."""
 
+from typing import cast
+
 import pandas as pd
 import pytest
-from dagster import build_asset_context
+from dagster import AssetExecutionContext, build_asset_context
 
 from usage_metrics.core.eel_hole import _core_eel_hole_logs
+
+
+def _run(context: AssetExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
+    """Call the asset function, restoring the DataFrame type dagster's stubs erase.
+
+    ``@asset``-decorated functions type as returning ``object`` when called
+    directly (bypassing the Dagster asset machinery), even though at runtime
+    they just run the wrapped function body and return its actual value.
+    """
+    return cast(pd.DataFrame, _core_eel_hole_logs(context, raw))
+
 
 RESOURCE = {
     "type": "cloud_run_revision",
@@ -47,7 +60,7 @@ def test_tolerates_a_partition_with_no_search_filters():
     """
     raw = pd.DataFrame([_row("hit")])
     context = build_asset_context(partition_key="2026-09-01")
-    df = _core_eel_hole_logs(context, raw)
+    df = _run(context, raw)
     assert list(df["event"]) == ["hit"]
 
 
@@ -70,7 +83,7 @@ def test_drops_malformed_params_instead_of_raising(params):
     """
     raw = pd.DataFrame([_row("duckdb_preview", params=params)])
     context = build_asset_context(partition_key="2026-09-01")
-    df = _core_eel_hole_logs(context, raw)
+    df = _run(context, raw)
     assert df.empty
 
 
@@ -79,7 +92,7 @@ def test_keeps_events_with_complete_params():
     params = {"filters": "[]", "name": "x", "page": 1, "perPage": 10}
     raw = pd.DataFrame([_row("duckdb_preview", params=params)])
     context = build_asset_context(partition_key="2026-09-01")
-    df = _core_eel_hole_logs(context, raw)
+    df = _run(context, raw)
     assert list(df["event"]) == ["duckdb_preview"]
 
 
@@ -107,7 +120,7 @@ def test_accepts_ends_with_filter_operation():
     }
     raw = pd.DataFrame([_row("duckdb_preview", params=params)])
     context = build_asset_context(partition_key="2026-09-17")
-    df = _core_eel_hole_logs(context, raw)
+    df = _run(context, raw)
     assert list(df["event"]) == ["duckdb_preview"]
 
 
@@ -135,7 +148,7 @@ def test_accepts_mismatched_case_filter_values():
     }
     raw = pd.DataFrame([_row("duckdb_preview", params=params)])
     context = build_asset_context(partition_key="2026-08-28")
-    df = _core_eel_hole_logs(context, raw)
+    df = _run(context, raw)
     assert list(df["event"]) == ["duckdb_preview"]
     assert df["params_filters_field_type"].iloc[0] == "text"
     assert df["params_filters_operation"].iloc[0] == "inRange"
@@ -152,5 +165,5 @@ def test_tolerates_a_partition_with_no_parseable_payloads():
     noise_row = _row("hit") | {"jsonPayload": None}
     raw = pd.DataFrame([noise_row])
     context = build_asset_context(partition_key="2026-09-01")
-    df = _core_eel_hole_logs(context, raw)
+    df = _run(context, raw)
     assert df.empty
