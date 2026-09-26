@@ -83,6 +83,34 @@ def test_keeps_events_with_complete_params():
     assert list(df["event"]) == ["duckdb_preview"]
 
 
+def test_accepts_ends_with_filter_operation():
+    """An `endsWith` search filter parses instead of raising.
+
+    Regression test: `DuckDBFilters.operation`'s allowed values included
+    `startsWith` but not its counterpart `endsWith` -- an easy oversight to
+    miss, but a real filter operation the viewer's search UI offers, so a
+    `ValidationError` failed the whole partition instead of just being an
+    unrecognized/malformed shape.
+    """
+    params = {
+        "filters": [
+            {
+                "fieldName": "utility_name",
+                "fieldType": "text",
+                "operation": "endsWith",
+                "value": "Co",
+            }
+        ],
+        "name": "x",
+        "page": 1,
+        "perPage": 10,
+    }
+    raw = pd.DataFrame([_row("duckdb_preview", params=params)])
+    context = build_asset_context(partition_key="2026-09-17")
+    df = _core_eel_hole_logs(context, raw)
+    assert list(df["event"]) == ["duckdb_preview"]
+
+
 def test_tolerates_a_partition_with_no_parseable_payloads():
     """A partition of nothing but app noise (no jsonPayload) shouldn't KeyError.
 
