@@ -6,6 +6,7 @@ scripts/save_zenodo_metrics.py.
 
 import json
 import re
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
 
@@ -15,7 +16,6 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 from pydantic import BaseModel
 
@@ -45,7 +45,7 @@ class ZenodoMetadata(BaseModel):
     """
 
     version: str | None = None
-    publication_date: datetime = None
+    publication_date: datetime | None = None
 
 
 class ZenodoExtractor(GCSExtractor):
@@ -58,7 +58,7 @@ class ZenodoExtractor(GCSExtractor):
         super().__init__(*args, **kwargs)
 
     def filter_blobs(
-        self, context: AssetExecutionContext, blobs: HTTPIterator
+        self, context: AssetExecutionContext, blobs: Iterable[storage.Blob]
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
@@ -79,13 +79,14 @@ class ZenodoExtractor(GCSExtractor):
         file_name_prefixes = tuple(f"zenodo/{date}-" for date in partition_dates)
         pattern = re.compile(r"\d{4}-\d{2}-\d{2}-\d+\.json$")
 
-        blobs = [
+        filtered_blobs = [
             blob
             for blob in blobs
-            if pattern.search(str(blob.name))
+            if blob.name is not None
+            and pattern.search(blob.name)
             and blob.name.startswith(file_name_prefixes)
         ]
-        return blobs
+        return filtered_blobs
 
     def load_file(self, file_path: Path) -> pd.DataFrame:
         """Read in file as dataframe."""
@@ -94,7 +95,10 @@ class ZenodoExtractor(GCSExtractor):
 
         df = pd.json_normalize(data_json["hits"]["hits"])
         # Add in date of metrics column from file name
-        df["metrics_date"] = re.search(r"\d{4}-\d{2}-\d{2}", str(file_path)).group()
+        date_match = re.search(r"\d{4}-\d{2}-\d{2}", str(file_path))
+        if date_match is None:
+            raise ValueError(f"Could not find a date in file path {file_path}")
+        df["metrics_date"] = date_match.group()
         return df
 
 

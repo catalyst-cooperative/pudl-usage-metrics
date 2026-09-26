@@ -104,7 +104,7 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
 
         context.add_output_metadata({"row_count": row_count, "path": str(path)})
 
-    def load_input(self, context) -> pd.DataFrame | str:
+    def load_input(self, context) -> pd.DataFrame:
         """Load a data frame from a parquet file."""
         path = self._get_path(context)
         return pd.read_parquet(str(path))
