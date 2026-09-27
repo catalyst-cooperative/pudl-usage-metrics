@@ -461,9 +461,9 @@ def _event_coverage_check(
             description=(
                 f"{partition_key}: {_n_pct(len(malformed), total)} slug eel-hole "
                 "events failed to parse -- the log format may have changed. See "
-                "the 'EEL-HOLE EVENT COVERAGE' block in the logs."
+                "the 'report' metadata below for the full breakdown."
             ),
-            metadata=metadata,
+            metadata={**metadata, "report": report},
         )
 
     if unrouted:
@@ -479,9 +479,9 @@ def _event_coverage_check(
                 f"eel-hole events ({metadata['unrouted_events']}) -- coverage gap, "
                 "add a core_eel_hole_* table"
                 + ("." if strict else " (non-fatal).")
-                + " See the 'EEL-HOLE EVENT COVERAGE' block in the logs."
+                + " See the 'report' metadata below for the full breakdown."
             ),
-            metadata=metadata,
+            metadata={**metadata, "report": report},
         )
 
     return AssetCheckResult(
