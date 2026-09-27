@@ -7,7 +7,7 @@ import os
 import re
 from collections import Counter
 from collections.abc import Iterator
-from typing import Annotated, Any, cast
+from typing import Annotated, Any, Literal, cast, get_args
 from urllib.parse import urlsplit
 
 import pandas as pd
@@ -76,26 +76,88 @@ def json_string_to_list(value: Any):
     return value
 
 
+ALLOWABLE_FIELD_TYPES = Literal["text", "number", "date"]
+ALLOWABLE_OPERATIONS = Literal[
+    "equals",
+    "contains",
+    "greaterThan",
+    "greaterThanOrEqual",
+    "lessThan",
+    "lessThanOrEqual",
+    "notBlank",
+    "startsWith",
+    "endsWith",
+    "notEqual",
+    "notContains",
+    "inRange",
+    "blank",
+    "false",
+    "true",
+]
+
+# The frontend's grid library is case-consistent about these values, but the
+# search UI sometimes isn't (e.g. "inrange" instead of "inRange"), so match
+# case-insensitively against the canonical casing instead of rejecting the row.
+_FIELD_TYPE_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_FIELD_TYPES)}
+_OPERATION_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_OPERATIONS)}
+# "string" shows up as a field_type synonym for "text", apparently from some
+# code path that reports a JS `typeof` instead of the grid's column type.
+_FIELD_TYPE_ALIASES = {"string": "text"}
+
+
+def normalize_field_type(value: Any):
+    """Canonicalize field_type casing and known synonyms."""
+    if isinstance(value, str):
+        lower = value.lower()
+        lower = _FIELD_TYPE_ALIASES.get(lower, lower)
+        return _FIELD_TYPE_BY_LOWER.get(lower, value)
+    return value
+
+
+def normalize_operation(value: Any):
+    """Canonicalize operation casing."""
+    if isinstance(value, str):
+        return _OPERATION_BY_LOWER.get(value.lower(), value)
+    return value
+
+
+class DuckDBFilters(BaseModel):
+    """DuckDB filter format class.
+
+    This is AG Grid's own filter shape, not eel-hole's -- it's validated
+    strictly like the rest of the eel-hole-authored payload, but a mismatch
+    here (a new grid operation, a casing change) means the *grid* changed,
+    not that eel-hole's own logging broke. Surfaced the same way: a malformed
+    filter fails the whole payload, which shows up as a coverage-check
+    ``malformed`` event above ``SCHEMA_DRIFT_TOLERANCE``.
+    """
+
+    field_name: str
+    field_type: Annotated[ALLOWABLE_FIELD_TYPES, BeforeValidator(normalize_field_type)]
+    operation: Annotated[ALLOWABLE_OPERATIONS, BeforeValidator(normalize_operation)]
+    value: str | int | float | None = None
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
 class DuckDBParams(BaseModel):
     """DuckDB search query parameters.
 
-    eel-hole logs these as ``dict(request.args)``. ``filters`` is the shape of
-    AG Grid's own filter model, which isn't under eel-hole's control and has
-    drifted independently (casing, new operations like "endsWith") -- that's
-    not eel-hole's contract to keep, so filter dicts are accepted as-is rather
-    than validated field-by-field. ``name``/``page``/``per_page`` *are*
-    eel-hole's own request parameters, so they stay required: a request
-    missing them indicates a real problem in eel-hole's own logging, not
-    AG Grid drift, and should surface as such rather than being silently
-    accepted.
+    eel-hole logs these as ``dict(request.args)``, so extra keys are allowed
+    (a new query param shouldn't drop the event), but ``name``/``page``/
+    ``per_page`` are left optional too: real backfills have hit events with
+    an empty or partial ``params`` dict (e.g. ``duckdb_other`` or a request
+    that never reached the search step), and those should still parse and
+    show up as an ordinary (if unrouted) event rather than being dropped as
+    malformed.
     """
 
     filters: Annotated[
-        list[dict[str, Any]] | None, BeforeValidator(json_string_to_list)
+        list[DuckDBFilters] | None, BeforeValidator(json_string_to_list)
     ] = None
-    name: str
-    page: int
-    per_page: int
+    name: str | None = None
+    page: int | None = None
+    per_page: int | None = None
 
     model_config = ConfigDict(
         alias_generator=to_camel, populate_by_name=True, extra="allow"
@@ -315,6 +377,20 @@ def _coverage_report(
     return "\n".join(lines)
 
 
+def _strict_coverage() -> bool:
+    """Whether an eel-hole coverage gap should block the run.
+
+    Reuses the same ``METRICS_PROD_ENV`` signal every other asset in this
+    module already logs against. Outside of ``prod`` -- local iteration, ad
+    hoc backfills -- an unrouted-but-parseable event (e.g. exploring a new
+    event type) is a non-blocking WARN so it doesn't halt a run. In ``prod``,
+    the same gap is a blocking ERROR: a scheduled production run silently
+    losing a category of data is exactly the kind of breakage we want to stop
+    and get paged for, not ride out until someone happens to read the logs.
+    """
+    return os.getenv("METRICS_PROD_ENV", "local") == "prod"
+
+
 def _event_coverage_check(
     context: AssetExecutionContext, rows: list[dict], models: list[dict]
 ) -> AssetCheckResult:
@@ -325,11 +401,11 @@ def _event_coverage_check(
     and then goes nowhere, because each ``core_eel_hole_*`` table filters one
     exact ``event`` string. This makes the gap loud:
 
-    * events parsed but not in ``ROUTED_EVENT_TYPES`` -> **WARN** (non-blocking):
-      real activity we aren't persisting; add a downstream table for it.
+    * events parsed but not in ``ROUTED_EVENT_TYPES`` -> WARN outside ``prod``,
+      ERROR (blocking) in ``prod`` -- see ``_strict_coverage``.
     * slug events that failed to parse at all (bad/missing ``timestamp``, non-str
-      ``event``, ...), above ``SCHEMA_DRIFT_TOLERANCE`` -> **ERROR** (blocking):
-      the log *format* broke.
+      ``event``, ...), above ``SCHEMA_DRIFT_TOLERANCE`` -> always **ERROR**
+      (blocking): the log *format* broke, which is never fine to ride out.
 
     The full ``_coverage_report`` is logged (WARNING / ERROR) so a maintainer
     reviewing the GHA run has the event names, field surface, and samples.
@@ -391,17 +467,19 @@ def _event_coverage_check(
         )
 
     if unrouted:
+        strict = _strict_coverage()
         report = _coverage_report(partition_key, total, routed, unrouted, malformed)
-        context.log.warning(report)
+        (context.log.error if strict else context.log.warning)(report)
         return AssetCheckResult(
             check_name=EEL_HOLE_EVENT_COVERAGE_CHECK,
             passed=False,
-            severity=AssetCheckSeverity.WARN,
+            severity=AssetCheckSeverity.ERROR if strict else AssetCheckSeverity.WARN,
             description=(
                 f"{partition_key}: NOT persisting {_n_pct(unrouted_n, total)} of "
                 f"eel-hole events ({metadata['unrouted_events']}) -- coverage gap, "
-                "add a core_eel_hole_* table (non-fatal). See the "
-                "'EEL-HOLE EVENT COVERAGE' block in the logs."
+                "add a core_eel_hole_* table"
+                + ("." if strict else " (non-fatal).")
+                + " See the 'EEL-HOLE EVENT COVERAGE' block in the logs."
             ),
             metadata=metadata,
         )
