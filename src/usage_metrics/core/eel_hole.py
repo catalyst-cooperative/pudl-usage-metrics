@@ -30,7 +30,18 @@ from pydantic import (
 from pydantic.alias_generators import to_camel
 
 ROUTED_EVENT_TYPES: frozenset[str] = frozenset(
-    {"search", "hit", "duckdb_preview", "duckdb_csv", "privacy-policy"}
+    {
+        "search",
+        "hit",
+        "duckdb_preview",
+        "duckdb_csv",
+        "duckdb_other",
+        "privacy-policy",
+        "preview",
+        "verify-email-requested",
+        "verify-email-failed",
+        "refresh-email-verification-failed",
+    }
 )
 """``jsonPayload.event`` values that have a persisted ``core_eel_hole_*`` table.
 
@@ -371,8 +382,8 @@ def _coverage_report(
         f"  Routed OK: {_event_summary(routed, total)}",
         "",
         "  To route a new event: add a core_eel_hole_<name> asset in",
-        "  usage_metrics.core.eel_hole, a Table in usage_metrics.models, and an",
-        "  Alembic migration; add it to ROUTED_EVENT_TYPES; then backfill.",
+        "  usage_metrics.core.eel_hole, a pyarrow schema in usage_metrics.models,",
+        "  and add it to ROUTED_EVENT_TYPES; then backfill.",
     ]
     return "\n".join(lines)
 
@@ -807,6 +818,85 @@ def core_eel_hole_downloads(
     kinds={"parquet"},
     tags={"source": "eel_hole"},
 )
+def core_eel_hole_duckdb_other(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of DuckDB query events with a non-standard page size.
+
+    /api/duckdb classifies a request as duckdb_preview or duckdb_csv only when
+    perPage matches one of those two fixed page sizes; anything else -- some
+    other client, a hand-built request, a future page size we haven't
+    accounted for -- lands here instead. Kept separate rather than merged into
+    core_eel_hole_previews/downloads so this catch-all bucket doesn't obscure
+    what those two tables actually mean.
+    """
+    context.log.info(f"Processing data for {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warning(f"No data found for {context.partition_key}")
+        return pd.DataFrame()
+
+    other_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_other"]
+    other_df = other_df.loc[
+        :,
+        ["insert_id", "user_id", "user_domain", "timestamp", "url", "session_id"]
+        + [col for col in other_df.columns if col.startswith("params_")],
+    ]
+
+    return other_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_table_views(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of table-preview page views from eel-hole logs.
+
+    Logged on every GET to /preview/<package>/<table_name>[/<partition>],
+    regardless of whether the visitor is logged in. The actual DuckDB-backed
+    data grid (core_eel_hole_previews) only loads for authenticated users --
+    an anonymous visitor gets a login prompt instead, but still shows up here.
+    Comparing this table's counts to core_eel_hole_previews' is the intended
+    way to see how many people land on a table's page without ever being able
+    to see the data (and therefore might convert to a login if asked).
+    """
+    context.log.info(f"Processing data for {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warning(f"No data found for {context.partition_key}")
+        return pd.DataFrame()
+
+    views_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "preview"]
+    views_df = views_df.loc[
+        :,
+        [
+            "insert_id",
+            "user_id",
+            "user_domain",
+            "timestamp",
+            "package",
+            "table_name",
+            "partition",
+            "session_id",
+        ],
+    ]
+
+    return views_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
+    tags={"source": "eel_hole"},
+)
 def core_eel_hole_user_settings_updates(
     context: AssetExecutionContext,
     _core_eel_hole_logs: pd.DataFrame,
@@ -837,3 +927,96 @@ def core_eel_hole_user_settings_updates(
     settings_df = settings_df.loc[settings_df.user_id.notnull()]
 
     return settings_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_verify_email_requests(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of email-verification prompts sent to a logged-in user."""
+    context.log.info(f"Processing data for {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warning(f"No data found for {context.partition_key}")
+        return pd.DataFrame()
+
+    requests_df = _core_eel_hole_logs[
+        _core_eel_hole_logs.event == "verify-email-requested"
+    ]
+    requests_df = requests_df.loc[
+        :, ["insert_id", "user_id", "user_domain", "timestamp"]
+    ]
+
+    return requests_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_verify_email_failures(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of failed attempts to send/request an email-verification.
+
+    Auth0 rejected our request to send the user a verification email --
+    either fetching the management API token or the send-email call itself
+    failed. status_code is Auth0's HTTP response code.
+    """
+    context.log.info(f"Processing data for {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warning(f"No data found for {context.partition_key}")
+        return pd.DataFrame()
+
+    failures_df = _core_eel_hole_logs[
+        _core_eel_hole_logs.event == "verify-email-failed"
+    ]
+    failures_df = failures_df.loc[
+        :, ["insert_id", "user_id", "user_domain", "timestamp", "status_code"]
+    ]
+
+    return failures_df.reset_index(drop=True)
+
+
+@asset(
+    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
+    io_manager_key="parquet_manager",
+    kinds={"parquet"},
+    tags={"source": "eel_hole"},
+)
+def core_eel_hole_email_verification_refresh_failures(
+    context: AssetExecutionContext,
+    _core_eel_hole_logs: pd.DataFrame,
+) -> pd.DataFrame:
+    """Create table of failed attempts to refresh a user's email-verification state.
+
+    Distinct from core_eel_hole_verify_email_failures: this is Auth0 rejecting
+    our lookup of the user's *current* verification status (triggered when the
+    viewer polls to see if a user has clicked the verification link yet), not
+    a failure to send the email in the first place. status_code is Auth0's
+    HTTP response code.
+    """
+    context.log.info(f"Processing data for {context.partition_key}")
+
+    if _core_eel_hole_logs.empty:
+        context.log.warning(f"No data found for {context.partition_key}")
+        return pd.DataFrame()
+
+    failures_df = _core_eel_hole_logs[
+        _core_eel_hole_logs.event == "refresh-email-verification-failed"
+    ]
+    failures_df = failures_df.loc[
+        :, ["insert_id", "user_id", "user_domain", "timestamp", "status_code"]
+    ]
+
+    return failures_df.reset_index(drop=True)

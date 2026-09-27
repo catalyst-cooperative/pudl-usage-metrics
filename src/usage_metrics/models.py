@@ -1298,6 +1298,157 @@ core_eel_hole_user_settings_updates = _table_schema(
     primary_key=["insert_id"],
 )
 
+core_eel_hole_duckdb_other = _table_schema(
+    name="core_eel_hole_duckdb_other",
+    columns=_eel_hole_preview_columns,
+    description=(
+        "DuckDB query events recorded by PUDL's data viewer (the eel hole) with "
+        "a page size that doesn't match the fixed preview or full-download size."
+    ),
+    primary_key=["insert_id"],
+)
+
+core_eel_hole_table_views = _table_schema(
+    name="core_eel_hole_table_views",
+    columns=[
+        _column(
+            "insert_id",
+            str,
+            "A unique identifier for the log entry.",
+        ),
+        _column(
+            "user_id",
+            str,
+            "The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+        ),
+        _column(
+            "user_domain",
+            str,
+            "User's email domain - the part of a user's email address that follows the '@' symbol.",
+        ),
+        _column(
+            "timestamp",
+            Timestamp,
+            "The time the event described by the log entry occurred.",
+        ),
+        _column(
+            "package",
+            str,
+            "The package containing the previewed table (e.g. 'pudl').",
+        ),
+        _column(
+            "table_name",
+            str,
+            "The name of the table whose preview page was viewed.",
+        ),
+        _column(
+            "partition",
+            str,
+            "The data partition being previewed (e.g. a FERC EQR quarter), for "
+            "the one PUDL dataset that's partitioned this way. Not to be "
+            "confused with partition_key, which is this ETL's own daily "
+            "partition.",
+        ),
+        _column(
+            "session_id",
+            str,
+            "A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
+        ),
+        _column("partition_key", str),
+    ],
+    description=(
+        "Page views of a table's /preview/<package>/<table_name> page, recorded "
+        "by PUDL's data viewer (the eel hole), regardless of whether the "
+        "visitor is logged in. The DuckDB-backed data grid on that page "
+        "(core_eel_hole_previews) only loads for logged-in users, so comparing "
+        "the two tables' counts shows how many visitors land on a table's page "
+        "without being able to see the actual data."
+    ),
+    primary_key=["insert_id"],
+)
+
+core_eel_hole_verify_email_requests = _table_schema(
+    name="core_eel_hole_verify_email_requests",
+    columns=[
+        _column(
+            "insert_id",
+            str,
+            "A unique identifier for the log entry.",
+        ),
+        _column(
+            "user_id",
+            str,
+            "The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+        ),
+        _column(
+            "user_domain",
+            str,
+            "User's email domain - the part of a user's email address that follows the '@' symbol.",
+        ),
+        _column(
+            "timestamp",
+            Timestamp,
+            "The time the event described by the log entry occurred.",
+        ),
+        _column("partition_key", str),
+    ],
+    description=(
+        "Successful requests to send a logged-in user an email-verification "
+        "link, recorded by PUDL's data viewer (the eel hole)."
+    ),
+    primary_key=["insert_id"],
+)
+
+_eel_hole_verify_email_failure_columns = [
+    _column(
+        "insert_id",
+        str,
+        "A unique identifier for the log entry.",
+    ),
+    _column(
+        "user_id",
+        str,
+        "The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+    ),
+    _column(
+        "user_domain",
+        str,
+        "User's email domain - the part of a user's email address that follows the '@' symbol.",
+    ),
+    _column(
+        "timestamp",
+        Timestamp,
+        "The time the event described by the log entry occurred.",
+    ),
+    _column("status_code", int, "Auth0's HTTP response status code."),
+    _column("partition_key", str),
+]
+"""Fields shared by core_eel_hole_verify_email_failures and
+core_eel_hole_email_verification_refresh_failures."""
+
+core_eel_hole_verify_email_failures = _table_schema(
+    name="core_eel_hole_verify_email_failures",
+    columns=_eel_hole_verify_email_failure_columns,
+    description=(
+        "Failed attempts to send a logged-in user an email-verification link "
+        "(Auth0 rejected the request), recorded by PUDL's data viewer (the eel "
+        "hole)."
+    ),
+    primary_key=["insert_id"],
+)
+
+core_eel_hole_email_verification_refresh_failures = _table_schema(
+    name="core_eel_hole_email_verification_refresh_failures",
+    columns=_eel_hole_verify_email_failure_columns,
+    description=(
+        "Failed attempts to refresh a logged-in user's email-verification "
+        "status from Auth0 (distinct from a failure to send the verification "
+        "email in the first place), recorded by PUDL's data viewer (the eel "
+        "hole)."
+    ),
+    primary_key=["insert_id"],
+)
+
 usage_metrics_schemas: dict[str, pandera.DataFrameSchema] = {
     cast(str, schema.name): schema  # _table_schema always sets the name
     for schema in [
@@ -1318,6 +1469,11 @@ usage_metrics_schemas: dict[str, pandera.DataFrameSchema] = {
         core_eel_hole_hits,
         core_eel_hole_previews,
         core_eel_hole_downloads,
+        core_eel_hole_duckdb_other,
+        core_eel_hole_table_views,
         core_eel_hole_user_settings_updates,
+        core_eel_hole_verify_email_requests,
+        core_eel_hole_verify_email_failures,
+        core_eel_hole_email_verification_refresh_failures,
     ]
 }
