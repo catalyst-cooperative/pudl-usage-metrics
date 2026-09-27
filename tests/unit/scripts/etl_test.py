@@ -1,12 +1,14 @@
 """Tests for `usage_metrics.scripts.etl`."""
 
+import logging
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from click.testing import CliRunner
 
 from usage_metrics.scripts import etl as etl_module
-from usage_metrics.scripts.etl import etl
+from usage_metrics.scripts.etl import _execute, etl
 
 
 def _fake_job_def(name: str, partition_keys: list[str] | None):
@@ -112,3 +114,61 @@ def test_invalid_partition_is_a_usage_error(executed):
     result = _run(["--job", "eel_hole", "--partition", "1999-01-01"])
     assert result.exit_code != 0
     assert "not a valid partition" in result.output
+
+
+# --- _execute()'s asset-check surfacing -------------------------------------
+
+
+def _fake_check(*, passed, severity, description, metadata=None):
+    return SimpleNamespace(
+        passed=passed,
+        severity=severity,
+        description=description,
+        metadata=metadata or {},
+        asset_key=SimpleNamespace(to_user_string=lambda: "some_asset"),
+        check_name="some_check",
+    )
+
+
+def _fake_job(checks):
+    result = SimpleNamespace(success=True, get_asset_check_evaluations=lambda: checks)
+    return Mock(name="job", execute_in_process=Mock(return_value=result))
+
+
+def test_execute_logs_failed_check_description(caplog):
+    job = _fake_job([_fake_check(passed=False, severity="WARN", description="gap")])
+    with caplog.at_level(logging.WARNING, logger="usage_metrics"):
+        _execute(job)
+    assert "gap" in caplog.text
+
+
+def test_execute_prints_full_report_when_attached(caplog):
+    """A check's 'report' metadata is printed in full, not just its one-line description.
+
+    Some checks (eel_hole_event_coverage) attach a full, copy-paste-actionable
+    report as metadata because the description alone isn't enough to act on.
+    That report needs to show up in this trailing summary -- not just where it
+    was first logged mid-run -- so it isn't lost in a long scroll of logs.
+    """
+    long_report = "EEL-HOLE EVENT COVERAGE -- 2026-09-25\n  preview -- 1898 (85%)"
+    job = _fake_job(
+        [
+            _fake_check(
+                passed=False,
+                severity="WARN",
+                description="coverage gap (non-fatal)",
+                metadata={"report": SimpleNamespace(value=long_report)},
+            )
+        ]
+    )
+    with caplog.at_level(logging.WARNING, logger="usage_metrics"):
+        _execute(job)
+    assert long_report in caplog.text
+
+
+def test_execute_skips_report_line_when_absent(caplog):
+    job = _fake_job([_fake_check(passed=False, severity="ERROR", description="broke")])
+    with caplog.at_level(logging.WARNING, logger="usage_metrics"):
+        _execute(job)
+    assert "broke" in caplog.text
+    assert "EEL-HOLE" not in caplog.text
