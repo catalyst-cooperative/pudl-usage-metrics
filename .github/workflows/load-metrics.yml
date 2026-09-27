@@ -130,7 +130,7 @@ jobs:
         run: |
           args=()
           [[ -n "$PARTITION" ]] && args+=(--partition "$PARTITION")
-          [[ "$SKIP_NONPARTITIONED" == "true" ]] && args+=(--skip-nonpartitioned)
+          [[ "$SKIP_NONPARTITIONED" == "true" ]] && args+=(--partitioned)
           pixi run usage-metrics etl "${args[@]}"
 
       - name: Notify Zulip
