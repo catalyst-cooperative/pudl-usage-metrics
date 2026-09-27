@@ -1,6 +1,8 @@
 """Tests for the eel hole (PUDL Viewer) log transform assets."""
 
 from collections import Counter
+from collections.abc import Iterator
+from typing import Any, cast
 
 import pandas as pd
 import pytest
@@ -25,15 +27,31 @@ def _ctx(partition_key: str = PARTITION):
     return build_asset_context(partition_key=partition_key)
 
 
+def _materialize(
+    raw: pd.DataFrame, ctx=None
+) -> list[Output[pd.DataFrame] | AssetCheckResult]:
+    """Call the asset function, restoring the type dagster's stubs erase.
+
+    ``@asset``-decorated functions type as returning ``object`` when called
+    directly (bypassing the Dagster asset machinery), even though at runtime
+    they just run the wrapped generator body and yield the actual results.
+    """
+    results = cast(
+        "Iterator[Output[pd.DataFrame] | AssetCheckResult]",
+        _core_eel_hole_logs(ctx or _ctx(), raw),
+    )
+    return list(results)
+
+
 def _run(raw: pd.DataFrame, ctx=None) -> pd.DataFrame:
     """Materialize ``_core_eel_hole_logs`` and return its output DataFrame."""
-    results = list(_core_eel_hole_logs(ctx or _ctx(), raw))
+    results = _materialize(raw, ctx)
     return next(r.value for r in results if isinstance(r, Output))
 
 
 def _check(raw: pd.DataFrame, ctx=None) -> AssetCheckResult:
     """Materialize ``_core_eel_hole_logs`` and return its event-coverage check."""
-    results = list(_core_eel_hole_logs(ctx or _ctx(), raw))
+    results = _materialize(raw, ctx)
     return next(r for r in results if isinstance(r, AssetCheckResult))
 
 
@@ -59,7 +77,7 @@ def _record(
     ``None``); otherwise it is built from ``event`` / ``params`` / ``user_id``.
     """
     if payload is _UNSET:
-        payload = {"event": event, "timestamp": timestamp}
+        payload: dict[str, Any] = {"event": event, "timestamp": timestamp}
         if user_id is not None:
             payload["userId"] = user_id
         if event == "search":
@@ -139,14 +157,6 @@ _IS_EVENT = [
         id="filters-list",
     ),
     pytest.param(
-        {
-            "event": "search",
-            "timestamp": TS,
-            "params": {"filters": '[{"fieldName": "y", "operation": "between"}]'},
-        },
-        id="filters-json-string-new-op",
-    ),
-    pytest.param(
         {"event": "search", "timestamp": TS, "somethingBrandNew": 123},
         id="unknown-extra-key",
     ),
@@ -175,6 +185,19 @@ _NOT_EVENT = [
     pytest.param(
         {"event": "search", "timestamp": TS, "params": {"filters": "{}"}},
         id="filters-json-not-a-list",
+    ),
+    pytest.param(
+        {
+            "event": "search",
+            "timestamp": TS,
+            # DuckDBFilters (AG Grid's own shape) is validated strictly: an
+            # unrecognized operation means the grid changed, not that
+            # eel-hole's own logging broke, but it's still a real gap we want
+            # to know about (a malformed event in the coverage check) rather
+            # than quietly accept.
+            "params": {"filters": '[{"fieldName": "y", "operation": "between"}]'},
+        },
+        id="filters-json-string-unknown-op",
     ),
 ]
 
@@ -364,9 +387,29 @@ def test_coverage_check_warns_non_fatally_on_unrouted_event():
     assert result.passed is False
     assert result.severity.value == "WARN"  # non-blocking
     # count AND percentage of the day's traffic, in both surfaces
-    assert "preview×903 (99%)" in result.metadata["unrouted_events"].value
+    assert "preview×903 (99%)" in cast(str, result.metadata["unrouted_events"].value)
     assert result.metadata["unrouted_pct"].value == pytest.approx(98.9, abs=0.1)
-    assert "903 (99%)" in result.description
+    assert "903 (99%)" in cast(str, result.description)
+
+
+def test_coverage_check_unrouted_event_blocks_in_prod(monkeypatch):
+    """The same unrouted-event gap is a blocking ERROR when METRICS_PROD_ENV=prod."""
+    monkeypatch.setenv("METRICS_PROD_ENV", "prod")
+    rows = [
+        _record("s1", event="search", user_id="u"),
+        _record(
+            "p1",
+            payload={
+                "event": "preview",
+                "timestamp": TS,
+                "package": "pudl",
+                "table_name": "x",
+            },
+        ),
+    ]
+    result = _coverage(rows)
+    assert result.passed is False
+    assert result.severity.value == "ERROR"  # blocking, unlike the non-prod default
 
 
 def test_coverage_check_errors_when_slug_events_fail_to_parse():
