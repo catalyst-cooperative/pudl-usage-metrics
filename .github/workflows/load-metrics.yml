@@ -9,6 +9,21 @@ on:
       end_partition:
         description: "Last date (YYYY-MM-DD, inclusive) to ETL. Defaults to start_partition (a single day) if blank."
         required: false
+      job:
+        description: "Which job(s) to run. 'all' (default) runs every partitioned and non-partitioned job."
+        required: false
+        type: choice
+        default: all
+        options:
+          - all
+          - partitioned
+          - nonpartitioned
+          - s3
+          - kaggle
+          - github_partitioned
+          - github_nonpartitioned
+          - zenodo
+          - eel_hole
 
   schedule:
     - cron: "14 7 * * *" # Every day at 7:14 AM UTC
@@ -29,9 +44,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       partitions: ${{ steps.compute.outputs.partitions }}
-      # Whether the matrix has more than one partition in it. Threaded through
-      # to load-metrics so it knows to skip all_nonpartitioned_metrics_etl (see
-      # the comment on that step for why).
+      # Whether the matrix has more than one *dated* partition in it (i.e. a
+      # real backfill, not a single day). Threaded through to load-metrics so
+      # it knows to skip all_nonpartitioned_metrics_etl on each dated entry
+      # (see the comment on that step for why).
       multiple: ${{ steps.compute.outputs.multiple }}
     steps:
       - uses: actions/checkout@v7
@@ -49,9 +65,20 @@ jobs:
           partitions=$(pixi run usage-metrics partitions \
             --start "${{ github.event.inputs.start_partition }}" \
             --end "${{ github.event.inputs.end_partition }}")
-          echo "partitions=$partitions" >> "$GITHUB_OUTPUT"
           count=$(echo "$partitions" | jq 'length')
-          echo "multiple=$([ "$count" -gt 1 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          multiple=$([ "$count" -gt 1 ] && echo true || echo false)
+          job="${{ github.event.inputs.job }}"
+          # A multi-day "all" backfill skips non-partitioned jobs on each
+          # dated matrix entry below to avoid them racing to overwrite the
+          # same un-dated output file. Add one extra matrix entry -- using
+          # the literal string "nonpartitioned" as a sentinel, since real
+          # partitions are always YYYY-MM-DD and can't collide with it -- to
+          # run them exactly once, so "all" actually refreshes everything.
+          if [[ "$multiple" == "true" && ( -z "$job" || "$job" == "all" ) ]]; then
+            partitions=$(echo "$partitions" | jq -c '. + ["nonpartitioned"]')
+          fi
+          echo "partitions=$partitions" >> "$GITHUB_OUTPUT"
+          echo "multiple=$multiple" >> "$GITHUB_OUTPUT"
 
       - name: Notify Zulip of workflow launch
         uses: zulip/github-actions-zulip/send-message@v2
@@ -63,7 +90,7 @@ jobs:
           to: "pudl-deployments"
           topic: "pudl-usage-metrics"
           content: |
-            # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})): `${{ steps.compute.outputs.partitions }}`
+            # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})): job `${{ github.event.inputs.job || 'all' }}`, partitions `${{ steps.compute.outputs.partitions }}`
 
   load-metrics:
     needs: compute-partitions
@@ -122,15 +149,41 @@ jobs:
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           PARTITION: ${{ matrix.partition }}
+          JOB: ${{ github.event.inputs.job }}
           # Non-partitioned outputs (e.g. GitHub repo stats) aren't scoped to a
-          # date; running them once per backfill partition would just have
-          # concurrent jobs racing to overwrite the same file.
+          # date; running them once per dated backfill entry would just have
+          # concurrent jobs racing to overwrite the same file. Only applies to
+          # the default "all" selection with more than one dated partition --
+          # compute-partitions adds a dedicated "nonpartitioned" matrix entry
+          # (handled below) to run them exactly once in that case. An explicit
+          # --job or --partitioned/--no-partitioned choice is mutually
+          # exclusive with this flag, and the CLI itself rejects a
+          # non-partitioned job paired with a real date range.
           SKIP_NONPARTITIONED: ${{ needs.compute-partitions.outputs.multiple }}
         shell: bash -l {0}
         run: |
           args=()
-          [[ -n "$PARTITION" ]] && args+=(--partition "$PARTITION")
-          [[ "$SKIP_NONPARTITIONED" == "true" ]] && args+=(--partitioned)
+          if [[ "$PARTITION" == "nonpartitioned" ]]; then
+            # The dedicated single-run matrix entry added for a multi-day
+            # "all" backfill -- see compute-partitions above.
+            args+=(--no-partitioned)
+          else
+            [[ -n "$PARTITION" ]] && args+=(--partition "$PARTITION")
+            case "$JOB" in
+              ""|all)
+                [[ "$SKIP_NONPARTITIONED" == "true" ]] && args+=(--partitioned)
+                ;;
+              partitioned)
+                args+=(--partitioned)
+                ;;
+              nonpartitioned)
+                args+=(--no-partitioned)
+                ;;
+              *)
+                args+=(--job "$JOB")
+                ;;
+            esac
+          fi
           pixi run usage-metrics etl "${args[@]}"
 
       - name: Notify Zulip
