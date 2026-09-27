@@ -45,12 +45,19 @@ def _execute(job, **execute_kwargs) -> bool:
                 if str(check.severity).endswith("ERROR")
                 else logging.WARNING
             )
-            logger.log(
-                level,
+            message = (
                 f"{job.name}: asset check "
                 f"{check.asset_key.to_user_string()}.{check.check_name} "
-                f"[{check.severity}] -- {check.description}",
+                f"[{check.severity}] -- {check.description}"
             )
+            # Some checks (e.g. eel_hole_event_coverage) attach a full,
+            # copy-paste-actionable report as metadata rather than cramming it
+            # into the one-line description. Print it here too, not just where
+            # it was first logged mid-run, so it's the last thing in the log
+            # instead of scrolled past.
+            if "report" in check.metadata:
+                message += f"\n{check.metadata['report'].value}"
+            logger.log(level, message)
     logger.info(f"{job.name} {'succeeded' if result.success else 'FAILED'}.")
     return result.success
 

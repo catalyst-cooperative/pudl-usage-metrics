@@ -390,6 +390,9 @@ def test_coverage_check_warns_non_fatally_on_unrouted_event():
     assert "preview×903 (99%)" in cast(str, result.metadata["unrouted_events"].value)
     assert result.metadata["unrouted_pct"].value == pytest.approx(98.9, abs=0.1)
     assert "903 (99%)" in cast(str, result.description)
+    # The full report travels as metadata, not just a pointer to the mid-run
+    # log line, so it's still visible in a trailing summary of failed checks.
+    assert "EEL-HOLE EVENT COVERAGE" in cast(str, result.metadata["report"].value)
 
 
 def test_coverage_check_unrouted_event_blocks_in_prod(monkeypatch):
@@ -425,6 +428,7 @@ def test_coverage_check_errors_when_slug_events_fail_to_parse():
     assert result.passed is False
     assert result.severity.value == "ERROR"
     assert result.metadata["malformed_slug_events"].value == 20
+    assert "EEL-HOLE EVENT COVERAGE" in cast(str, result.metadata["report"].value)
 
 
 def test_coverage_report_is_actionable():
