@@ -14,6 +14,11 @@ from usage_metrics.core.eel_hole import (
     _core_eel_hole_logs,
     _coverage_report,
     _event_coverage_check,
+    core_eel_hole_duckdb_other,
+    core_eel_hole_email_verification_refresh_failures,
+    core_eel_hole_table_views,
+    core_eel_hole_verify_email_failures,
+    core_eel_hole_verify_email_requests,
     payload_is_event,
 )
 
@@ -371,15 +376,7 @@ def test_coverage_check_warns_non_fatally_on_unrouted_event():
     rows = [
         *(_record(f"s{i}", event="search", user_id="u") for i in range(10)),
         *(
-            _record(
-                f"p{i}",
-                payload={
-                    "event": "preview",
-                    "timestamp": TS,
-                    "package": "pudl",
-                    "table_name": "x",
-                },
-            )
+            _record(f"p{i}", payload={"event": "some_future_event", "timestamp": TS})
             for i in range(903)
         ),
     ]
@@ -387,7 +384,9 @@ def test_coverage_check_warns_non_fatally_on_unrouted_event():
     assert result.passed is False
     assert result.severity.value == "WARN"  # non-blocking
     # count AND percentage of the day's traffic, in both surfaces
-    assert "preview×903 (99%)" in cast(str, result.metadata["unrouted_events"].value)
+    assert "some_future_event×903 (99%)" in cast(
+        str, result.metadata["unrouted_events"].value
+    )
     assert result.metadata["unrouted_pct"].value == pytest.approx(98.9, abs=0.1)
     assert "903 (99%)" in cast(str, result.description)
     # The full report travels as metadata, not just a pointer to the mid-run
@@ -400,15 +399,7 @@ def test_coverage_check_unrouted_event_blocks_in_prod(monkeypatch):
     monkeypatch.setenv("METRICS_PROD_ENV", "prod")
     rows = [
         _record("s1", event="search", user_id="u"),
-        _record(
-            "p1",
-            payload={
-                "event": "preview",
-                "timestamp": TS,
-                "package": "pudl",
-                "table_name": "x",
-            },
-        ),
+        _record("p1", payload={"event": "some_future_event", "timestamp": TS}),
     ]
     result = _coverage(rows)
     assert result.passed is False
@@ -484,3 +475,132 @@ def test_core_eel_hole_logs_emits_coverage_check():
     result = _check(raw)
     assert result.check_name == EEL_HOLE_EVENT_COVERAGE_CHECK
     assert result.passed is True
+
+
+# --- newly-routed per-event tables ------------------------------------------
+
+
+def test_core_eel_hole_table_views_selects_preview_fields():
+    """core_eel_hole_table_views keeps only the preview page-view rows/fields."""
+    raw = pd.DataFrame(
+        [
+            _record("s", event="search", user_id="u"),
+            _record(
+                "p1",
+                payload={
+                    "event": "preview",
+                    "timestamp": TS,
+                    "package": "pudl",
+                    "tableName": "core_eia860__cooling_equipment",
+                    "partition": None,
+                },
+            ),
+            _record(
+                "p2",
+                payload={
+                    "event": "preview",
+                    "timestamp": TS,
+                    "package": "ferceqr",
+                    "tableName": "out_ferceqr__yearly_projections",
+                    "partition": "2024q1",
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_table_views(_ctx(), core_logs))
+
+    assert sorted(out["insert_id"]) == ["p1", "p2"]
+    assert set(out["table_name"]) == {
+        "core_eia860__cooling_equipment",
+        "out_ferceqr__yearly_projections",
+    }
+    row = out.loc[out.insert_id == "p2"].iloc[0]
+    assert row["package"] == "ferceqr"
+    assert row["partition"] == "2024q1"
+
+
+def test_core_eel_hole_duckdb_other_selects_matching_rows():
+    raw = pd.DataFrame(
+        [
+            _record("a", event="duckdb_preview", user_id="u"),
+            _record(
+                "b",
+                payload={
+                    "event": "duckdb_other",
+                    "timestamp": TS,
+                    "url": "/api/duckdb?perPage=42",
+                    "params": {"name": "x", "page": 1, "perPage": 42},
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_duckdb_other(_ctx(), core_logs))
+    assert list(out["insert_id"]) == ["b"]
+    assert out.iloc[0]["params_name"] == "x"
+
+
+def test_core_eel_hole_verify_email_requests_selects_matching_rows():
+    raw = pd.DataFrame(
+        [
+            _record("a", event="search", user_id="u"),
+            _record(
+                "b",
+                payload={
+                    "event": "verify-email-requested",
+                    "timestamp": TS,
+                    "userId": "u1",
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_verify_email_requests(_ctx(), core_logs))
+    assert list(out["insert_id"]) == ["b"]
+    assert out.iloc[0]["user_id"] == "u1"
+
+
+def test_core_eel_hole_verify_email_failures_selects_matching_rows():
+    raw = pd.DataFrame(
+        [
+            _record("a", event="search", user_id="u"),
+            _record(
+                "b",
+                payload={
+                    "event": "verify-email-failed",
+                    "timestamp": TS,
+                    "statusCode": 502,
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_verify_email_failures(_ctx(), core_logs))
+    assert list(out["insert_id"]) == ["b"]
+    assert out.iloc[0]["status_code"] == 502
+
+
+def test_core_eel_hole_email_verification_refresh_failures_selects_matching_rows():
+    raw = pd.DataFrame(
+        [
+            _record("a", event="search", user_id="u"),
+            _record(
+                "b",
+                payload={
+                    "event": "refresh-email-verification-failed",
+                    "timestamp": TS,
+                    "statusCode": 502,
+                    "userId": "u1",
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(
+        pd.DataFrame,
+        core_eel_hole_email_verification_refresh_failures(_ctx(), core_logs),
+    )
+    assert list(out["insert_id"]) == ["b"]
+    assert out.iloc[0]["status_code"] == 502
+    assert out.iloc[0]["user_id"] == "u1"
