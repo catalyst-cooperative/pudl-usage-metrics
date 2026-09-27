@@ -156,9 +156,16 @@ You can run the ETL via the dagit UI or the [dagster CLI](https://docs.dagster.i
 The `usage-metrics` console script wraps the production workflows:
 
 ```
-usage-metrics etl [--partition YYYY-MM-DD]   # ETL the latest (or given) partition of every job
-usage-metrics save {github,kaggle,zenodo}    # snapshot metrics from an external API into GCS
+usage-metrics etl [--partition YYYY-MM-DD]                 # ETL the latest (or given) partition of every job
+usage-metrics etl --start YYYY-MM-DD --end YYYY-MM-DD       # ETL a range of partitions, one at a time
+usage-metrics etl --job {s3,kaggle,github_partitioned,github_nonpartitioned,zenodo,eel_hole}
+                                                             # ETL just one dataset instead of everything
+usage-metrics etl --partitioned | --no-partitioned          # restrict to just the partitioned or non-partitioned jobs
+usage-metrics save {github,kaggle,zenodo}                   # snapshot metrics from an external API into GCS
 ```
+
+`--job` and `--partitioned`/`--no-partitioned` are two ways of picking which job(s) to run and can't be combined.
+`--partition`/`-p` and `--start`/`--end` are also mutually exclusive with each other.
 
 `usage-metrics etl` is what the `load-metrics` GitHub Action runs; the `save` commands run daily in `save_daily_metrics`.
 
