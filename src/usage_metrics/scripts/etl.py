@@ -16,8 +16,19 @@ import coloredlogs
 
 from usage_metrics.etl import defs
 from usage_metrics.scripts import CONTEXT_SETTINGS
+from usage_metrics.scripts.partitions import compute_partitions
 
 logger = logging.getLogger("usage_metrics")
+
+JOB_ALIASES: dict[str, str] = {
+    "s3": "s3_metrics_etl",
+    "kaggle": "kaggle_metrics_etl",
+    "github_partitioned": "github_partitioned_metrics_etl",
+    "github_nonpartitioned": "github_nonpartitioned_metrics_etl",
+    "zenodo": "zenodo_metrics_etl",
+    "eel_hole": "eel_hole_metrics_etl",
+}
+"""Short names for the per-source jobs, as accepted by ``--job``."""
 
 
 def _execute(job, **execute_kwargs) -> bool:
@@ -28,35 +39,107 @@ def _execute(job, **execute_kwargs) -> bool:
     return result.success
 
 
+def _resolve_jobs(job_alias: str | None, partitioned: bool | None):
+    """Resolve --job/--partitioned/--no-partitioned into the job(s) to run.
+
+    Exactly one of "a specific dataset" or "partitioned-ness" narrows the
+    selection -- they're two ways of expressing the same choice, so combining
+    them is rejected by the caller before this runs.
+    """
+    if job_alias:
+        return [defs.resolve_job_def(name=JOB_ALIASES[job_alias])]
+    if partitioned is True:
+        return [defs.resolve_job_def(name="all_partitioned_metrics_etl")]
+    if partitioned is False:
+        return [defs.resolve_job_def(name="all_nonpartitioned_metrics_etl")]
+    return [
+        defs.resolve_job_def(name="all_partitioned_metrics_etl"),
+        defs.resolve_job_def(name="all_nonpartitioned_metrics_etl"),
+    ]
+
+
 @click.command("etl", context_settings=CONTEXT_SETTINGS)
-@click.option("-p", "--partition", type=str, default=None)
-def etl(partition: str | None):
+@click.option(
+    "-p",
+    "--partition",
+    type=str,
+    default=None,
+    help="A single partition date (YYYY-MM-DD). Mutually exclusive with --start/--end.",
+)
+@click.option(
+    "--start", type=str, default=None, help="First partition date of a range."
+)
+@click.option("--end", type=str, default=None, help="Last partition date of a range.")
+@click.option(
+    "--job",
+    "job_alias",
+    type=click.Choice(sorted(JOB_ALIASES)),
+    default=None,
+    help="Run only this dataset's job, instead of every partitioned/non-partitioned job.",
+)
+@click.option(
+    "--partitioned/--no-partitioned",
+    "partitioned",
+    default=None,
+    help=(
+        "Restrict to only the partitioned or only the non-partitioned jobs. "
+        "Default (neither flag) runs both. Not allowed together with --job."
+    ),
+)
+def etl(
+    partition: str | None,
+    start: str | None,
+    end: str | None,
+    job_alias: str | None,
+    partitioned: bool | None,
+):
     """Load the latest partition of every metrics source to Google Cloud Storage."""
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
     coloredlogs.install(fmt=log_format, level="INFO", logger=logger)
     logger.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} storage.")
 
-    partitioned = defs.resolve_job_def(name="all_partitioned_metrics_etl")
-    nonpartitioned = defs.resolve_job_def(name="all_nonpartitioned_metrics_etl")
-
-    assert partitioned.partitions_def is not None, (
-        f"{partitioned.name} is expected to have a partitions_def."
-    )
-    partition_keys = partitioned.partitions_def.get_partition_keys()
-    if partition is None:
-        partition = max(partition_keys)
-    elif partition not in partition_keys:
-        raise click.BadParameter(
-            f"{partition!r} is not a valid partition "
-            f"(range: {partition_keys[0]}..{partition_keys[-1]})."
+    if job_alias and partitioned is not None:
+        raise click.UsageError(
+            "--job cannot be combined with --partitioned/--no-partitioned -- "
+            "they're two ways of picking which job(s) to run."
         )
-    logger.info(f"Processing partitioned data for {partition}.")
+    if partition and (start or end):
+        raise click.UsageError("--partition cannot be combined with --start/--end.")
 
-    # Run both jobs regardless of the other's outcome, then fail if either did.
-    results = {
-        partitioned.name: _execute(partitioned, partition_key=partition),
-        nonpartitioned.name: _execute(nonpartitioned),
-    }
+    try:
+        dates = compute_partitions(start or partition, end)
+    except ValueError as e:
+        raise click.BadParameter(str(e)) from e
+
+    job_defs = _resolve_jobs(job_alias, partitioned)
+    partitioned_jobs = [j for j in job_defs if j.partitions_def is not None]
+    nonpartitioned_jobs = [j for j in job_defs if j.partitions_def is None]
+
+    if dates != [""] and not partitioned_jobs:
+        raise click.UsageError(
+            "--partition/--start/--end given, but no partitioned job is selected."
+        )
+
+    results: dict[str, bool] = {}
+
+    for job in partitioned_jobs:
+        assert job.partitions_def is not None, (
+            f"{job.name} is expected to have a partitions_def."
+        )
+        partition_keys = job.partitions_def.get_partition_keys()
+        for requested in dates:
+            resolved = requested or max(partition_keys)
+            if resolved not in partition_keys:
+                raise click.BadParameter(
+                    f"{resolved!r} is not a valid partition for {job.name} "
+                    f"(range: {partition_keys[0]}..{partition_keys[-1]})."
+                )
+            logger.info(f"Processing partitioned data for {job.name} / {resolved}.")
+            results[f"{job.name}:{resolved}"] = _execute(job, partition_key=resolved)
+
+    for job in nonpartitioned_jobs:
+        results[job.name] = _execute(job)
+
     failed = [name for name, succeeded in results.items() if not succeeded]
     if failed:
         logger.error(f"Failed job(s): {', '.join(failed)}")
