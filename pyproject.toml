@@ -28,6 +28,10 @@ test = ["test"]
 [tool.pixi.dependencies]
 pandas = ">=3.1"
 pyarrow = ">=24"
+# 0.33 required for Arrow tables. conda-forge splits pandera extras into separate
+# packages (pandera-narwhals); the pyarrow extra is just the pyarrow package.
+pandera = ">=0.33"
+pandera-narwhals = ">=0.33"
 dagster = ">=1.13"
 dagster-dg-cli = ">=1.13"
 dagster-webserver = ">=1.13"
@@ -44,8 +48,6 @@ platformdirs = ">=4"
 # isn't on conda-forge. Everything else is a conda dep; see above.
 pudl-usage-metrics = { path = ".", editable = true }
 ipinfo = ">=5.0.1"
-# pyarrow support landed in pandera 0.33; not yet packaged on conda-forge.
-pandera = { version = ">=0.33.0", extras = ["pyarrow"] }
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=9"
