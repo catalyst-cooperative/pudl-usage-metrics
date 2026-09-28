@@ -27,18 +27,20 @@ default = ["default"]
 test = ["test"]
 
 [tool.pixi.dependencies]
-pandas = ">=3"
 dagster = ">=1.13"
 dagster-webserver = ">=1.13"
-pandas-gbq = ">=0.23.1"
+pandas = ">=3"
+# 0.33 required for Arrow tables. conda-forge splits pandera extras into separate
+# packages (pandera-narwhals); the pyarrow extra is just the pyarrow package.
+pandera = ">=0.33"
+pandera-narwhals = ">=0.33"
+pyarrow = ">=24"
 pydata-google-auth = ">=1.8.2"
-jupyterlab = ">=4.2.3"
 joblib = ">=1.4.2"
-matplotlib = ">=3.9.0"
 google-cloud-storage = ">=2.17"
-kaggle = ">=1.6.3"
-s3fs = ">=2025.10.0"
-polars = ">=1.43.2"
+kaggle = ">=2.2"
+s3fs = ">=2026"
+polars = ">=1.44"
 google-cloud-sdk = ">=580"
 
 [tool.pixi.pypi-dependencies]
@@ -47,14 +49,12 @@ google-cloud-sdk = ">=580"
 # happen to only be available via PyPI.
 pudl-usage-metrics = { path = ".", editable = true }
 ipinfo = ">=5.0.1"
-# pyarrow support landed in pandera 0.33; not yet packaged on conda-forge.
-pandera = { version = ">=0.33.0", extras = ["pyarrow"] }
 
 [tool.pixi.feature.test.dependencies]
 pytest = ">=9"
 coverage = ">=7"
 doc8 = ">=2"
-prek = ">=0.4.13"
+prek = ">=0.5"
 pydocstyle = ">=6.3"
 pytest-asyncio = ">=1.4"
 pytest-console-scripts = ">=1.4.1"
