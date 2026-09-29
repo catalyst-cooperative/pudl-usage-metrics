@@ -154,6 +154,9 @@ class GCSExtractor(ABC):
         )
         # Set in extract(); lets load_file() apply partition-specific handling.
         self.partition_key: str | None = None
+        # Number of source objects behind the last download, when a subclass
+        # reduces them before downloading (so it differs from the file count).
+        self.source_object_count: int | None = None
 
     @property
     def gcs_client(self) -> storage.Client:
@@ -284,6 +287,36 @@ class GCSExtractor(ABC):
                 if not data.endswith(b"\n"):
                     combined.write(b"\n")
         return dest
+
+    def build_combined_file(
+        self, context: AssetExecutionContext
+    ) -> tuple[Path, int] | None:
+        """Download the partition's blobs and concatenate them into one file.
+
+        This is ``extract`` minus the parsing, for callers that want the raw
+        combined bytes (e.g. to compact them into a single artifact).
+
+        Returns:
+            ``(combined file, number of source objects)``, or ``None`` when the
+            partition has no files.
+        """
+        self.partition_key = (
+            context.partition_key if context.has_partition_key else None
+        )
+        label = self.partition_key or self.dataset_name
+        download_dir = self.get_download_dir()
+        self.source_object_count = None
+        file_paths = self.download_gcs_blobs(context, download_dir)
+        if not file_paths:
+            context.log.warning(f"No files found for {label}.")
+            return None
+        combined = self.combine_files(file_paths, download_dir / f"{label}.combined")
+        count = (
+            self.source_object_count
+            if self.source_object_count is not None
+            else len(file_paths)
+        )
+        return combined, count
 
     def extract(self, context: AssetExecutionContext) -> pd.DataFrame:
         """Download the partition's logs from GCS and read them into one pandas DataFrame.
