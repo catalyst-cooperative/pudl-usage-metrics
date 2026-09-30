@@ -30,9 +30,12 @@ on:
 
 env:
   METRICS_PROD_ENV: "prod"
-  # Concurrent GCS blob download threads. The S3 log extract fetches >100k tiny
-  # objects per day and is latency-bound. Left at the code default (32); tune
-  # here if a run's download phase is the bottleneck.
+  # Threads (and HTTP connections) for concurrent GCS requests. The S3 log
+  # compaction uses them to run the server-side compose() calls that reduce a
+  # day's >100k tiny log objects to a few hundred, and then to download those.
+  # Compose is thousands of ~1-2 s calls and is latency-bound, so it dominates
+  # a fresh build (2.5-4.5 of ~5-7 minutes for a 137k-object day); raise this if
+  # that phase is the bottleneck. Left at the code default (32).
   GCS_DOWNLOAD_WORKERS: "32"
 
 jobs:
@@ -98,13 +101,16 @@ jobs:
     # 4-vCPU runner is the tightest resource. Downloads scale with concurrency,
     # not cores, so 8 vCPUs / 32 GB is plenty.
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    # Fast-fail: a healthy run finishes in well under an hour. This applies per
-    # matrix job (i.e. per partition), not to the matrix as a whole -- each
-    # partition gets its own fresh 60-minute budget, so a month-long backfill
-    # (~30 independent jobs) is no different from this job's perspective than a
-    # single day. If a run regresses to multi-hour, kill it early instead of
-    # burning the full 6-hour default.
-    timeout-minutes: 60
+    # Fast-fail: a healthy run finishes in minutes. Measured for the S3 job, a
+    # fresh partition of ~137k log objects took 5-7 minutes end to end (the
+    # heaviest day seen, ~176k objects, is estimated at ~10), and re-running an
+    # already-compacted partition took ~2. 30 minutes leaves about 3x headroom.
+    # This applies per matrix job (i.e. per partition), not to the matrix as a
+    # whole -- each partition gets its own fresh 30-minute budget, so a
+    # month-long backfill (~30 independent jobs) is no different from this
+    # job's perspective than a single day. If a run regresses to much longer,
+    # kill it early instead of burning the full 6-hour default.
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
