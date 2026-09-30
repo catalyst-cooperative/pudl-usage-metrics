@@ -63,17 +63,17 @@ concurrency in local testing, so that is the default. Override per extractor via
 the ``download_workers`` argument, or globally via the ``GCS_DOWNLOAD_WORKERS``
 env var."""
 
-DEFAULT_COMPOSE_WORKERS = 32
+DEFAULT_COMPOSE_WORKERS = 128
 """Default number of threads issuing server-side ``compose()`` calls concurrently.
 
-Compaction reduces a day's >100k tiny objects with thousands of ``compose()``
-calls. Measured at 32 threads on a 136,824-object day (4,276 calls in the first
-round), that round took 2m31s and 4m30s in two runs, while downloading,
-combining, compressing and uploading the resulting ~134 objects together took
-about 10 s. It is a separate setting from ``DEFAULT_DOWNLOAD_WORKERS`` so the two
-phases can be tuned independently. Whether more threads make the compose phase
-faster has not been measured. Override per extractor via the ``compose_workers``
-argument, or globally via the ``GCS_COMPOSE_WORKERS`` env var."""
+Compaction reduces hundreds of thousands of tiny objects to a few larger objects using
+thousands of GCS server-side ``compose()`` calls. This constant controls how many of
+those calls can be running in parallel. It is a separate setting from
+``DEFAULT_DOWNLOAD_WORKERS`` because object composition is not bounded by our VM
+resources, and is by far the slowest step in the log compaction. It can be overridden
+with an explicit compose_workers argument, or globally via the ``GCS_COMPOSE_WORKERS``
+env var.
+"""
 
 
 @contextmanager
