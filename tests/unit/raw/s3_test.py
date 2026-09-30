@@ -9,6 +9,7 @@ import polars as pl
 import pytest
 from dagster import MaterializeResult, build_asset_context
 
+from usage_metrics.raw import extract
 from usage_metrics.raw import s3 as s3_module
 from usage_metrics.raw.s3 import (
     COMPACTED_BUCKET,
@@ -37,6 +38,32 @@ def test_filter_blobs_keeps_only_matching_date(filtered_blob_names):
         ["2024-06-15-00-00-00-a", "2024-06-16-00-00-00-b", "2024-06-15"],
     )
     assert kept == ["2024-06-15", "2024-06-15-00-00-00-a"]
+
+
+# --- compose / download worker counts ------------------------------------------
+
+
+def test_compose_and_download_use_their_own_worker_counts(
+    make_client, partition_context, download_dir, monkeypatch
+):
+    """compose() calls run on compose_workers threads; downloads on download_workers."""
+    seen = {}
+    monkeypatch.setattr(
+        s3_module,
+        "compose_day",
+        lambda bucket, prefix, key, workers: (
+            seen.setdefault("compose", workers) and ([], 0)
+        ),
+    )
+    monkeypatch.setattr(
+        extract.transfer_manager,
+        "download_many",
+        lambda pairs, **kwargs: seen.setdefault("download", kwargs["max_workers"]),
+    )
+    client = make_client({BUCKET: {}})
+    ext = S3Extractor(client=client, compose_workers=7, download_workers=3)
+    ext.download_gcs_blobs(partition_context(DAY), download_dir)
+    assert seen == {"compose": 7, "download": 3}
 
 
 # --- load_file -----------------------------------------------------------
