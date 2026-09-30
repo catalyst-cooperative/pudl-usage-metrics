@@ -1,6 +1,6 @@
 """Tests for the S3 log extractor."""
 
-import gzip
+from compression import zstd
 from datetime import UTC, datetime
 from typing import cast
 
@@ -18,8 +18,8 @@ from usage_metrics.raw.s3 import (
     _drop_lines_with_embedded_quotes,
     compacted_path,
     compacted_s3_logs,
-    gzip_with_guard,
     raw_s3_logs,
+    zstd_with_guard,
 )
 
 BUCKET = "pudl-s3-logs.catalyst.coop"
@@ -189,12 +189,12 @@ def test_load_file_empty_raises_no_data_error(tmp_path):
         S3Extractor().load_file(path)
 
 
-# --- gzipped input to load_file -----------------------------------------------
+# --- compressed input to load_file -----------------------------------------------
 
 
-def _gzipped(tmp_path, data: bytes):
-    path = tmp_path / "day.log.gz"
-    path.write_bytes(gzip.compress(data))
+def _compressed(tmp_path, data: bytes):
+    path = tmp_path / "day.log.zst"
+    path.write_bytes(zstd.compress(data))
     return path
 
 
@@ -202,30 +202,30 @@ def _gzipped(tmp_path, data: bytes):
     ("subdir", "n_columns"),
     [("normal_v1", 27), ("normal_v2", 28)],
 )
-def test_load_file_reads_gzip_same_as_plain(
+def test_load_file_reads_zstd_same_as_plain(
     tmp_path, s3_fixture_blobs, subdir, n_columns
 ):
-    """A gzipped combined file parses identically to the plain one."""
+    """A zstd-compressed combined file parses identically to the plain one."""
     data = b"".join(s3_fixture_blobs(subdir).values())
     plain = tmp_path / "plain"
     plain.write_bytes(data)
     ext = S3Extractor()
     expected = ext.load_file(plain)
-    actual = ext.load_file(_gzipped(tmp_path, data))
+    actual = ext.load_file(_compressed(tmp_path, data))
     assert actual.width == n_columns
     assert actual.equals(expected)
 
 
-def test_load_file_ragged_partition_gzip_forces_28_columns(tmp_path, s3_fixture_blobs):
-    """The 2026-02-25 ragged-day workaround also works on gzipped input."""
+def test_load_file_ragged_partition_zstd_forces_28_columns(tmp_path, s3_fixture_blobs):
+    """The 2026-02-25 ragged-day workaround also works on compressed input."""
     ext = S3Extractor()
     ext.partition_key = "2026-02-25"
-    path = _gzipped(tmp_path, b"".join(s3_fixture_blobs("ragged").values()))
+    path = _compressed(tmp_path, b"".join(s3_fixture_blobs("ragged").values()))
     assert ext.load_file(path).width == 28
 
 
-def test_load_file_gzip_drops_line_with_embedded_quotes(tmp_path):
-    """The embedded-quote fallback decompresses ``.gz`` input before cleaning."""
+def test_load_file_zstd_drops_line_with_embedded_quotes(tmp_path):
+    """The embedded-quote fallback decompresses ``.zst`` input before cleaning."""
     bad_line = (
         "owner bkt [19/Sep/2026:00:00:00 +0000] 198.51.100.1 - RID REST.GET.OBJECT k "
         '"GET /k HTTP/1.1" 200 - 100 200 5 4 "-" '
@@ -237,55 +237,55 @@ def test_load_file_gzip_drops_line_with_embedded_quotes(tmp_path):
         '"GET /k2 HTTP/1.1" 200 - 100 200 5 4 "-" "Mozilla/5.0 (X11; Linux)" '
         "- hid2 SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
     )
-    df = S3Extractor().load_file(_gzipped(tmp_path, (bad_line + good_line).encode()))
+    df = S3Extractor().load_file(_compressed(tmp_path, (bad_line + good_line).encode()))
     assert df.height == 1
     assert df.row(0)[4] == "198.51.100.2"
 
 
-# --- gzip_with_guard -----------------------------------------------------------
+# --- zstd_with_guard -----------------------------------------------------------
 
 REC_A = b"owner bkt [15/Jun/2024:00:00:00 +0000] 1.1.1.1 owner RID1 op k\n"
 REC_B = b"owner bkt [15/Jun/2024:00:00:01 +0000] 2.2.2.2 - RID2 op k\n"
 
 
-def test_gzip_with_guard_round_trips(tmp_path):
-    """Well-formed records are gzipped unchanged, and the line count returned."""
+def test_zstd_with_guard_round_trips(tmp_path):
+    """Well-formed records are compressed unchanged, and the line count returned."""
     src = tmp_path / "src"
     src.write_bytes(REC_A + REC_B)
-    dest = tmp_path / "dest.gz"
-    assert gzip_with_guard(src, dest) == 2
-    assert gzip.decompress(dest.read_bytes()) == REC_A + REC_B
+    dest = tmp_path / "dest.zst"
+    assert zstd_with_guard(src, dest) == 2
+    assert zstd.decompress(dest.read_bytes()) == REC_A + REC_B
 
 
-def test_gzip_with_guard_allows_owner_id_elsewhere_in_a_record(tmp_path):
+def test_zstd_with_guard_allows_owner_id_elsewhere_in_a_record(tmp_path):
     """The bucket owner can legitimately be the requester (REC_A) -- not a fusion."""
     src = tmp_path / "src"
     src.write_bytes(REC_A)
-    assert gzip_with_guard(src, tmp_path / "dest.gz") == 1
+    assert zstd_with_guard(src, tmp_path / "dest.zst") == 1
 
 
-def test_gzip_with_guard_detects_fused_records(tmp_path):
+def test_zstd_with_guard_detects_fused_records(tmp_path):
     """Two records on one line (a missing newline before compose) are rejected."""
     src = tmp_path / "src"
     src.write_bytes(REC_A + REC_B.rstrip(b"\n") + REC_A + REC_B)
     with pytest.raises(FusedRecordsError, match="Line 2"):
-        gzip_with_guard(src, tmp_path / "dest.gz")
+        zstd_with_guard(src, tmp_path / "dest.zst")
 
 
-def test_gzip_with_guard_can_be_disabled(tmp_path):
+def test_zstd_with_guard_can_be_disabled(tmp_path):
     """``guard=False`` skips the check for input that is already newline-padded."""
     src = tmp_path / "src"
     src.write_bytes(b"whatever\nlines\n")
-    assert gzip_with_guard(src, tmp_path / "dest.gz", guard=False) == 2
+    assert zstd_with_guard(src, tmp_path / "dest.zst", guard=False) == 2
 
 
-def test_gzip_with_guard_empty_file(tmp_path):
+def test_zstd_with_guard_empty_file(tmp_path):
     """An empty file compresses to an empty stream with zero lines."""
     src = tmp_path / "src"
     src.write_bytes(b"")
-    dest = tmp_path / "dest.gz"
-    assert gzip_with_guard(src, dest) == 0
-    assert gzip.decompress(dest.read_bytes()) == b""
+    dest = tmp_path / "dest.zst"
+    assert zstd_with_guard(src, dest) == 0
+    assert zstd.decompress(dest.read_bytes()) == b""
 
 
 # --- compacted_s3_logs / raw_s3_logs assets -------------------------------------
@@ -313,7 +313,7 @@ def _artifact(client, key=DAY):
 
 def _put_artifact(client, data: bytes, count: int, key=DAY):
     blob = client.bucket(COMPACTED_BUCKET).blob(compacted_path(key))
-    blob._data = gzip.compress(data)
+    blob._data = zstd.compress(data)
     blob.metadata = {"source_object_count": str(count)}
     blob._store()
 
@@ -330,15 +330,15 @@ def _raw(key=DAY) -> pd.DataFrame:
 
 
 def test_compacted_builds_artifact(s3_client, s3_fixture_blobs):
-    """No artifact yet: compose, download, gzip, upload with metadata."""
+    """No artifact yet: compose, download, compress, upload with metadata."""
     blobs = s3_fixture_blobs("normal_v1")
     client = s3_client(blobs)
     metadata = _build()
     artifact = _artifact(client)
-    assert gzip.decompress(artifact._data) == b"".join(blobs.values())
+    assert zstd.decompress(artifact._data) == b"".join(blobs.values())
     assert artifact.metadata["source_object_count"] == str(len(blobs))
     assert "built_at" in artifact.metadata
-    assert artifact.content_type == "application/gzip"
+    assert artifact.content_type == "application/zstd"
     assert metadata["action"] == "built"
     assert metadata["source_object_count"] == len(blobs)
     assert client.bucket(BUCKET).compose_calls  # reduced server-side
@@ -360,7 +360,7 @@ def test_compacted_rebuild_ignores_existing_artifact(s3_client):
     _put_artifact(client, REC_A, 1)
     metadata = _build(rebuild=True)
     assert metadata["action"] == "built"
-    assert gzip.decompress(_artifact(client)._data) == REC_A + REC_B
+    assert zstd.decompress(_artifact(client)._data) == REC_A + REC_B
     assert _artifact(client).metadata["source_object_count"] == "2"
 
 
@@ -381,7 +381,7 @@ def test_compacted_empty_day_records_an_empty_artifact(s3_client):
     metadata = _build()
     assert metadata["action"] == "no-data"
     assert _artifact(client).metadata["source_object_count"] == "0"
-    assert gzip.decompress(_artifact(client)._data) == b""
+    assert zstd.decompress(_artifact(client)._data) == b""
 
 
 def test_compacted_falls_back_when_records_are_fused(s3_client):
@@ -393,7 +393,7 @@ def test_compacted_falls_back_when_records_are_fused(s3_client):
     }
     client = s3_client(blobs)
     metadata = _build()
-    assert gzip.decompress(_artifact(client)._data) == REC_A + REC_B
+    assert zstd.decompress(_artifact(client)._data) == REC_A + REC_B
     assert metadata["source_object_count"] == 2
 
 
