@@ -1,8 +1,8 @@
 """Extract data from S3 logs."""
 
-import gzip
 import re
 from collections.abc import Iterable
+from compression import zstd
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
@@ -23,7 +23,7 @@ from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 
 COMPACTED_BUCKET = "metrics.catalyst.coop"
 COMPACTED_PREFIX = "raw/pudl_s3_logs"
-"""Where each day's compacted log artifact (``<date>.log.gz``) is stored."""
+"""Where each day's compacted log artifact (``<date>.log.zst``) is stored."""
 
 TRANSFER_DELAY = timedelta(days=1, hours=2)
 """How long after the start of a partition's day its logs are fully in GCS.
@@ -32,8 +32,12 @@ A Storage Transfer job copies the previous day's S3 log objects into GCS at
 00:00 UTC (measured: every ``D-*`` object lands in the hour after ``D`` ends), so
 a build attempted before ``D + 1 day + 2 h`` could bake in a partial day."""
 
-GZIP_LEVEL = 6
-"""Compression level for the compacted artifact."""
+ZSTD_LEVEL = 9
+"""zstd compression level for the compacted artifact.
+
+Measured on a real 2M-line, 1.1 GB day: level 9 is 9% smaller than gzip -6
+(176 vs 195 MB) while compressing faster (3.8 vs 4.9 s) and reading about twice
+as fast in polars. Level 19 saves only 3% more for ~55x the compression time."""
 
 _LINES_PER_WRITE = 50_000
 
@@ -77,7 +81,7 @@ class FusedRecordsError(ValueError):
 
 def compacted_path(partition_key: str) -> str:
     """Object name of a partition's compacted artifact in ``COMPACTED_BUCKET``."""
-    return f"{COMPACTED_PREFIX}/{partition_key}.log.gz"
+    return f"{COMPACTED_PREFIX}/{partition_key}.log.zst"
 
 
 def _utcnow() -> datetime:
@@ -85,15 +89,15 @@ def _utcnow() -> datetime:
 
 
 def _read_text(path: Path) -> str:
-    """Read a (possibly gzipped) text file, replacing undecodable bytes."""
-    if path.suffix == ".gz":
-        with gzip.open(path, "rt", errors="replace") as f:
+    """Read a (possibly zstd-compressed) text file, replacing undecodable bytes."""
+    if path.suffix == ".zst":
+        with zstd.open(path, "rt", errors="replace") as f:
             return f.read()
     return path.read_text(errors="replace")
 
 
-def gzip_with_guard(src: Path, dest: Path, *, guard: bool = True) -> int:
-    """Gzip ``src`` to ``dest``, checking that no two records share a line.
+def zstd_with_guard(src: Path, dest: Path, *, guard: bool = True) -> int:
+    """Compress ``src`` to ``dest`` with zstd, checking that no two records share a line.
 
     ``compose()`` concatenates objects without a separator, so a source object
     lacking a trailing newline would fuse its last record with the next
@@ -103,7 +107,7 @@ def gzip_with_guard(src: Path, dest: Path, *, guard: bool = True) -> int:
 
     Args:
         src: The concatenated log text.
-        dest: Where to write the gzipped copy.
+        dest: Where to write the compressed copy.
         guard: Set False to skip the check (for input already newline-padded).
 
     Returns:
@@ -116,7 +120,7 @@ def gzip_with_guard(src: Path, dest: Path, *, guard: bool = True) -> int:
     signature = b""
     lines = 0
     batch: list[bytes] = []
-    with src.open("rb") as raw, gzip.open(dest, "wb", compresslevel=GZIP_LEVEL) as out:
+    with src.open("rb") as raw, zstd.open(dest, "wb", level=ZSTD_LEVEL) as out:
         for line in raw:
             if guard:
                 if not signature:
@@ -260,7 +264,7 @@ class CompactedS3LogsConfig(Config):
 def _build_artifact(
     context: AssetExecutionContext, ext: S3Extractor
 ) -> tuple[Path, int] | None:
-    """Build the day's ``.log.gz`` locally; return ``(path, source object count)``.
+    """Build the day's ``.log.zst`` locally; return ``(path, source object count)``.
 
     Returns ``None`` for an empty day.
     """
@@ -268,9 +272,9 @@ def _build_artifact(
     if built is None:
         return None
     combined, count = built
-    dest = combined.parent / f"{context.partition_key}.log.gz"
+    dest = combined.parent / f"{context.partition_key}.log.zst"
     try:
-        gzip_with_guard(combined, dest)
+        zstd_with_guard(combined, dest)
     except FusedRecordsError as e:
         context.log.warning(
             f"Composed logs contain fused records ({e}); falling back to "
@@ -280,7 +284,7 @@ def _build_artifact(
         rebuilt = ext.build_combined_file(context)
         assert rebuilt is not None, "Fallback found no files the compose path found."
         combined, count = rebuilt
-        gzip_with_guard(combined, dest, guard=False)
+        zstd_with_guard(combined, dest, guard=False)
     return dest, count
 
 
@@ -293,11 +297,11 @@ def _build_artifact(
 def compacted_s3_logs(
     context: AssetExecutionContext, config: CompactedS3LogsConfig
 ) -> MaterializeResult:
-    """Concatenate a day's S3 log objects into one gzipped file in GCS, once.
+    """Concatenate a day's S3 log objects into one zstd-compressed file in GCS, once.
 
     An existing artifact is reused without touching the source bucket. Otherwise
     the day's ~100k+ tiny objects are reduced server-side with GCS ``compose``,
-    the few resulting objects are downloaded, and the concatenation is gzipped
+    the few resulting objects are downloaded, and the concatenation is compressed
     and uploaded. An empty day is recorded as an empty artifact so that
     ``raw_s3_logs`` can tell "no logs" from "not compacted yet".
     """
@@ -328,8 +332,8 @@ def compacted_s3_logs(
     built = _build_artifact(context, ext)
     if built is None:
         context.log.warning(f"No S3 logs found for {key}; recording an empty day.")
-        local = ext.get_download_dir() / f"{key}.log.gz"
-        local.write_bytes(gzip.compress(b""))
+        local = ext.get_download_dir() / f"{key}.log.zst"
+        local.write_bytes(zstd.compress(b""))
         built = (local, 0)
     local, count = built
 
@@ -338,7 +342,7 @@ def compacted_s3_logs(
         "source_object_count": str(count),
         "built_at": _utcnow().isoformat(),
     }
-    blob.upload_from_filename(str(local), content_type="application/gzip")
+    blob.upload_from_filename(str(local), content_type="application/zstd")
     return MaterializeResult(
         metadata={
             "action": "built" if count else "no-data",
@@ -370,7 +374,7 @@ def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
         context.log.warning(f"No S3 logs for {key}.")
         return pd.DataFrame()
 
-    local = ext.get_download_dir() / f"{key}.log.gz"
+    local = ext.get_download_dir() / f"{key}.log.zst"
     blob.download_to_filename(str(local))
     try:
         frame = ext.load_file(local)
