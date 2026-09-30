@@ -28,7 +28,8 @@ TRANSFER_DELAY = timedelta(days=1, hours=2)
 """How long after the start of a partition's day its logs are fully in GCS.
 
 A Storage Transfer job copies the previous day's S3 log objects into GCS at
-00:00 UTC (measured: every ``D-*`` object lands in the hour after ``D`` ends), so
+00:00 UTC (measured on four days, ~328k objects: all had arrived by 01:00 UTC on
+the following day), so
 a build attempted before ``D + 1 day + 2 h`` could bake in a partial day."""
 
 ZSTD_LEVEL = 9
@@ -169,7 +170,7 @@ class S3Extractor(GCSExtractor):
             bucket,
             self.get_blob_prefix(context),
             context.partition_key,
-            self.download_workers,
+            self.compose_workers,
         )
         context.log.info(
             f"Composed {self.source_object_count:,} objects from {self.bucket_name} "

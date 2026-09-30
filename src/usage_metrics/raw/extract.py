@@ -62,6 +62,18 @@ concurrency in local testing, so that is the default. Override per extractor via
 the ``download_workers`` argument, or globally via the ``GCS_DOWNLOAD_WORKERS``
 env var."""
 
+DEFAULT_COMPOSE_WORKERS = 32
+"""Default number of threads issuing server-side ``compose()`` calls concurrently.
+
+Compaction reduces a day's >100k tiny objects with thousands of ``compose()``
+calls. Measured at 32 threads on a 136,824-object day (4,276 calls in the first
+round), that round took 2m31s and 4m30s in two runs, while downloading,
+combining, compressing and uploading the resulting ~134 objects together took
+about 10 s. It is a separate setting from ``DEFAULT_DOWNLOAD_WORKERS`` so the two
+phases can be tuned independently. Whether more threads make the compose phase
+faster has not been measured. Override per extractor via the ``compose_workers``
+argument, or globally via the ``GCS_COMPOSE_WORKERS`` env var."""
+
 
 @contextmanager
 def log_download_progress(
@@ -131,6 +143,7 @@ class GCSExtractor(ABC):
         *args,
         client: storage.Client | None = None,
         download_workers: int | None = None,
+        compose_workers: int | None = None,
         **kwargs,
     ):
         """Create new extractor object and load metadata.
@@ -142,6 +155,9 @@ class GCSExtractor(ABC):
             download_workers: Number of concurrent blob-download threads. Defaults
                 to the ``GCS_DOWNLOAD_WORKERS`` env var, then
                 ``DEFAULT_DOWNLOAD_WORKERS``.
+            compose_workers: Number of concurrent server-side ``compose()``
+                threads. Defaults to the ``GCS_COMPOSE_WORKERS`` env var, then
+                ``DEFAULT_COMPOSE_WORKERS``.
         """
         if not self.dataset_name:
             raise NotImplementedError("self.dataset_name must be set.")
@@ -150,6 +166,9 @@ class GCSExtractor(ABC):
         self._client = client
         self.download_workers = download_workers or int(
             os.environ.get("GCS_DOWNLOAD_WORKERS", DEFAULT_DOWNLOAD_WORKERS)
+        )
+        self.compose_workers = compose_workers or int(
+            os.environ.get("GCS_COMPOSE_WORKERS", DEFAULT_COMPOSE_WORKERS)
         )
         # Set in extract(); lets load_file() apply partition-specific handling.
         self.partition_key: str | None = None
@@ -161,15 +180,16 @@ class GCSExtractor(ABC):
     def gcs_client(self) -> storage.Client:
         """The GCS client, created on first use if one wasn't injected.
 
-        The HTTP connection pool is sized to ``download_workers`` so the
-        concurrent download threads don't contend on the default 10-connection
-        pool.
+        The HTTP connection pool is sized to the larger of ``download_workers``
+        and ``compose_workers`` so the concurrent threads don't contend on the
+        default 10-connection pool.
         """
         if self._client is None:
             client = storage.Client()
+            pool_size = max(self.download_workers, self.compose_workers)
             adapter = requests.adapters.HTTPAdapter(
-                pool_connections=self.download_workers,
-                pool_maxsize=self.download_workers,
+                pool_connections=pool_size,
+                pool_maxsize=pool_size,
             )
             client._http.mount("https://", adapter)
             self._client = client
