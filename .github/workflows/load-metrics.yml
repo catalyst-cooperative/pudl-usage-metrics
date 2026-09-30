@@ -30,7 +30,8 @@ on:
 
 env:
   METRICS_PROD_ENV: "prod"
-  # Concurrent GCS blob download threads for latency-bound S3 log downloads
+  # Threads (and HTTP connections) for concurrent GCS requests: the S3 log compaction's
+  # server-side compose() calls and the downloads that follow. Default is 32.
   GCS_DOWNLOAD_WORKERS: "32"
 
 jobs:
@@ -89,10 +90,13 @@ jobs:
     needs: compute-partitions
     # Larger third-party runner lets us parallelize the S3 log extraction
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    # A healthy run finishes in well under an hour. This applies per matrix job (i.e.
-    # per partition), not to the matrix as a whole -- each partition gets its own fresh
-    # 60-minute budget and doesn't burn a whole 6-hour timeout.
-    timeout-minutes: 60
+    # A healthy run finishes in minutes. Measured for the S3 job, a fresh partition of
+    # ~137k log objects took 5-7 minutes end to end (the heaviest day seen, ~176k
+    # objects, is estimated at ~10) and re-running an already-compacted one took ~2,
+    # so 30 minutes leaves about 3x headroom. This applies per matrix job (i.e. per
+    # partition), not to the matrix as a whole, and keeps a regression from burning
+    # the full 6-hour default.
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
