@@ -27,11 +27,10 @@ PARQUET_COMPRESSION_LEVEL = 3
 """Codec and level for every Parquet file this repo writes.
 
 Measured on a real 2.0M-row ``core_s3_logs`` partition: zstd level 3 is 30%
-smaller than snappy (208 vs 296 MB) for +0.6 s of write time and a negligible
-read-time difference, and the smaller upload more than pays for the compression.
-Level 9 saves only 3% more for ~2x the write time. Readers (pandas, pyarrow,
-DuckDB) decompress it transparently, so existing snappy files stay readable
-until their partition is rewritten."""
+smaller than snappy (208 vs 296 MB); writing took 1.6 s vs 1.0 s and reading
+with pyarrow 0.14 s vs 0.08 s. Level 9 was a further 4% smaller (199 MB) with a
+3.4 s write. pandas and pyarrow read zstd files back (tested), and existing snappy
+files stay readable (tested) until their partition is rewritten."""
 
 
 def _parquet_path(

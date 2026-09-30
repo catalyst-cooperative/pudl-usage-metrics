@@ -255,21 +255,48 @@ def test_download_workers_resolution(monkeypatch):
     assert LineExtractor(download_workers=3).download_workers == 3
 
 
+def test_compose_workers_resolution(monkeypatch):
+    """compose_workers: explicit arg > env var > default, independent of downloads."""
+    monkeypatch.delenv("GCS_COMPOSE_WORKERS", raising=False)
+    monkeypatch.setenv("GCS_DOWNLOAD_WORKERS", "9")
+    assert LineExtractor().compose_workers == extract.DEFAULT_COMPOSE_WORKERS
+    monkeypatch.setenv("GCS_COMPOSE_WORKERS", "128")
+    ext = LineExtractor()
+    assert ext.compose_workers == 128
+    assert ext.download_workers == 9  # the two settings don't affect each other
+    assert LineExtractor(compose_workers=3).compose_workers == 3
+
+
+def _pool_size_for(monkeypatch, **kwargs) -> int:
+    """Create a client via ``gcs_client`` and return its mounted pool size."""
+    fake = mock.Mock()
+    monkeypatch.setattr(extract.storage, "Client", lambda *a, **k: fake)
+    assert LineExtractor(**kwargs).gcs_client is fake
+    fake._http.mount.assert_called_once()
+    assert fake._http.mount.call_args.args[0] == "https://"
+    return fake._http.mount.call_args.args[1]._pool_maxsize
+
+
 def test_gcs_client_is_lazy_and_sizes_the_pool(monkeypatch):
     """No client until first use; then a sized HTTPS adapter is mounted."""
-    fake = mock.Mock()
     calls = []
+    fake = mock.Mock()
     monkeypatch.setattr(
         extract.storage, "Client", lambda *a, **k: calls.append(1) or fake
     )
-    ext = LineExtractor(download_workers=17)
+    ext = LineExtractor(download_workers=17, compose_workers=5)
     assert calls == []
     assert ext.gcs_client is fake
     assert calls == [1]
     fake._http.mount.assert_called_once()
     assert fake._http.mount.call_args.args[0] == "https://"
-    adapter = fake._http.mount.call_args.args[1]
-    assert adapter._pool_maxsize == 17
+    assert fake._http.mount.call_args.args[1]._pool_maxsize == 17
+
+
+def test_pool_is_sized_to_the_larger_worker_count(monkeypatch):
+    """Whichever phase has more threads decides the connection pool size."""
+    assert _pool_size_for(monkeypatch, download_workers=8, compose_workers=128) == 128
+    assert _pool_size_for(monkeypatch, download_workers=64, compose_workers=4) == 64
 
 
 # --- log_download_progress -------------------------------------------------
