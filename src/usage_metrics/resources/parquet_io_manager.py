@@ -7,7 +7,6 @@ https://github.com/dagster-io/dagster/blob/master/examples/project_fully_feature
 import os
 
 import pandas as pd
-import pyarrow as pa
 from dagster import (
     ConfigurableIOManager,
     Field,
@@ -18,16 +17,7 @@ from dagster import (
 from upath import UPath
 
 from usage_metrics.helpers import get_table_name_from_context
-from usage_metrics.models import usage_metrics_schemas
-
-ARROW_TO_PANDAS: dict[pa.DataType, str] = {
-    pa.bool_(): "bool",
-    pa.int64(): "Int64",
-    pa.float64(): "float64",
-    pa.string(): "string",
-    pa.timestamp("s"): "datetime64[s]",
-}
-"""Type map so we can derive pandas dtypes from the pyarrow schema."""
+from usage_metrics.models import ARROW_TO_PANDAS, usage_metrics_schemas
 
 
 class PartitionedParquetIOManager(ConfigurableIOManager):

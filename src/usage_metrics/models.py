@@ -11,9 +11,30 @@ import json
 
 import pyarrow as pa
 
+ARROW_TO_PANDAS: dict[pa.DataType, str] = {
+    pa.bool_(): "boolean",
+    pa.int64(): "Int64",
+    pa.float64(): "float64",
+    pa.string(): "string",
+    pa.timestamp("s"): "datetime64[s]",
+}
+"""The only pyarrow types schemas may use, and the pandas dtype each maps to.
+
+The Parquet IO manager uses this to cast dataframes before writing.
+"""
+
 
 def _field(name: str, datatype: pa.DataType, comment: str | None = None) -> pa.Field:
-    """Build a pa.field with an optional doc comment stored as field metadata."""
+    """Build a pa.field with an optional doc comment stored as field metadata.
+
+    Raises:
+        ValueError: if ``datatype`` has no entry in ARROW_TO_PANDAS.
+    """
+    if datatype not in ARROW_TO_PANDAS:
+        raise ValueError(
+            f"Field {name!r} has type {datatype}, which has no pandas dtype in "
+            f"ARROW_TO_PANDAS. Supported types: {list(ARROW_TO_PANDAS)}"
+        )
     metadata = {"comment": comment} if comment else None
     return pa.field(name, datatype, metadata=metadata)
 
