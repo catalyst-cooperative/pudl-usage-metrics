@@ -128,7 +128,7 @@ _PARAMS_WITH_FILTERS = {
 
 _IS_EVENT = [
     pytest.param({"event": "search", "timestamp": TS}, id="minimal-search"),
-    pytest.param({"event": "hit", "timestamp": TS, "score": None}, id="hit-null-score"),
+    pytest.param({"event": "hit", "timestamp": TS}, id="dead-hit-event-still-parses"),
     pytest.param(
         {"event": "privacy-policy", "timestamp": TS, "accepted": True}, id="privacy"
     ),
@@ -236,7 +236,7 @@ def test_handles_partition_with_no_search_filters():
     raw = pd.DataFrame(
         [
             _record("a", event="search", user_id="user-1"),
-            _record("b", event="hit", user_id="user-1"),
+            _record("b", event="duckdb_csv", user_id="user-1"),
         ]
     )
 
@@ -409,7 +409,7 @@ def test_coverage_check_unrouted_event_blocks_in_prod(monkeypatch):
 def test_coverage_check_errors_when_slug_events_fail_to_parse():
     """Slug events that can't be parsed at all -> ERROR (blocking)."""
     rows = [
-        *(_record(f"ok{i}", event="hit", user_id="u") for i in range(20)),
+        *(_record(f"ok{i}", event="duckdb_csv", user_id="u") for i in range(20)),
         *(
             _record(f"bad{i}", payload={"event": "search", "timestamp": "not-a-date"})
             for i in range(20)
@@ -459,7 +459,7 @@ def test_coverage_report_shows_malformed_events():
     report = _coverage_report(
         "2026-06-16",
         total=10,
-        routed=Counter({"hit": 9}),
+        routed=Counter({"duckdb_csv": 9}),
         unrouted={},
         malformed=[{"event": "search", "timestamp": "not-a-date"}],
     )
