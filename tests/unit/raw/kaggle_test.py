@@ -3,18 +3,13 @@
 import json
 
 import pytest
-from dagster import build_asset_context
 
 from usage_metrics.raw.kaggle import KaggleExtractor
 
 BUCKET = "pudl-usage-metrics-archives.catalyst.coop"
 
 
-def _ctx(partition_key: str):
-    return build_asset_context(partition_key=partition_key)
-
-
-def test_filter_blobs_matches_exact_daily_file(make_client):
+def test_filter_blobs_matches_exact_daily_file(make_client, partition_context):
     """filter_blobs keeps only the single ``kaggle/<date>.json`` object."""
     blobs = {
         "kaggle/2025-10-01.json": b"{}",
@@ -24,7 +19,9 @@ def test_filter_blobs_matches_exact_daily_file(make_client):
     client = make_client({BUCKET: blobs})
     ext = KaggleExtractor(client=client)
     listed = client.bucket(BUCKET).list_blobs()
-    kept = [blob.name for blob in ext.filter_blobs(_ctx("2025-10-01"), listed)]
+    kept = [
+        blob.name for blob in ext.filter_blobs(partition_context("2025-10-01"), listed)
+    ]
     assert kept == ["kaggle/2025-10-01.json"]
 
 
