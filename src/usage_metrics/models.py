@@ -235,8 +235,16 @@ out_s3_logs = _table_schema(
             datatype=pa.timestamp("s"),
             comment="The time at which the request was received; these dates and times are in Coordinated Universal Time (UTC).",
         ),
-        _field(name="table", datatype=pa.string()),
-        _field(name="version", datatype=pa.string()),
+        _field(
+            name="table",
+            datatype=pa.string(),
+            comment="The PUDL data table accessed by a user.",
+        ),
+        _field(
+            name="version",
+            datatype=pa.string(),
+            comment="The version of the PUDL database (e.g., stable, nightly, 2026.1) accessed by a user.",
+        ),
         _field(
             name="usage_type",
             datatype=pa.string(),
@@ -396,8 +404,16 @@ out_s3_daily_summary_by_table = _table_schema(
             datatype=pa.timestamp("s"),
             comment="The day for which metrics are reported.",
         ),
-        _field(name="table", datatype=pa.string()),
-        _field(name="version", datatype=pa.string()),
+        _field(
+            name="table",
+            datatype=pa.string(),
+            comment="The PUDL data table accessed by a user.",
+        ),
+        _field(
+            name="version",
+            datatype=pa.string(),
+            comment="The version of the PUDL database (e.g., stable, nightly, 2026.1) accessed by a user.",
+        ),
         _field(
             name="usage_type",
             datatype=pa.string(),
@@ -432,8 +448,16 @@ out_s3_daily_summary_by_user = _table_schema(
             datatype=pa.timestamp("s"),
             comment="The day for which metrics are reported.",
         ),
-        _field(name="table", datatype=pa.string()),
-        _field(name="version", datatype=pa.string()),
+        _field(
+            name="table",
+            datatype=pa.string(),
+            comment="The PUDL data table accessed by a user.",
+        ),
+        _field(
+            name="version",
+            datatype=pa.string(),
+            comment="The version of the PUDL database (e.g., stable, nightly, 2026.1) accessed by a user.",
+        ),
         _field(
             name="usage_type",
             datatype=pa.string(),
