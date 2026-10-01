@@ -46,6 +46,15 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
                 Create a schema for it in usage_metrics.models."""
             schema = usage_metrics_schemas[table_name]
             table_dtypes = {f.name: ARROW_TO_PANDAS[f.type] for f in schema}
+            # Writing with a schema silently drops any column that isn't in it, so a
+            # renamed or newly added upstream field would just vanish. Fail instead.
+            extra_columns = [c for c in obj.columns if c not in table_dtypes]
+            if extra_columns:
+                raise ValueError(
+                    f"{table_name} has columns that are not in its schema: "
+                    f"{extra_columns}. Add them to the schema in usage_metrics.models "
+                    "or drop them in the asset."
+                )
             # Make sure we have all the columns we need
             for column, dtype in table_dtypes.items():
                 if column not in obj.columns:
