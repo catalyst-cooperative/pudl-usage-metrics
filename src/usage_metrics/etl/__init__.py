@@ -7,7 +7,6 @@ import os
 import warnings
 
 from dagster import (
-    AssetsDefinition,
     AssetSelection,
     Definitions,
     define_asset_job,
@@ -78,29 +77,6 @@ default_asset_checks = list(
 )
 
 
-_persisted_table_names = {
-    asset_key.to_user_string()
-    for asset_def in default_assets
-    if isinstance(asset_def, AssetsDefinition)
-    for asset_key in asset_def.keys
-    if asset_def.get_io_manager_key_for_asset_key(asset_key) == "parquet_manager"
-}
-"""Names of assets actually written to Parquet by ``PartitionedParquetIOManager``.
-
-Some tables in ``usage_metrics.models`` (e.g. ``out_s3_logs``, an intermediate
-asset that uses the default in-memory IO manager) document a schema without
-ever being persisted. A pandera schema check built for one of those would
-always fail with a ``FileNotFoundError`` looking for a Parquet file that's
-never written, so schema checks are limited to tables that are actually
-persisted.
-"""
-
-persisted_pandera_schema_checks = [
-    check
-    for check in pandera_schema_checks
-    if check.check_key.asset_key.to_user_string() in _persisted_table_names
-]
-
 gcs_base_path = "gs://" + os.environ.get("GCS_BUCKET", "metrics.catalyst.coop")
 local_base_path = str(UPath(os.environ.get("DATA_DIR", ".")) / "usage_metrics")
 
@@ -119,7 +95,7 @@ resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
 
 defs: Definitions = Definitions(
     assets=default_assets,
-    asset_checks=default_asset_checks + persisted_pandera_schema_checks,
+    asset_checks=default_asset_checks + pandera_schema_checks,
     resources=resources,
     jobs=[
         define_asset_job(
