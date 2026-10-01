@@ -1,13 +1,10 @@
 """Test util functions."""
 
 import pandas as pd
-import pytest
 
 from usage_metrics.helpers import (
-    convert_camel_case_columns_to_snake_case,
     geocode_ip,
     geocode_ips,
-    parse_request_url,
 )
 
 
@@ -81,30 +78,3 @@ def test_geocode_ips_maps_lite_fields_and_handles_bogon(monkeypatch) -> None:
     assert bogon_row.remote_ip_bogon is True
     assert pd.isna(bogon_row.remote_ip_asn)
     assert pd.isna(bogon_row.remote_ip_country)
-
-
-def test_url_parse() -> None:
-    """Test url parsing."""
-    url = "https://data.catalyst.coop/ferc1/f1_cash_flow"
-    parsed_url = parse_request_url(url)
-
-    assert parsed_url == {
-        "scheme": "https",
-        "netloc": "data.catalyst.coop",
-        "path": "/ferc1/f1_cash_flow",
-        "query": "",
-    }
-
-
-@pytest.mark.parametrize(
-    "camel_case_df,snake_case_df",
-    [
-        (pd.DataFrame(columns=["CamelCase"]), pd.DataFrame(columns=["camel_case"])),
-        (pd.DataFrame(columns=["Single"]), pd.DataFrame(columns=["single"])),
-        (pd.DataFrame(columns=["S"]), pd.DataFrame(columns=["s"])),
-    ],
-)
-def test_convert_camel_case_columns_to_snake_case(camel_case_df, snake_case_df) -> None:
-    """Test camel case to snake case."""
-    result_df = convert_camel_case_columns_to_snake_case(camel_case_df)
-    pd.testing.assert_frame_equal(result_df, snake_case_df)

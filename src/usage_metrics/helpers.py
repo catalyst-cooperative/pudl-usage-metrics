@@ -6,7 +6,6 @@ import os
 import time
 from functools import wraps
 from pathlib import Path
-from urllib.parse import urlparse
 
 import ipinfo
 import pandas as pd
@@ -90,59 +89,6 @@ def geocode_ips(df: pd.DataFrame) -> pd.DataFrame:
     # I'm not sure if IP addresses always geocode to the same information.
     geocoded_logs = df.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
     return geocoded_logs
-
-
-def parse_request_url(url: str) -> dict:
-    """Create dictionary of request components.
-
-    Args:
-        url: A generic url.
-
-    Returns:
-        The parsed URL components.
-    """
-    pr = urlparse(url)
-    return {
-        "scheme": pr.scheme,
-        "netloc": pr.netloc,
-        "path": pr.path,
-        "query": pr.query,
-    }
-
-
-def convert_camel_case_columns_to_snake_case(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert CamelCase columns of a dataframe to snake_case.
-
-    Args:
-        df: A dataframe with CamelCase columns.
-
-    Returns:
-        df: A dataframe with snake_case columns.
-    """
-    df.columns = df.columns.str.replace(r"(?<!^)(?=[A-Z])", "_", regex=True).str.lower()
-    return df
-
-
-def unpack_json_series(series: pd.Series) -> pd.DataFrame:
-    """Unpack a series containing json records to a DataFrame.
-
-    Expects no more than one json record per series element.
-
-    Args:
-        series: A pandas series on json records.
-
-    Returns:
-        unpacked_df: A dataframe where columns are the fields of the json records.
-    """
-    series_dict = series.to_dict()
-    # Replace missing data with empty dicts
-    series_dict = {index: v if v else {} for index, v in series_dict.items()}
-
-    unpacked_df = pd.DataFrame.from_dict(series_dict, orient="index")
-    assert len(unpacked_df) <= len(series), (
-        "Unpacked more JSON records than there are records in the DataFrame."
-    )
-    return unpacked_df
 
 
 def get_table_name_from_context(context: OutputContext) -> str:
