@@ -1215,6 +1215,37 @@ core_eel_hole_hits = _table_schema(
     primary_key=["insert_id"],
 )
 
+
+def _eel_hole_filter_fields(suffix: str) -> list[pa.Field]:
+    """Fields describing one DuckDB filter in an eel hole preview/download query.
+
+    The viewer logs up to seven filters per query, with the fields of the first
+    unsuffixed and the rest suffixed ``_1`` through ``_6``.
+    """
+    return [
+        _field(
+            name=f"params_filters_field_name{suffix}",
+            datatype=pa.string(),
+            comment="The variable on which a user is performing a filter using DuckDB.",
+        ),
+        _field(
+            name=f"params_filters_field_type{suffix}",
+            datatype=pa.string(),
+            comment="The data type of the variable on which a user is performing a filter using DuckDB.",
+        ),
+        _field(
+            name=f"params_filters_operation{suffix}",
+            datatype=pa.string(),
+            comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
+        ),
+        _field(
+            name=f"params_filters_value{suffix}",
+            datatype=pa.string(),
+            comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
+        ),
+    ]
+
+
 _eel_hole_preview_fields = [
     _field(
         name="insert_id",
@@ -1250,46 +1281,23 @@ _eel_hole_preview_fields = [
         datatype=pa.int64(),
         comment="The number of records returned per DuckDB query. This is set by us, so it should be expected to hold constant without our intervention.",
     ),
+    *(
+        field
+        for i in range(7)
+        for field in _eel_hole_filter_fields(suffix="" if i == 0 else f"_{i}")
+    ),
+    _field(
+        name="session_id",
+        datatype=pa.string(),
+        comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
+    ),
+    _field(name="partition_key", datatype=pa.string()),
 ]
-"""Fields shared by core_eel_hole_previews and core_eel_hole_downloads."""
+"""Fields shared by core_eel_hole_previews and core_eel_hole_downloads.
 
-for _i in range(7):
-    _suffix = "" if _i == 0 else f"_{_i}"
-    _eel_hole_preview_fields.extend(
-        [
-            _field(
-                name=f"params_filters_field_name{_suffix}",
-                datatype=pa.string(),
-                comment="The variable on which a user is performing a filter using DuckDB.",
-            ),
-            _field(
-                name=f"params_filters_field_type{_suffix}",
-                datatype=pa.string(),
-                comment="The data type of the variable on which a user is performing a filter using DuckDB.",
-            ),
-            _field(
-                name=f"params_filters_operation{_suffix}",
-                datatype=pa.string(),
-                comment="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
-            ),
-            _field(
-                name=f"params_filters_value{_suffix}",
-                datatype=pa.string(),
-                comment="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
-            ),
-        ]
-    )
-
-_eel_hole_preview_fields.extend(
-    [
-        _field(
-            name="session_id",
-            datatype=pa.string(),
-            comment="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
-        ),
-        _field(name="partition_key", datatype=pa.string()),
-    ]
-)
+Rather than specifying these fields twice, we define them once and use the list for both tables. This avoids duplication
+and keeps the two tables consistent.
+"""
 
 core_eel_hole_previews = _table_schema(
     fields=_eel_hole_preview_fields,
