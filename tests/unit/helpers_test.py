@@ -4,71 +4,71 @@ import pandas as pd
 import pytest
 
 from usage_metrics.helpers import (
-    convert_camel_case_columns_to_snake_case,
     geocode_ip,
-    parse_request_url,
+    geocode_ips,
 )
 
+# What ipinfo's Lite API (plus the client's country_name lookup) returns for
+# Google Public DNS. Only fields the pipeline uses or the API itself provides;
+# the client also adds flag/currency/isEU/etc., which we deliberately ignore.
+GOOGLE_DNS = {
+    "ip": "8.8.8.8",
+    "asn": "AS15169",
+    "as_name": "Google LLC",
+    "as_domain": "google.com",
+    "country_code": "US",
+    "country_name": "United States",
+    "continent_code": "NA",
+}
 
-@pytest.mark.xfail(reason="This test inconsistently fails on the lat/long & loc.")
+
 def test_geocode_ip() -> None:
-    """Test Google Public DNS IP."""
-    geocoded_ip = geocode_ip("8.8.8.8")
-    assert geocoded_ip == {
-        "ip": "8.8.8.8",
-        "hostname": "dns.google",
-        "anycast": True,
-        "city": "Mountain View",
-        "region": "California",
-        "country": "US",
-        "continent": {
-            "code": "NA",
-            "name": "North America",
-        },
-        "country_currency": {
-            "code": "USD",
-            "symbol": "$",
-        },
-        "country_flag": {
-            "emoji": "🇺🇸",
-            "unicode": "U+1F1FA U+1F1F8",
-        },
-        "country_flag_url": (
-            "https://cdn.ipinfo.io/static/images/countries-flags/US.svg"
-        ),
-        "loc": "37.4056,-122.0775",
-        "org": "AS15169 Google LLC",
-        "postal": "94043",
-        "timezone": "America/Los_Angeles",
-        "country_name": "United States",
-        "latitude": "37.4056",
-        "longitude": "-122.0775",
-        "isEU": False,
-    }
-
-
-def test_url_parse() -> None:
-    """Test url parsing."""
-    url = "https://data.catalyst.coop/ferc1/f1_cash_flow"
-    parsed_url = parse_request_url(url)
-
-    assert parsed_url == {
-        "scheme": "https",
-        "netloc": "data.catalyst.coop",
-        "path": "/ferc1/f1_cash_flow",
-        "query": "",
-    }
+    """Test Google Public DNS IP against the Lite API."""
+    geocoded_ip = geocode_ip(GOOGLE_DNS["ip"])
+    assert {k: geocoded_ip[k] for k in GOOGLE_DNS} == GOOGLE_DNS
 
 
 @pytest.mark.parametrize(
-    "camel_case_df,snake_case_df",
+    "ip,expected",
     [
-        (pd.DataFrame(columns=["CamelCase"]), pd.DataFrame(columns=["camel_case"])),
-        (pd.DataFrame(columns=["Single"]), pd.DataFrame(columns=["single"])),
-        (pd.DataFrame(columns=["S"]), pd.DataFrame(columns=["s"])),
+        (
+            GOOGLE_DNS["ip"],
+            {
+                "remote_ip_asn": GOOGLE_DNS["asn"],
+                "remote_ip_org": GOOGLE_DNS["as_name"],
+                "remote_ip_country": GOOGLE_DNS["country_code"],
+                "remote_ip_country_name": GOOGLE_DNS["country_name"],
+            },
+        ),
+        # A bogon's response is just {"ip": ..., "bogon": True}, so every other
+        # column must come through as null rather than raising a KeyError.
+        (
+            "10.0.0.1",
+            {
+                "remote_ip_bogon": True,
+                "remote_ip_asn": None,
+                "remote_ip_org": None,
+                "remote_ip_country": None,
+                "remote_ip_country_name": None,
+            },
+        ),
     ],
 )
-def test_convert_camel_case_columns_to_snake_case(camel_case_df, snake_case_df) -> None:
-    """Test camel case to snake case."""
-    result_df = convert_camel_case_columns_to_snake_case(camel_case_df)
-    pd.testing.assert_frame_equal(result_df, snake_case_df)
+def test_geocode_ips(ip: str, expected: dict) -> None:
+    """`geocode_ips` should map real ipinfo responses onto usage_metrics columns."""
+    row = geocode_ips(pd.DataFrame({"remote_ip": [ip]})).iloc[0]
+    for column, value in expected.items():
+        if value is None:
+            assert pd.isna(row[column]), column
+        else:
+            assert row[column] == value, column
+
+
+def test_geocode_ips_mixed_batch_with_duplicates() -> None:
+    """Duplicate IPs are geocoded once and merged back onto every log row."""
+    ips = [GOOGLE_DNS["ip"], "10.0.0.1", GOOGLE_DNS["ip"]]
+    geocoded = geocode_ips(pd.DataFrame({"remote_ip": ips}))
+
+    assert geocoded.remote_ip.tolist() == ips
+    assert geocoded.remote_ip_country.tolist()[::2] == [GOOGLE_DNS["country_code"]] * 2
+    assert pd.isna(geocoded.remote_ip_country.iloc[1])

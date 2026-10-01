@@ -11,6 +11,108 @@ from dagster import (
 
 from usage_metrics.helpers import geocode_ips
 
+# S3 server access logs are headerless and space-delimited, so the only thing that
+# says which field is which is its position in the row.
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html
+S3_LOG_COLUMNS = [
+    "bucket_owner",
+    "bucket",
+    "time",
+    "timezone",
+    "remote_ip",
+    "requester",
+    "request_id",
+    "operation",
+    "key",
+    "request_uri",
+    "http_status",
+    "error_code",
+    "bytes_sent",
+    "object_size",
+    "total_time",
+    "turn_around_time",
+    "referer",
+    "user_agent",
+    "version_id",
+    "host_id",
+    "signature_version",
+    "cipher_suite",
+    "authentication_type",
+    "host_header",
+    "tls_version",
+    "access_point_arn",
+    "acl_required",
+]
+"""Names of the fields in an S3 access log row, in the order AWS writes them."""
+
+LAST_PARTITION_WITHOUT_AWS_REGION = "2026-02-15"
+"""In late February 2026 AWS added an aws_region field to the end of each row.
+
+We don't need it, so it is dropped rather than persisted.
+"""
+
+_S3_LOG_COLUMN_PATTERNS = {
+    "bucket_owner": r"[0-9a-f]{64}",
+    "time": r"\[\d{2}/[A-Z][a-z]{2}/\d{4}:\d{2}:\d{2}:\d{2}",
+    "timezone": r"[+-]\d{4}\]",
+    "remote_ip": r"-|(\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F:]+:[0-9a-fA-F:]*",
+    "operation": r"[A-Z0-9_]+(\.[A-Za-z0-9_]+)+",
+    "request_uri": r"-|[A-Z]+ .*",
+    "signature_version": r"-|SigV[24]",
+    "tls_version": r"-|TLSv1\.[0-3]",
+}
+"""Formats of some fields whose formats are distinctive and always strings.
+
+They are checked after the columns are named, so that a field added or moved in
+the middle of the row, which names would otherwise silently line up wrong with, is
+caught. Numeric fields are left out: they all look alike, and pandas may parse them as
+integers or floats depending on the day's data.
+"""
+
+
+def name_s3_log_columns(raw_s3_logs: pd.DataFrame, partition_key: str) -> pd.DataFrame:
+    """Name the columns of headerless raw S3 logs, checking that they line up.
+
+    Names are assigned by position, so a field AWS inserts anywhere but the end of
+    the row would shift every following field into the wrong column. Besides
+    checking the number of columns, this checks that the values in a few
+    columns with distinctive formats look like what their names claim.
+
+    Args:
+        raw_s3_logs: Raw logs, with integer column labels.
+        partition_key: The partition date, used to know which layout to expect.
+
+    Returns:
+        A copy with named columns, without the unused aws_region column.
+
+    Raises:
+        ValueError: If the number of columns is unexpected, or the values in a column
+            don't look like what the column's name says.
+    """
+    columns = list(S3_LOG_COLUMNS)
+    if pd.to_datetime(partition_key) > pd.to_datetime(
+        LAST_PARTITION_WITHOUT_AWS_REGION
+    ):
+        columns.append("aws_region")
+    if raw_s3_logs.shape[1] != len(columns):
+        raise ValueError(
+            f"Expected {len(columns)} columns in the S3 logs for {partition_key}, "
+            f"found {raw_s3_logs.shape[1]}. Has AWS changed the log format?"
+        )
+    named = raw_s3_logs.set_axis(columns, axis="columns")
+
+    for column, pattern in _S3_LOG_COLUMN_PATTERNS.items():
+        matches = named[column].astype("string").str.fullmatch(pattern).fillna(False)
+        mismatched = named.loc[~matches.astype(bool), column]
+        if not mismatched.empty:
+            raise ValueError(
+                f"{len(mismatched)} values in S3 log column {column!r} for "
+                f"{partition_key} don't match the expected format {pattern!r}, "
+                f"e.g. {mismatched.unique()[:5].tolist()}. The columns may be "
+                "misaligned: has AWS added or moved a field in the log format?"
+            )
+    return named.drop(columns=columns[len(S3_LOG_COLUMNS) :])
+
 
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
@@ -31,44 +133,7 @@ def core_s3_logs(
     if raw_s3_logs.empty:
         context.log.warning(f"No data found for the week of {context.partition_key}")
         return raw_s3_logs
-    # Name columns
-    base_columns = [
-        "bucket_owner",
-        "bucket",
-        "time",
-        "timezone",
-        "remote_ip",
-        "requester",
-        "request_id",
-        "operation",
-        "key",
-        "request_uri",
-        "http_status",
-        "error_code",
-        "bytes_sent",
-        "object_size",
-        "total_time",
-        "turn_around_time",
-        "referer",
-        "user_agent",
-        "version_id",
-        "host_id",
-        "signature_version",
-        "cipher_suite",
-        "authentication_type",
-        "host_header",
-        "tls_version",
-        "access_point_arn",
-        "acl_required",
-    ]
-
-    # In late February 2026, AWS started tracking AWS region.
-    # We don't care about this column and don't persist to DB.
-    if pd.to_datetime(context.partition_key) <= pd.to_datetime("2026-02-15"):
-        raw_s3_logs.columns = base_columns
-    else:
-        raw_s3_logs.columns = base_columns + ["aws_region"]
-        raw_s3_logs = raw_s3_logs.drop(columns=["aws_region"])
+    raw_s3_logs = name_s3_log_columns(raw_s3_logs, context.partition_key)
 
     # Combine time and timezone columns
     raw_s3_logs.time = raw_s3_logs.time + " " + raw_s3_logs.timezone
@@ -82,17 +147,6 @@ def core_s3_logs(
         raw_s3_logs["remote_ip"].eq("-"), pd.NA
     )  # Mask null IPs
     geocoded_df = geocode_ips(raw_s3_logs)
-
-    # Drop unnecessary geocoding columns
-    geocoded_df = geocoded_df.drop(
-        columns=[
-            "remote_ip_country_flag",
-            "remote_ip_country_flag_url",
-            "remote_ip_country_currency",
-            "remote_ip_continent",
-            "remote_ip_isEU",
-        ]
-    )
 
     # Convert string to datetime using Pandas
     format_string = "[%d/%b/%Y:%H:%M:%S %z]"

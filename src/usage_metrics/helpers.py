@@ -1,12 +1,9 @@
 """General utility functions for cleaning usage metrics data."""
 
-from __future__ import annotations
-
 import os
 import time
 from functools import wraps
 from pathlib import Path
-from urllib.parse import urlparse
 
 import ipinfo
 import pandas as pd
@@ -20,25 +17,36 @@ ip_address_cache = Memory(cache_dir, verbose=0)
 
 REQUEST_TIMEOUT = 10
 
+# Fields pulled from ipinfo's Lite API response (plus its client-side
+# country-name/bogon lookups) and the usage_metrics column each maps to.
+_IPINFO_FIELD_MAP = {
+    "ip": "remote_ip",
+    "country_code": "remote_ip_country",
+    "country_name": "remote_ip_country_name",
+    "as_name": "remote_ip_org",
+    "asn": "remote_ip_asn",
+    "bogon": "remote_ip_bogon",
+}
+
 
 @ip_address_cache.cache
 def geocode_ip(ip_address: str) -> dict:
-    """Geocode an ip address using ipinfo API.
+    """Geocode an ip address using ipinfo's Lite API.
 
     This function uses joblib to cache api calls so we only have to
-    call the api once for a given ip address. We get 50k free api calls.
+    call the api once for a given ip address.
 
     Args:
         ip_address: An ip address.
 
-    Return:
+    Returns:
         details: Ip location and org information.
     """
     try:
         ipinfo_token = os.environ["IPINFO_TOKEN"]
     except KeyError:
         raise AssertionError("Can't find IPINFO_TOKEN.")
-    handler = ipinfo.getHandler(
+    handler = ipinfo.getHandlerLite(
         ipinfo_token, request_options={"timeout": REQUEST_TIMEOUT}
     )
 
@@ -63,85 +71,19 @@ def geocode_ips(df: pd.DataFrame) -> pd.DataFrame:
     unique_ips = pd.Series(df.remote_ip.dropna().unique())
     geocoded_ips = unique_ips.apply(lambda ip: geocode_ip(ip))
     geocoded_ips = pd.DataFrame.from_dict(geocoded_ips.to_dict(), orient="index")
-    geocoded_ip_column_map = {
-        col: "remote_ip_" + col for col in geocoded_ips.columns if col != "ip"
-    }
-    geocoded_ip_column_map["ip"] = "remote_ip"
-    geocoded_ips = geocoded_ips.rename(columns=geocoded_ip_column_map)
 
-    # Split the org and org ASN into different columns
-    geocoded_ips["remote_ip_asn"] = geocoded_ips.remote_ip_org.str.split(" ").str[0]
-    geocoded_ips["remote_ip_org"] = (
-        geocoded_ips.remote_ip_org.str.split(" ").str[1:].str.join(sep=" ")
-    )
-
-    # Create a verbose ip location field
-    geocoded_ips["remote_ip_full_location"] = (
-        geocoded_ips.remote_ip_city
-        + ", "
-        + geocoded_ips.remote_ip_region
-        + ", "
-        + geocoded_ips.remote_ip_country
-    )
+    # Keep only the fields the Lite API actually provides (reindex adds any
+    # that are missing -- e.g. a bogon IP's response has no asn/country -- as
+    # NaN, instead of raising a KeyError) and rename them to their usage_metrics
+    # column names.
+    geocoded_ips = geocoded_ips.reindex(columns=_IPINFO_FIELD_MAP.keys())
+    geocoded_ips = geocoded_ips.rename(columns=_IPINFO_FIELD_MAP)
 
     # Add the component fields back to the logs
     # TODO: Could create a separate db table for ip information.
     # I'm not sure if IP addresses always geocode to the same information.
     geocoded_logs = df.merge(geocoded_ips, on="remote_ip", how="left", validate="m:1")
     return geocoded_logs
-
-
-def parse_request_url(url: str) -> dict:
-    """Create dictionary of request components.
-
-    Args:
-        url: A generic url.
-
-    Returns:
-        The parsed URL components.
-    """
-    pr = urlparse(url)
-    return {
-        "scheme": pr.scheme,
-        "netloc": pr.netloc,
-        "path": pr.path,
-        "query": pr.query,
-    }
-
-
-def convert_camel_case_columns_to_snake_case(df: pd.DataFrame) -> pd.DataFrame:
-    """Convert CamelCase columns of a dataframe to snake_case.
-
-    Args:
-        df: A dataframe with CamelCase columns.
-
-    Returns:
-        df: A dataframe with snake_case columns.
-    """
-    df.columns = df.columns.str.replace(r"(?<!^)(?=[A-Z])", "_", regex=True).str.lower()
-    return df
-
-
-def unpack_json_series(series: pd.Series) -> pd.DataFrame:
-    """Unpack a series containing json records to a DataFrame.
-
-    Expects no more than one json record per series element.
-
-    Args:
-        series: A pandas series on json records.
-
-    Returns:
-        unpacked_df: A dataframe where columns are the fields of the json records.
-    """
-    series_dict = series.to_dict()
-    # Replace missing data with empty dicts
-    series_dict = {index: v if v else {} for index, v in series_dict.items()}
-
-    unpacked_df = pd.DataFrame.from_dict(series_dict, orient="index")
-    assert len(unpacked_df) <= len(series), (
-        "Unpacked more JSON records than there are records in the DataFrame."
-    )
-    return unpacked_df
 
 
 def get_table_name_from_context(context: OutputContext) -> str:

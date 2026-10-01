@@ -7,7 +7,6 @@ https://github.com/dagster-io/dagster/blob/master/examples/project_fully_feature
 import os
 
 import pandas as pd
-import pyarrow as pa
 from dagster import (
     ConfigurableIOManager,
     Field,
@@ -15,33 +14,10 @@ from dagster import (
     OutputContext,
     io_manager,
 )
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, Integer, String
 from upath import UPath
 
 from usage_metrics.helpers import get_table_name_from_context
-from usage_metrics.models import usage_metrics_metadata
-
-PANDAS_TO_ARROW: dict[str, pa.DataType] = {
-    "bool": pa.bool_(),
-    "date": pa.date32(),  # not currently used but maybe someday
-    "datetime64[s]": pa.timestamp("s"),
-    "Int32": pa.int32(),
-    "Int64": pa.int64(),
-    "float64": pa.float64(),
-    "string": pa.string(),
-}
-"""Type map so we can annotate empty partitions."""
-
-SQLALCHEMY_TO_PANDAS = {
-    BigInteger: "Int64",
-    Boolean: "bool",
-    Float: "float64",
-    Integer: "Int32",
-    String: "string",
-    Date: "datetime64[s]",
-    DateTime: "datetime64[s]",
-}
-"""Type map so we can use the sqlalchemy metadata."""
+from usage_metrics.models import ARROW_TO_PANDAS, usage_metrics_schemas
 
 
 class PartitionedParquetIOManager(ConfigurableIOManager):
@@ -65,14 +41,20 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
             context.log.debug(f"Row count: {row_count}")
             table_name = get_table_name_from_context(context)
             assert (
-                table_name in usage_metrics_metadata.tables
+                table_name in usage_metrics_schemas
             ), f"""{table_name} does not have a schema defined.
                 Create a schema for it in usage_metrics.models."""
-            table_metadata = usage_metrics_metadata.tables[table_name]
-            table_dtypes = {
-                c.name: SQLALCHEMY_TO_PANDAS[type(c.type)]
-                for c in table_metadata.columns
-            }
+            schema = usage_metrics_schemas[table_name]
+            table_dtypes = {f.name: ARROW_TO_PANDAS[f.type] for f in schema}
+            # Writing with a schema silently drops any column that isn't in it, so a
+            # renamed or newly added upstream field would just vanish. Fail instead.
+            extra_columns = [c for c in obj.columns if c not in table_dtypes]
+            if extra_columns:
+                raise ValueError(
+                    f"{table_name} has columns that are not in its schema: "
+                    f"{extra_columns}. Add them to the schema in usage_metrics.models "
+                    "or drop them in the asset."
+                )
             # Make sure we have all the columns we need
             for column, dtype in table_dtypes.items():
                 if column not in obj.columns:
@@ -98,9 +80,7 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
             obj.astype(table_dtypes).to_parquet(
                 path=str(path),
                 index=False,
-                schema=pa.schema(
-                    [(c, PANDAS_TO_ARROW[t]) for c, t in table_dtypes.items()]
-                ),
+                schema=schema,
             )
         else:
             raise TypeError(f"Outputs of type {type(obj)} not supported.")
