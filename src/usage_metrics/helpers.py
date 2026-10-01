@@ -1,7 +1,5 @@
 """General utility functions for cleaning usage metrics data."""
 
-from __future__ import annotations
-
 import os
 import time
 from functools import wraps
@@ -21,9 +19,6 @@ REQUEST_TIMEOUT = 10
 
 # Fields pulled from ipinfo's Lite API response (plus its client-side
 # country-name/bogon lookups) and the usage_metrics column each maps to.
-# Lite doesn't return city/region/loc/postal/timezone/hostname or a combined
-# `org` string the way the old Core API did -- it gives `asn` and `as_name`
-# as separate fields already, so no more string-splitting is needed.
 _IPINFO_FIELD_MAP = {
     "ip": "remote_ip",
     "country_code": "remote_ip_country",
@@ -44,7 +39,7 @@ def geocode_ip(ip_address: str) -> dict:
     Args:
         ip_address: An ip address.
 
-    Return:
+    Returns:
         details: Ip location and org information.
     """
     try:
