@@ -67,6 +67,7 @@ def core_kaggle_logs(
             "totalVotes": "total_votes",
             "totalDownloads": "total_downloads",
             "isPrivate": "is_private",
+            "expectedUpdateFrequency": "expected_update_frequency",
         }
     )
 
