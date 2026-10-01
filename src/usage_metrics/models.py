@@ -1088,40 +1088,6 @@ core_eel_hole_searches = _table_schema(
     primary_key=["insert_id"],
 )
 
-core_eel_hole_hits = _table_schema(
-    name="core_eel_hole_hits",
-    columns=[
-        _column(
-            name="insert_id",
-            dtype=str,
-            description="A unique identifier for the log entry.",
-        ),
-        _column(
-            name="timestamp",
-            dtype=Timestamp,
-            description="The time the event described by the log entry occurred.",
-        ),
-        _column(
-            name="name",
-            dtype=str,
-            description="The name of the PUDL table returned by a search query. Only populated for 'hit' event types.",
-        ),
-        _column(
-            name="score",
-            dtype=float,
-            description="The table's relevance score based on the provided search query. Only populated for 'hit' event types.",
-        ),
-        _column(
-            name="tags",
-            dtype=str,
-            description="The tags associated with a given table in the search results. Only populated for 'hit' events types.",
-        ),
-        _column(name="partition_key", dtype=str),
-    ],
-    description="Search result hit events recorded by PUDL's data viewer (the eel hole).",
-    primary_key=["insert_id"],
-)
-
 
 def _eel_hole_filter_columns(suffix: str) -> list[pandera.Column]:
     """Columns describing one DuckDB filter in an eel hole preview/download query.
@@ -1466,7 +1432,6 @@ usage_metrics_schemas: dict[str, pandera.DataFrameSchema] = {
         core_zenodo_logs,
         core_eel_hole_log_ins,
         core_eel_hole_searches,
-        core_eel_hole_hits,
         core_eel_hole_previews,
         core_eel_hole_downloads,
         core_eel_hole_duckdb_other,

@@ -32,7 +32,6 @@ from pydantic.alias_generators import to_camel
 ROUTED_EVENT_TYPES: frozenset[str] = frozenset(
     {
         "search",
-        "hit",
         "duckdb_preview",
         "duckdb_csv",
         "duckdb_other",
@@ -190,11 +189,8 @@ class JsonPayload(BaseModel):
     timestamp: datetime.datetime
     user_id: str | None = None
     user_domain: str | None = None
-    # 'search' / 'hit'
-    name: str | None = None
+    # 'search'
     query: str | None = None
-    score: float | None = None
-    tags: str | None = None
     url: str | None = None
     # 'preview' -- the /preview/<package>/<table_name> page view
     package: str | None = None
@@ -212,10 +208,8 @@ class JsonPayload(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
     @field_validator("*", mode="before")
-    def replace_na_with_none(cls, value, info):  # noqa: N805
+    def replace_na_with_none(cls, value):  # noqa: N805
         """To successfully validate string dtypes, convert NaNs to None."""
-        if info.field_name == "score":
-            return value  # Skip NaN coercion for the 'score' field
         if isinstance(value, float) and math.isnan(value):
             return None
         return value
@@ -733,29 +727,6 @@ def core_eel_hole_searches(
     ]
 
     return search_df.reset_index(drop=True)
-
-
-@asset(
-    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
-    io_manager_key="parquet_manager",
-    kinds={"parquet"},
-    tags={"source": "eel_hole"},
-)
-def core_eel_hole_hits(
-    context: AssetExecutionContext,
-    _core_eel_hole_logs: pd.DataFrame,
-) -> pd.DataFrame:
-    """Create table of search hits from eel-hole logs."""
-    context.log.info(f"Processing data for {context.partition_key}")
-
-    if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for {context.partition_key}")
-        return pd.DataFrame()
-
-    hit_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "hit"]
-    hit_df = hit_df.loc[:, ["insert_id", "timestamp", "name", "score", "tags"]]
-
-    return hit_df.reset_index(drop=True)
 
 
 @asset(
