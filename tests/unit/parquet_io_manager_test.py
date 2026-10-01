@@ -55,8 +55,11 @@ def _write_then_load(
         "partition_key": PARTITION_KEY,
         "asset_partitions_def": PARTITIONS_DEF,
     }
-    manager.handle_output(build_output_context(**kwargs), df)
-    return manager.load_input(build_input_context(**kwargs))
+    # Close the contexts explicitly; see parquet_io_manager_schema_test.py.
+    with build_output_context(**kwargs) as output_context:
+        manager.handle_output(output_context, df)
+    with build_input_context(**kwargs) as input_context:
+        return manager.load_input(input_context)
 
 
 @pytest.mark.parametrize("table_name", list(usage_metrics_schemas))

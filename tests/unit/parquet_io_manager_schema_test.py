@@ -24,8 +24,16 @@ CONTEXT_KWARGS = {
 }
 
 
+# The contexts are used in `with` blocks so that the throwaway Dagster instance each
+# one creates is closed right away. Left to the garbage collector, an instance can be
+# closed while SQLAlchemy still has a connection to its SQLite database, which logs
+# "Exception during reset or similar" errors.
 def _output_context(table_name: str):
     return build_output_context(asset_key=table_name, **CONTEXT_KWARGS)
+
+
+def _input_context(table_name: str):
+    return build_input_context(asset_key=table_name, **CONTEXT_KWARGS)
 
 
 @pytest.mark.parametrize("table_name", list(usage_metrics_schemas))
@@ -36,13 +44,15 @@ def test_extra_columns_raise_and_nothing_is_written(table_name, tmp_path) -> Non
         {name: [] for name in usage_metrics_schemas[table_name].names}
         | {"surprise_column": [], "another_surprise": []}
     )
-    context = _output_context(table_name)
 
-    with pytest.raises(ValueError, match="surprise_column.*another_surprise") as error:
-        manager.handle_output(context, df)
+    with _output_context(table_name) as context:
+        with pytest.raises(
+            ValueError, match="surprise_column.*another_surprise"
+        ) as error:
+            manager.handle_output(context, df)
 
-    assert table_name in str(error.value)
-    assert not manager._get_path(context).exists()
+        assert table_name in str(error.value)
+        assert not manager._get_path(context).exists()
 
 
 def test_renamed_column_raises_instead_of_losing_its_data(tmp_path) -> None:
@@ -60,8 +70,11 @@ def test_renamed_column_raises_instead_of_losing_its_data(tmp_path) -> None:
         }
     )
 
-    with pytest.raises(ValueError, match="uniques"):
-        manager.handle_output(_output_context("core_github_clones"), df)
+    with (
+        _output_context("core_github_clones") as context,
+        pytest.raises(ValueError, match="uniques"),
+    ):
+        manager.handle_output(context, df)
 
 
 def test_missing_columns_are_still_filled_with_nulls(tmp_path) -> None:
@@ -74,10 +87,10 @@ def test_missing_columns_are_still_filled_with_nulls(tmp_path) -> None:
         {"metrics_date": pd.to_datetime(["2025-01-01"]), "total_clones": [5]}
     )
 
-    manager.handle_output(_output_context("core_github_clones"), df)
-    loaded = manager.load_input(
-        build_input_context(asset_key="core_github_clones", **CONTEXT_KWARGS)
-    )
+    with _output_context("core_github_clones") as context:
+        manager.handle_output(context, df)
+    with _input_context("core_github_clones") as context:
+        loaded = manager.load_input(context)
 
     assert loaded.total_clones.tolist() == [5]
     assert loaded.unique_clones.isna().all()
@@ -88,10 +101,10 @@ def test_empty_dataframe_is_written_with_the_full_schema(table_name, tmp_path) -
     """Assets return a bare pd.DataFrame() for a period with no data."""
     manager = LocalPartitionedParquetIOManager(base_path=str(tmp_path))
 
-    manager.handle_output(_output_context(table_name), pd.DataFrame())
-    loaded = manager.load_input(
-        build_input_context(asset_key=table_name, **CONTEXT_KWARGS)
-    )
+    with _output_context(table_name) as context:
+        manager.handle_output(context, pd.DataFrame())
+    with _input_context(table_name) as context:
+        loaded = manager.load_input(context)
 
     assert loaded.empty
     assert set(loaded.columns) == set(usage_metrics_schemas[table_name].names)
