@@ -15,7 +15,7 @@ from dagster import (
 
 from usage_metrics.models import usage_metrics_schemas
 from usage_metrics.resources.parquet_io_manager import (
-    LocalPartitionedParquetIOManager,
+    PartitionedParquetIOManager,
 )
 
 CONTEXT_KWARGS = {
@@ -39,9 +39,9 @@ def _input_context(table_name: str):
 @pytest.mark.parametrize("table_name", list(usage_metrics_schemas))
 def test_extra_columns_raise_and_nothing_is_written(table_name, tmp_path) -> None:
     """A column that isn't in the schema is an error, not silently dropped."""
-    manager = LocalPartitionedParquetIOManager(base_path=str(tmp_path))
+    manager = PartitionedParquetIOManager(base_path=str(tmp_path))
     df = pd.DataFrame(
-        {name: [] for name in usage_metrics_schemas[table_name].names}
+        {name: [] for name in list(usage_metrics_schemas[table_name].columns)}
         | {"surprise_column": [], "another_surprise": []}
     )
 
@@ -61,7 +61,7 @@ def test_renamed_column_raises_instead_of_losing_its_data(tmp_path) -> None:
     Without the check the data under the new name is dropped and the old column
     is filled with nulls, with no sign anything went wrong.
     """
-    manager = LocalPartitionedParquetIOManager(base_path=str(tmp_path))
+    manager = PartitionedParquetIOManager(base_path=str(tmp_path))
     df = pd.DataFrame(
         {
             "metrics_date": pd.to_datetime(["2025-01-01"]),
@@ -82,7 +82,7 @@ def test_missing_columns_are_still_filled_with_nulls(tmp_path) -> None:
 
     Those are filled with nulls rather than rejected.
     """
-    manager = LocalPartitionedParquetIOManager(base_path=str(tmp_path))
+    manager = PartitionedParquetIOManager(base_path=str(tmp_path))
     df = pd.DataFrame(
         {"metrics_date": pd.to_datetime(["2025-01-01"]), "total_clones": [5]}
     )
@@ -99,7 +99,7 @@ def test_missing_columns_are_still_filled_with_nulls(tmp_path) -> None:
 @pytest.mark.parametrize("table_name", list(usage_metrics_schemas))
 def test_empty_dataframe_is_written_with_the_full_schema(table_name, tmp_path) -> None:
     """Assets return a bare pd.DataFrame() for a period with no data."""
-    manager = LocalPartitionedParquetIOManager(base_path=str(tmp_path))
+    manager = PartitionedParquetIOManager(base_path=str(tmp_path))
 
     with _output_context(table_name) as context:
         manager.handle_output(context, pd.DataFrame())
@@ -107,4 +107,33 @@ def test_empty_dataframe_is_written_with_the_full_schema(table_name, tmp_path) -
         loaded = manager.load_input(context)
 
     assert loaded.empty
-    assert set(loaded.columns) == set(usage_metrics_schemas[table_name].names)
+    assert set(loaded.columns) == set(usage_metrics_schemas[table_name].columns)
+
+
+@pytest.mark.parametrize(
+    "table_name", ["core_eel_hole_previews", "core_eel_hole_downloads"]
+)
+def test_request_params_from_the_data_viewer_are_written(table_name, tmp_path) -> None:
+    """The assets keep every ``params_*`` column, so each one needs a place in the schema.
+
+    The viewer began logging these four parameters in September 2026, and a run failed
+    because the IO manager refused the columns it didn't know.
+    """
+    manager = PartitionedParquetIOManager(base_path=str(tmp_path))
+    df = pd.DataFrame(
+        {
+            "insert_id": ["a"],
+            "params_package": ["pudl"],
+            "params_table": ["core_eia861__yearly_sales"],
+            "params_report_date": ["2024-01-01"],
+            "params_state": ["FL"],
+        }
+    )
+
+    with _output_context(table_name) as context:
+        manager.handle_output(context, df)
+    with _input_context(table_name) as context:
+        loaded = manager.load_input(context)
+
+    assert loaded.params_state.tolist() == ["FL"]
+    assert loaded.params_report_date.tolist() == ["2024-01-01"]

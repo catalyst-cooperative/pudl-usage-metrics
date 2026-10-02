@@ -30,8 +30,10 @@ The ETL uses [ipinfo](https://ipinfo.io/) to geocode ip addresses.
 Grab the [ipinfo token](https://ipinfo.io/account/token) by logging in using the credentials saved in our [Bitwarden Shared Inframundo Logins collection](https://vault.bitwarden.com/#/vault?collectionId=b53a14cf-48bd-4b53-a59e-b29600217e8b&itemId=50afdcf5-8cec-42a3-b366-b296013ba389&action=view).
 The ETL will look for this token in the `IPINFO_TOKEN` environment variable.
 
-The ``DATA_DIR`` environment variable is required for local development.
-In this directory, the script will cache input data and save the processed database.
+The ``PUDL_METRICS_LOCAL_DATA_DIR`` environment variable is required for local
+development. In this directory, the script will cache input data and save the processed
+database. If it is unset, the ETL will create a `usage_metrics` directory in the current
+working directory and use that as the local data directory.
 
 Dagster stores run logs and caches in a directory stored in the `DAGSTER_HOME` environment variable.
 The `usage_metrics/dagster_home/dagster.yaml` file contains configuration for the dagster instance.
@@ -48,7 +50,7 @@ To set these environment variables, run these commands:
 ```
 export IPINFO_TOKEN="{your_token_here}"
 export DAGSTER_HOME="$(pwd)/dagster_home/"
-export DATA_DIR="$(pwd)/data/" # Required for local development. Input and output data will be saved here.
+export PUDL_METRICS_LOCAL_DATA_DIR="$(pwd)/data/" # Required for local development. Input and output data will be saved here.
 export KAGGLE_USER="{your_kaggle_username_here}" # If setting manually
 export KAGGLE_KEY="{your_kaggle_api_key_here}" # If setting manually
 ```
@@ -78,7 +80,7 @@ This gives you the opportunity to fix those issues before publishing them.
 To make sure they are run before you commit any code, you need to enable the pre-commit hooks scripts with this command:
 
 ```
-pre-commit install
+pixi run prek install
 ```
 
 The scripts that run are configured in the .pre-commit-config.yaml file.
@@ -169,14 +171,14 @@ Be sure this is what you want before you kick off the run!
 If a new column is added or data is processed in a new way,
 you'll have to run a complete backfill to overwrite all previous partitions.
 
-By default prod runs will write to `metrics.catalyst.coop`.
+By default prod runs will write to `gs://metrics.catalyst.coop`.
 You can examine the contents of the default bucket at
 https://console.cloud.google.com/storage/browser/metrics.catalyst.coop.
 
-To update a different path or bucket, set `GCS_BUCKET`:
+To update a different path or bucket, set `PUDL_METRICS_GCS_BUCKET`:
 
 ```
-export GCS_BUCKET="metrics.catalyst.coop/my-cool-folder"
+export PUDL_METRICS_GCS_BUCKET="test.catalyst.coop"
 ```
 
 ### IP Geocoding with ipinfo
