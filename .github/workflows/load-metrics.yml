@@ -112,7 +112,7 @@ jobs:
     # Larger third-party runner: the S3 log extract is I/O-heavy and the default
     # 4-vCPU runner is the tightest resource. Downloads scale with concurrency,
     # not cores, so 8 vCPUs / 32 GB is plenty.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     # Fast-fail: a healthy run finishes in minutes. Measured for the S3 job, a
     # fresh partition of ~137k log objects took 5-7 minutes end to end and
     # re-running an already-compacted one took ~2. The 30-minute limit is about
