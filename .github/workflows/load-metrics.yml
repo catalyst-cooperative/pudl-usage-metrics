@@ -106,8 +106,7 @@ jobs:
 
   load-metrics:
     needs: compute-partitions
-    # Larger third-party runner lets us parallelize the S3 log extraction
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: ubuntu-latest
     # A healthy run finishes in minutes. Measured for the S3 job, a fresh partition of
     # ~137k log objects took 5-7 minutes end to end and re-running an already-compacted
     # one took ~2, so the 30-minute limit is about 4x the slowest of those. This applies
