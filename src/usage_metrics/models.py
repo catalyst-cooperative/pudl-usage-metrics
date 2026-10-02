@@ -243,7 +243,8 @@ core_s3_logs = _table_schema(
             name="tls_version",
             dtype=str,
             description="The Transport Layer Security (TLS) version negotiated by the client. The value is one of following: TLSv1.1, TLSv1.2, TLSv1.3, or - if TLS wasn't used.",
-            pattern=r"-|TLSv1\.[0-3]",
+            # AWS also logs INVALID_RELAY_TLS_VERSION, which its documentation doesn't list.
+            pattern=r"-|TLSv1\.[0-3]|INVALID_RELAY_TLS_VERSION",
         ),
         _column(
             name="total_time",
