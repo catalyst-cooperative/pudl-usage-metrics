@@ -113,8 +113,8 @@ def fake_blob():
 
 @pytest.fixture
 def download_dir(tmp_path, monkeypatch):
-    """Point extractors at a temp download directory via ``DATA_DIR``."""
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    """Point extractors at a temp download directory via ``PUDL_METRICS_LOCAL_DATA_DIR``."""
+    monkeypatch.setenv("PUDL_METRICS_LOCAL_DATA_DIR", str(tmp_path))
     return tmp_path
 
 
