@@ -22,13 +22,28 @@ import pandera.pyarrow as pandera
 from pandera.dtypes import Timestamp
 
 
-def _column(name: str, dtype: type, comment: str | None = None) -> pandera.Column:
-    """Build a nullable pandera Column with an optional description.
+def _column(
+    name: str, dtype: type, comment: str | None = None, pattern: str | None = None
+) -> pandera.Column:
+    """Build a nullable pandera Column with an optional description and pattern.
 
     Columns are nullable unless they are part of a primary key; see
     :func:`_table_schema`.
+
+    Args:
+        name: The column name.
+        dtype: The column type.
+        comment: The column description.
+        pattern: A regular expression that every non-null value must match in full.
     """
-    return pandera.Column(dtype, name=name, nullable=True, description=comment)
+    checks = None
+    if pattern is not None:
+        # str_matches only anchors the start of the value, and doesn't group a
+        # pattern's top-level alternatives, so anchor and group them here.
+        checks = pandera.Check.str_matches(f"^(?:{pattern})$")
+    return pandera.Column(
+        dtype, name=name, nullable=True, description=comment, checks=checks
+    )
 
 
 def _table_schema(
@@ -65,6 +80,10 @@ def _table_schema(
     )
 
 
+# S3 access logs are headerless, so raw columns are named by position. The columns with a
+# pattern have distinctive formats, so values that don't match are a sign that AWS has
+# added or moved a field and the columns are misaligned. The numeric columns are left
+# out: they all look alike.
 # Metadata derived from:
 # https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html#log-record-fields
 # https://ipinfo.io/developers/lite-api
@@ -81,11 +100,13 @@ core_s3_logs = _table_schema(
             name="request_uri",
             dtype=str,
             comment="The Request-URI part of the HTTP request message.",
+            pattern=r"-|[A-Z]+ .*",
         ),
         _column(
             name="operation",
             dtype=str,
             comment="The operation listed here is declared as SOAP.operation, REST.HTTP_method.resource_type, WEBSITE.HTTP_method.resource_type, or BATCH.DELETE.OBJECT, or S3.action.resource_type for S3 Lifecycle and logging. For Compute checksum job requests, the operation is listed as S3.COMPUTE.OBJECT.CHECKSUM.",
+            pattern=r"[A-Z0-9_]+(\.[A-Za-z0-9_]+)+",
         ),
         _column(
             name="bucket",
@@ -96,6 +117,7 @@ core_s3_logs = _table_schema(
             name="bucket_owner",
             dtype=str,
             comment="The canonical user ID of the owner of the source bucket. The canonical user ID is another form of the AWS account ID.",
+            pattern=r"[0-9a-f]{64}",
         ),
         _column(
             name="requester",
@@ -122,6 +144,7 @@ core_s3_logs = _table_schema(
             name="remote_ip",
             dtype=str,
             comment="The apparent IP address of the requester. Intermediate proxies and firewalls might obscure the actual IP address of the machine that's making the request.",
+            pattern=r"-|(\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F:]+:[0-9a-fA-F:]*",
         ),
         _column(
             name="remote_ip_org",
@@ -208,11 +231,13 @@ core_s3_logs = _table_schema(
             name="signature_version",
             dtype=str,
             comment="The signature version, SigV2 or SigV4, that was used to authenticate the request, or a - for unauthenticated requests.",
+            pattern=r"-|SigV[24]",
         ),
         _column(
             name="tls_version",
             dtype=str,
             comment="The Transport Layer Security (TLS) version negotiated by the client. The value is one of following: TLSv1.1, TLSv1.2, TLSv1.3, or - if TLS wasn't used.",
+            pattern=r"-|TLSv1\.[0-3]",
         ),
         _column(
             name="total_time",
