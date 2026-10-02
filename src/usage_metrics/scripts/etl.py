@@ -36,8 +36,10 @@ def _execute(job, **execute_kwargs) -> bool:
     logger.info(f"Starting {job.name}.")
     result = job.execute_in_process(raise_on_error=False, **execute_kwargs)
     # Surface non-passing asset checks at the end of the run so a reviewer sees
-    # them without scrolling the Dagster event log -- including WARN checks (e.g.
-    # eel_hole_event_coverage) that don't fail the job but flag a coverage gap.
+    # them without scrolling the Dagster event log. A blocking check, like the pandera
+    # schema check of every table, or eel_hole_event_coverage in prod, fails the job
+    # and stops the assets downstream of it. Other checks are WARN, like
+    # eel_hole_event_coverage outside prod: they don't fail the job, but flag a gap.
     for check in result.get_asset_check_evaluations():
         if not check.passed:
             level = (
