@@ -5,7 +5,7 @@ import tempfile
 import threading
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -18,7 +18,6 @@ from dagster import (
     Jitter,
     RetryPolicy,
 )
-from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 from google.cloud.storage import transfer_manager
 
@@ -112,6 +111,13 @@ def log_download_progress(
 class GCSExtractor(ABC):
     """Generic extractor base class for Google Cloud Storage logs."""
 
+    dataset_name: str
+    """Name of the dataset, set by subclasses before calling ``super().__init__()``."""
+
+    bucket_name: str
+    """Name of the GCS bucket to extract from, set by subclasses before calling
+    ``super().__init__()``."""
+
     concatenable_files: bool = False
     """Whether ``load_file`` can parse many source files concatenated into one.
 
@@ -168,7 +174,7 @@ class GCSExtractor(ABC):
 
     @abstractmethod
     def filter_blobs(
-        self, context: AssetExecutionContext, blobs: HTTPIterator
+        self, context: AssetExecutionContext, blobs: Iterable[storage.Blob]
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
@@ -203,7 +209,10 @@ class GCSExtractor(ABC):
         When ``context`` is provided, a background thread logs periodic download
         progress (see ``log_download_progress``).
         """
-        file_paths = [Path(download_dir, blob.name.replace("/", "-")) for blob in blobs]
+        file_paths = []
+        for blob in blobs:
+            assert blob.name is not None, f"Blob {blob} has no name."
+            file_paths.append(Path(download_dir, blob.name.replace("/", "-")))
         with log_download_progress(context, download_dir, len(file_paths)):
             transfer_manager.download_many(
                 [
@@ -229,10 +238,9 @@ class GCSExtractor(ABC):
     def get_download_dir(self) -> Path:
         """Get download directory as path."""
         # Determine where to save these files
-        if os.environ.get("PUDL_METRICS_LOCAL_DATA_DIR"):
-            download_dir = Path(
-                os.environ.get("PUDL_METRICS_LOCAL_DATA_DIR"), f"{self.dataset_name}/"
-            )
+        data_dir = os.environ.get("PUDL_METRICS_LOCAL_DATA_DIR")
+        if data_dir:
+            download_dir = Path(data_dir, f"{self.dataset_name}/")
             if not Path.exists(download_dir):
                 Path.mkdir(download_dir, parents=True, exist_ok=True)
         else:

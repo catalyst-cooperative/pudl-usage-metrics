@@ -2,11 +2,9 @@
 
 import json
 import logging
-import sys
 from datetime import UTC, datetime
 from typing import Annotated
 
-import pandas as pd
 import requests
 from google.cloud import storage
 from pydantic import BaseModel, StringConstraints
@@ -16,8 +14,7 @@ from usage_metrics.helpers import retry_request
 Doi = Annotated[str, StringConstraints(pattern=r"10\.5281/zenodo\.\d+")]
 SandboxDoi = Annotated[str, StringConstraints(pattern=r"10\.5072/zenodo\.\d+")]
 
-logger = logging.getLogger()
-logging.basicConfig(level="INFO")
+logger = logging.getLogger(__name__)
 
 
 class CommunityMetadata(BaseModel):
@@ -26,15 +23,15 @@ class CommunityMetadata(BaseModel):
     See https://developers.zenodo.org/#representation.
     """
 
-    created: datetime = None
-    modified: datetime = None
+    created: datetime | None = None
+    modified: datetime | None = None
     recid: str
     conceptrecid: str
     doi: Doi | SandboxDoi | None = None
     conceptdoi: Doi | SandboxDoi | None = None
     doi_url: str
     title: str
-    updated: datetime = None
+    updated: datetime | None = None
     revision: int
 
     @classmethod
@@ -44,7 +41,7 @@ class CommunityMetadata(BaseModel):
             return
 
 
-def save_zenodo_logs() -> pd.DataFrame():
+def save_zenodo_logs() -> None:
     """Get JSONs of Zenodo metrics for all Catalyst records and upload to GCS.
 
     Get metrics for all versions in the Catalyst Cooperative Zenodo community locally,
@@ -112,15 +109,9 @@ def save_zenodo_logs() -> pd.DataFrame():
         upload_to_bucket(bucket=bucket, blob_name=blob_name, data=versions_metadata)
 
 
-def upload_to_bucket(
-    bucket: storage.Client.bucket, blob_name: str, data: pd.DataFrame
-) -> None:
+def upload_to_bucket(bucket: storage.Bucket, blob_name: str, data: str) -> None:
     """Upload a GCP object to a selected bucket."""
     blob = bucket.blob(blob_name)
     blob.upload_from_string(data)
 
     logger.info(f"Uploaded {blob_name} to GCS bucket.")
-
-
-if __name__ == "__main__":
-    sys.exit(save_zenodo_logs())

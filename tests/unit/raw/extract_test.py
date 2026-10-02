@@ -2,6 +2,7 @@
 
 import time
 from pathlib import Path
+from typing import Any
 from unittest import mock
 
 import pandas as pd
@@ -233,7 +234,7 @@ def test_get_blobs_from_gcs_passes_string_filenames(
     transfer_manager rejects non-str targets for its process pool and silently
     ignores skip_if_exists for them.
     """
-    captured = {}
+    captured: dict[str, Any] = {}
 
     def spy(pairs, **kwargs):
         captured["pairs"] = list(pairs)

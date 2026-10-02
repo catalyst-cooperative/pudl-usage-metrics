@@ -1,6 +1,7 @@
 """Extract data from Kaggle logs."""
 
 import json
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
@@ -10,7 +11,6 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
 from usage_metrics.raw.extract import GCSExtractor
@@ -26,7 +26,7 @@ class KaggleExtractor(GCSExtractor):
         super().__init__(*args, **kwargs)
 
     def filter_blobs(
-        self, context: AssetExecutionContext, blobs: HTTPIterator
+        self, context: AssetExecutionContext, blobs: Iterable[storage.Blob]
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
@@ -41,8 +41,10 @@ class KaggleExtractor(GCSExtractor):
         partition_date = date.fromisoformat(day_start_date_str).strftime("%Y-%m-%d")
         file_name_prefix = f"kaggle/{partition_date}.json"
 
-        blobs = [blob for blob in blobs if blob.name == file_name_prefix]
-        return blobs
+        filtered_blobs: list[storage.Blob] = [
+            blob for blob in blobs if blob.name == file_name_prefix
+        ]
+        return filtered_blobs
 
     def load_file(self, file_path: Path) -> pd.DataFrame:
         """Read in JSON file as dataframe."""
@@ -56,6 +58,10 @@ class KaggleExtractor(GCSExtractor):
             # Prior to this partition, we had everything nested under the "info" key,
             # except for metrics_date. In the newer data, there isn't the same
             # nesting structure and all fields are housed in the top-level.
+            if self.partition_key is None:
+                raise ValueError(
+                    "partition_key must be set before load_file() is called."
+                )
             if pd.to_datetime(self.partition_key) < pd.to_datetime("2025-09-21"):
                 df = pd.json_normalize(data["info"])
                 df["metrics_date"] = data["metrics_date"]
