@@ -31,14 +31,15 @@ class S3Extractor(GCSExtractor):
 
         Note that the timestamp on the S3 file name corresponds to the end of the window
         in which the logs were produced, meaning that logs can sometimes contain data
-        from more than one day. We read these records in based on the file name
-        and use the time column as the referent timestamp, so this can look unusual in
-        the context of examining a single partition but does not cause any issues in
-        the overall complete timeseries analysis.
+        from more than one day. We read these records in based on the file name and use
+        the time column as the referent timestamp, so this can look unusual in the
+        context of examining a single partition but does not cause any issues in the
+        overall complete timeseries analysis.
 
         Args:
             context: The Dagster asset execution context
-            blobs: the list of all file blobs in the bucket, returned by bucket.list_blobs()
+            blobs: the list of all file blobs in the bucket, returned by
+                bucket.list_blobs()
 
         Returns:
             A list of blobs to be downloaded.
@@ -52,10 +53,11 @@ class S3Extractor(GCSExtractor):
         try:
             return pd.read_csv(file_path, delimiter=" ", header=None)
         except pd.errors.ParserError as e:
-            # Handle one day of weird edge cases where new column added mid log file hrmph
-            # This happens in more than 4 files, so we filter by day rather than identifying the exact files
-            # and force these files to have 28 columns rather than the inferred and error-causing 27 found
-            # in the first row of these files.
+            # Handle one day of weird edge cases where new column added mid log file
+            # hrmph This happens in more than 4 files, so we filter by day rather than
+            # identifying the exact files and force these files to have 28 columns
+            # rather than the inferred and error-causing 27 found in the first row of
+            # these files.
             if "2026-02-25" in file_path.stem:
                 return pd.read_csv(
                     file_path, delimiter=" ", header=None, names=range(28)
