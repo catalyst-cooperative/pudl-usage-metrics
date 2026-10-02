@@ -1,10 +1,8 @@
 """Dagster definitions for the PUDL usage metrics ETL."""
 
-import importlib.resources
 import itertools
 import logging
 import os
-import warnings
 
 from dagster import (
     AssetSelection,
@@ -20,6 +18,13 @@ from usage_metrics.checks import pandera_schema_checks
 from usage_metrics.resources.parquet_io_manager import (
     PartitionedParquetIOManager,
     PyArrowTableReader,
+)
+
+PUDL_METRICS_GCS_BASE_PATH = "gs://" + os.environ.get(
+    "PUDL_METRICS_GCS_BUCKET", "metrics.catalyst.coop"
+)
+PUDL_METRICS_LOCAL_BASE_PATH = str(
+    UPath(os.environ.get("PUDL_METRICS_LOCAL_DATA_DIR", ".")) / "usage_metrics"
 )
 
 logger = logging.getLogger(__name__)
@@ -76,18 +81,18 @@ default_asset_checks = list(
     )
 )
 
-
-gcs_base_path = "gs://" + os.environ.get("GCS_BUCKET", "metrics.catalyst.coop")
-local_base_path = str(UPath(os.environ.get("DATA_DIR", ".")) / "usage_metrics")
-
 resources_by_env = {
     "prod": {
-        "parquet_manager": PartitionedParquetIOManager(base_path=gcs_base_path),
-        "pyarrow_reader": PyArrowTableReader(base_path=gcs_base_path),
+        "parquet_manager": PartitionedParquetIOManager(
+            base_path=PUDL_METRICS_GCS_BASE_PATH
+        ),
+        "pyarrow_reader": PyArrowTableReader(base_path=PUDL_METRICS_GCS_BASE_PATH),
     },
     "local": {
-        "parquet_manager": PartitionedParquetIOManager(base_path=local_base_path),
-        "pyarrow_reader": PyArrowTableReader(base_path=local_base_path),
+        "parquet_manager": PartitionedParquetIOManager(
+            base_path=PUDL_METRICS_LOCAL_BASE_PATH
+        ),
+        "pyarrow_reader": PyArrowTableReader(base_path=PUDL_METRICS_LOCAL_BASE_PATH),
     },
 }
 
