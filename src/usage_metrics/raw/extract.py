@@ -62,6 +62,18 @@ concurrency in local testing, so that is the default. Override per extractor via
 the ``download_workers`` argument, or globally via the ``GCS_DOWNLOAD_WORKERS``
 env var."""
 
+DEFAULT_COMPOSE_WORKERS = 128
+"""Default number of threads issuing server-side ``compose()`` calls concurrently.
+
+Compaction reduces hundreds of thousands of tiny objects to a few larger objects using
+thousands of GCS server-side ``compose()`` calls. This constant controls how many of
+those calls can be running in parallel. It is a separate setting from
+``DEFAULT_DOWNLOAD_WORKERS`` because object composition is not bounded by our VM
+resources, and is by far the slowest step in the log compaction. It can be overridden
+with an explicit compose_workers argument, or globally via the ``GCS_COMPOSE_WORKERS``
+env var.
+"""
+
 
 @contextmanager
 def log_download_progress(
@@ -131,6 +143,7 @@ class GCSExtractor(ABC):
         *args,
         client: storage.Client | None = None,
         download_workers: int | None = None,
+        compose_workers: int | None = None,
         **kwargs,
     ):
         """Create new extractor object and load metadata.
@@ -142,6 +155,9 @@ class GCSExtractor(ABC):
             download_workers: Number of concurrent blob-download threads. Defaults
                 to the ``GCS_DOWNLOAD_WORKERS`` env var, then
                 ``DEFAULT_DOWNLOAD_WORKERS``.
+            compose_workers: Number of concurrent server-side ``compose()``
+                threads. Defaults to the ``GCS_COMPOSE_WORKERS`` env var, then
+                ``DEFAULT_COMPOSE_WORKERS``.
         """
         if not self.dataset_name:
             raise NotImplementedError("self.dataset_name must be set.")
@@ -151,22 +167,29 @@ class GCSExtractor(ABC):
         self.download_workers = download_workers or int(
             os.environ.get("GCS_DOWNLOAD_WORKERS", DEFAULT_DOWNLOAD_WORKERS)
         )
+        self.compose_workers = compose_workers or int(
+            os.environ.get("GCS_COMPOSE_WORKERS", DEFAULT_COMPOSE_WORKERS)
+        )
         # Set in extract(); lets load_file() apply partition-specific handling.
         self.partition_key: str | None = None
+        # Number of source objects behind the last download, when a subclass
+        # reduces them before downloading (so it differs from the file count).
+        self.source_object_count: int | None = None
 
     @property
     def gcs_client(self) -> storage.Client:
         """The GCS client, created on first use if one wasn't injected.
 
-        The HTTP connection pool is sized to ``download_workers`` so the
-        concurrent download threads don't contend on the default 10-connection
-        pool.
+        The HTTP connection pool is sized to the larger of ``download_workers``
+        and ``compose_workers`` so the concurrent threads don't contend on the
+        default 10-connection pool.
         """
         if self._client is None:
             client = storage.Client()
+            pool_size = max(self.download_workers, self.compose_workers)
             adapter = requests.adapters.HTTPAdapter(
-                pool_connections=self.download_workers,
-                pool_maxsize=self.download_workers,
+                pool_connections=pool_size,
+                pool_maxsize=pool_size,
             )
             client._http.mount("https://", adapter)
             self._client = client
@@ -290,6 +313,36 @@ class GCSExtractor(ABC):
                 if not data.endswith(b"\n"):
                     combined.write(b"\n")
         return dest
+
+    def build_combined_file(
+        self, context: AssetExecutionContext
+    ) -> tuple[Path, int] | None:
+        """Download the partition's blobs and concatenate them into one file.
+
+        This is ``extract`` minus the parsing, for callers that want the raw
+        combined bytes (e.g. to compact them into a single artifact).
+
+        Returns:
+            ``(combined file, number of source objects)``, or ``None`` when the
+            partition has no files.
+        """
+        self.partition_key = (
+            context.partition_key if context.has_partition_key else None
+        )
+        label = self.partition_key or self.dataset_name
+        download_dir = self.get_download_dir()
+        self.source_object_count = None
+        file_paths = self.download_gcs_blobs(context, download_dir)
+        if not file_paths:
+            context.log.warning(f"No files found for {label}.")
+            return None
+        combined = self.combine_files(file_paths, download_dir / f"{label}.combined")
+        count = (
+            self.source_object_count
+            if self.source_object_count is not None
+            else len(file_paths)
+        )
+        return combined, count
 
     def extract(self, context: AssetExecutionContext) -> pd.DataFrame:
         """Download the partition's logs from GCS and read them into one pandas DataFrame.
