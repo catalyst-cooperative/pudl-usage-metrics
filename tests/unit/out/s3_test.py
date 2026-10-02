@@ -74,6 +74,7 @@ def test_daily_summary_id_does_not_depend_on_the_time_unit(unit, out_s3_logs) ->
 
     result = out_s3_daily_summary_by_table(out_s3_logs)
 
+    assert isinstance(result, pd.DataFrame)
     assert set(result["id"]) == {
         "2026-09-25 00:00:00.000_eel_hole_link_core_eia923__monthly_generation.parquet_v2",
         "2026-09-25 00:00:00.000_other_s3_core_eia860__scd_plants.parquet_v1",

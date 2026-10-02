@@ -19,6 +19,7 @@ zone, so timestamps are written to Parquet as naive microseconds.
 
 import collections
 import copy
+from typing import cast
 
 import pandera.pyarrow as pandera
 from pandera.dtypes import Timestamp
@@ -59,13 +60,16 @@ def _table_schema(
     The primary key columns must be non-null, and their values unique together.
 
     Raises:
-        ValueError: if a column name is repeated, or a primary key column isn't one of
-            the columns.
+        ValueError: if a column has no name or its name is repeated, or a primary key
+            column isn't one of the columns.
     """
-    counts = collections.Counter(column.name for column in columns)
+    names = [column.name for column in columns if column.name is not None]
+    if len(names) != len(columns):
+        raise ValueError(f"Table {name!r} has columns without a name.")
+    counts = collections.Counter(names)
     if repeated := sorted(column for column, count in counts.items() if count > 1):
         raise ValueError(f"Table {name!r} repeats column names: {repeated}.")
-    table_columns = {column.name: copy.deepcopy(column) for column in columns}
+    table_columns = {n: copy.deepcopy(c) for n, c in zip(names, columns, strict=True)}
     primary_key = primary_key or []
     if missing := [key for key in primary_key if key not in table_columns]:
         raise ValueError(
@@ -1264,7 +1268,7 @@ core_eel_hole_user_settings_updates = _table_schema(
 )
 
 usage_metrics_schemas: dict[str, pandera.DataFrameSchema] = {
-    schema.name: schema
+    cast(str, schema.name): schema  # _table_schema always sets the name
     for schema in [
         core_s3_logs,
         out_s3_daily_summary_by_table,
