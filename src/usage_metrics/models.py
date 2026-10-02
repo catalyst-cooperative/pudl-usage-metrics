@@ -1186,6 +1186,26 @@ _eel_hole_preview_columns = [
         dtype=int,
         description="The number of records returned per DuckDB query. This is set by us, so it should be expected to hold constant without our intervention.",
     ),
+    _column(
+        name="params_package",
+        dtype=str,
+        description="The package parameter of the request, e.g. 'pudl'.",
+    ),
+    _column(
+        name="params_table",
+        dtype=str,
+        description="The table parameter of the request, e.g. 'core_eia861__yearly_sales'.",
+    ),
+    _column(
+        name="params_report_date",
+        dtype=str,
+        description="The report date parameter of the request, e.g. '2024-01-01'.",
+    ),
+    _column(
+        name="params_state",
+        dtype=str,
+        description="The state parameter of the request, e.g. 'FL'.",
+    ),
     *(
         column
         for i in range(7)
