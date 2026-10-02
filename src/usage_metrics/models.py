@@ -1008,7 +1008,10 @@ core_zenodo_logs = _table_schema(
         "Daily snapshot of download and view statistics for PUDL's archived "
         "Zenodo datasets and versions."
     ),
-    primary_key=["version_id"],
+    # A daily snapshot: the same version_id recurs once per day it's tracked,
+    # matching the ("metrics_date", "version_id") index zenodo.py itself asserts
+    # is unique. version_id alone is duplicated in most partitions.
+    primary_key=["metrics_date", "version_id"],
 )
 
 core_eel_hole_log_ins = _table_schema(
