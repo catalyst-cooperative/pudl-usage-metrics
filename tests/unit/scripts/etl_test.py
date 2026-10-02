@@ -6,6 +6,13 @@ from unittest.mock import Mock
 
 import pytest
 from click.testing import CliRunner
+from dagster import (
+    AssetCheckResult,
+    Definitions,
+    asset,
+    asset_check,
+    define_asset_job,
+)
 
 from usage_metrics.scripts import etl as etl_module
 from usage_metrics.scripts.etl import _execute, etl
@@ -172,3 +179,42 @@ def test_execute_skips_report_line_when_absent(caplog):
         _execute(job)
     assert "broke" in caplog.text
     assert "EEL-HOLE" not in caplog.text
+
+
+def test_execute_fails_the_job_when_a_blocking_check_fails(caplog):
+    """A failing blocking check, e.g. a table's schema check, fails the whole job.
+
+    The assets downstream of the table don't run, and the check's description and
+    report are still printed at the end, since that is all a reviewer has to go on.
+    """
+    ran = []
+
+    @asset
+    def table():
+        ran.append("table")
+
+    @asset_check(asset=table, blocking=True)
+    def schema_check():
+        return AssetCheckResult(
+            passed=False,
+            description="table failed its schema",
+            metadata={"report": "tls_version  str_matches  2  ['TLSv1.2x']"},
+        )
+
+    @asset
+    def summary(table):
+        ran.append("summary")
+
+    job = Definitions(
+        assets=[table, summary],
+        asset_checks=[schema_check],
+        jobs=[define_asset_job("job")],
+    ).resolve_job_def("job")
+
+    with caplog.at_level(logging.WARNING, logger="usage_metrics"):
+        succeeded = _execute(job)
+
+    assert not succeeded
+    assert ran == ["table"]
+    assert "table failed its schema" in caplog.text
+    assert "TLSv1.2x" in caplog.text
