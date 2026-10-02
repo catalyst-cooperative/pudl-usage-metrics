@@ -26,6 +26,17 @@ PARTITION_KEY = "2025-01-01"
 PARTITIONS_DEF = DailyPartitionsDefinition(start_date="2023-08-16")
 
 
+# Two different values for each string column that has a pattern in its schema.
+PATTERNED_VALUES = {
+    "bucket_owner": ["a" * 64, "b" * 64],
+    "remote_ip": ["192.0.2.3", "2001:db8::1"],
+    "operation": ["REST.GET.OBJECT", "REST.HEAD.OBJECT"],
+    "request_uri": ["GET /a HTTP/1.1", "-"],
+    "signature_version": ["SigV4", "SigV2"],
+    "tls_version": ["TLSv1.3", "-"],
+}
+
+
 def _distinct_values(schema: pa.Schema) -> dict[str, list]:
     """Make two rows of values that differ per column, so a column mix-up shows up."""
     values = {}
@@ -42,7 +53,9 @@ def _distinct_values(schema: pa.Schema) -> dict[str, list]:
                 pd.Timestamp("2025-06-01") + pd.Timedelta(days=i),
             ]
         else:
-            column = [f"{field.name}-a", f"{field.name}-b"]
+            column = PATTERNED_VALUES.get(
+                field.name, [f"{field.name}-a", f"{field.name}-b"]
+            )
         values[field.name] = column
     # The IO manager overwrites partition_key with the Dagster partition key.
     if "partition_key" in values:

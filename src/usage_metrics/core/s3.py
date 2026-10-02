@@ -51,32 +51,15 @@ LAST_PARTITION_WITHOUT_AWS_REGION = "2026-02-15"
 We don't need it, so it is dropped rather than persisted.
 """
 
-_S3_LOG_COLUMN_PATTERNS = {
-    "bucket_owner": r"[0-9a-f]{64}",
-    "time": r"\[\d{2}/[A-Z][a-z]{2}/\d{4}:\d{2}:\d{2}:\d{2}",
-    "timezone": r"[+-]\d{4}\]",
-    "remote_ip": r"-|(\d{1,3}\.){3}\d{1,3}|[0-9a-fA-F:]+:[0-9a-fA-F:]*",
-    "operation": r"[A-Z0-9_]+(\.[A-Za-z0-9_]+)+",
-    "request_uri": r"-|[A-Z]+ .*",
-    "signature_version": r"-|SigV[24]",
-    "tls_version": r"-|TLSv1\.[0-3]",
-}
-"""Formats of some fields whose formats are distinctive and always strings.
-
-They are checked after the columns are named, so that a field added or moved in
-the middle of the row, which names would otherwise silently line up wrong with, is
-caught. Numeric fields are left out: they all look alike, and pandas may parse them as
-integers or floats depending on the day's data.
-"""
-
 
 def name_s3_log_columns(raw_s3_logs: pd.DataFrame, partition_key: str) -> pd.DataFrame:
-    """Name the columns of headerless raw S3 logs, checking that they line up.
+    """Name the columns of headerless raw S3 logs, checking the number of columns.
 
     Names are assigned by position, so a field AWS inserts anywhere but the end of
-    the row would shift every following field into the wrong column. Besides
-    checking the number of columns, this checks that the values in a few
-    columns with distinctive formats look like what their names claim.
+    the row would shift every following field into the wrong column. That is caught
+    by the formats declared for some columns in :mod:`usage_metrics.models`, which the
+    schema asset check validates after the data is written, and by the parsing of
+    ``time`` in :func:`core_s3_logs`.
 
     Args:
         raw_s3_logs: Raw logs, with integer column labels.
@@ -86,8 +69,7 @@ def name_s3_log_columns(raw_s3_logs: pd.DataFrame, partition_key: str) -> pd.Dat
         A copy with named columns, without the unused aws_region column.
 
     Raises:
-        ValueError: If the number of columns is unexpected, or the values in a column
-            don't look like what the column's name says.
+        ValueError: If the number of columns is unexpected.
     """
     columns = list(S3_LOG_COLUMNS)
     if pd.to_datetime(partition_key) > pd.to_datetime(
@@ -100,17 +82,6 @@ def name_s3_log_columns(raw_s3_logs: pd.DataFrame, partition_key: str) -> pd.Dat
             f"found {raw_s3_logs.shape[1]}. Has AWS changed the log format?"
         )
     named = raw_s3_logs.set_axis(columns, axis="columns")
-
-    for column, pattern in _S3_LOG_COLUMN_PATTERNS.items():
-        matches = named[column].astype("string").str.fullmatch(pattern).fillna(False)
-        mismatched = named.loc[~matches.astype(bool), column]
-        if not mismatched.empty:
-            raise ValueError(
-                f"{len(mismatched)} values in S3 log column {column!r} for "
-                f"{partition_key} don't match the expected format {pattern!r}, "
-                f"e.g. {mismatched.unique()[:5].tolist()}. The columns may be "
-                "misaligned: has AWS added or moved a field in the log format?"
-            )
     return named.drop(columns=columns[len(S3_LOG_COLUMNS) :])
 
 
