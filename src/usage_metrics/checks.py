@@ -5,11 +5,38 @@ asset check that validates the materialized parquet data against that schema: it
 types, which columns may be null, and its primary key.
 """
 
+import pandas as pd
 import pandera.errors
 import pandera.pyarrow as pandera
-from dagster import AssetCheckResult, AssetChecksDefinition, AssetKey, asset_check
+from dagster import (
+    AssetCheckResult,
+    AssetChecksDefinition,
+    AssetCheckSeverity,
+    AssetKey,
+    asset_check,
+)
 
 from usage_metrics.models import usage_metrics_schemas
+
+EXAMPLES_PER_CHECK = 3
+"""How many failing values to show for each column and check in a failure report."""
+
+
+def _failure_report(failure_cases: pd.DataFrame) -> str:
+    """Summarize pandera failure cases: one line per column and check, with examples.
+
+    A table can have many thousands of failing values, so this counts them and shows a
+    few, rather than listing them all.
+    """
+    return (
+        failure_cases.groupby(["column", "check"], dropna=False)["failure_case"]
+        .agg(
+            failures="size",
+            examples=lambda cases: cases.astype(str).head(EXAMPLES_PER_CHECK).tolist(),
+        )
+        .reset_index()
+        .to_string(index=False)
+    )
 
 
 def _make_schema_check(
@@ -28,9 +55,19 @@ def _make_schema_check(
         try:
             schema.validate(table, lazy=True)
         except pandera.errors.SchemaErrors as err:
+            failure_cases = err.failure_cases.to_pandas()
+            report = _failure_report(failure_cases)
+            partition = f" {context.partition_key}" if context.has_partition_key else ""
+            context.log.error(f"{table_name}{partition} failed its schema:\n{report}")
             return AssetCheckResult(
                 passed=False,
-                metadata={"failure_cases": str(err.failure_cases.to_pandas())},
+                severity=AssetCheckSeverity.ERROR,
+                description=(
+                    f"{table_name}{partition}: {len(failure_cases)} values failed "
+                    f"the table's schema. See the 'report' metadata for the columns "
+                    "and checks that failed, with examples."
+                ),
+                metadata={"report": report, "failure_cases": str(failure_cases)},
             )
         return AssetCheckResult(passed=True, metadata={"row_count": table.num_rows})
 
