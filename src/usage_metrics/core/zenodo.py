@@ -99,9 +99,27 @@ def core_zenodo_logs(
     ]:
         df[col] = pd.to_datetime(df[col])
 
+    # An archive is a full snapshot of every version of a record, and a day can have
+    # more than one: the archive job can run twice in a day, and a version published in
+    # between names the second archive for a new latest version id. Keep the latest
+    # snapshot of each version, which has the newest statistics.
+    key = ["metrics_date", "version_id"]
+    repeated = df.duplicated(key, keep=False)
+    if repeated.any():
+        dates = ", ".join(
+            sorted(str(d) for d in df.loc[repeated, "metrics_date"].unique())
+        )
+        context.log.warning(
+            f"{df.loc[repeated, 'version_id'].nunique()} versions are in more than one "
+            "archive for the same day; keeping each one from the archive with the "
+            f"highest record id. Dates: {dates}."
+        )
+        df = df.sort_values("source_record_id").drop_duplicates(key, keep="last")
+    df = df.drop(columns="source_record_id")
+
     # Check validity of PK column
-    df = df.set_index(["metrics_date", "version_id"])
-    assert df.index.is_unique
+    df = df.set_index(key)
+    assert df.index.is_unique, f"Duplicate {key} in the Zenodo logs"
 
     # Add a column with the dataset slug
     dataset_slugs = {
