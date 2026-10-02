@@ -1,9 +1,8 @@
 """Pandera-based schema and primary-key asset checks for usage_metrics tables.
 
-For every table with a pyarrow schema defined in :mod:`usage_metrics.models`,
-build an asset check that validates the materialized parquet data against
-that schema's column types and (documentation-only, previously unenforced)
-primary key, now enforced here as a uniqueness constraint.
+For every table with a pyarrow schema defined in :mod:`usage_metrics.models`, build an
+asset check that validates the materialized parquet data against that schema's column
+types and primary key.
 """
 
 import json
@@ -19,17 +18,16 @@ from usage_metrics.models import usage_metrics_schemas
 def _pandera_schema(schema: pa.Schema) -> pandera.DataFrameSchema:
     """Build a pandera pyarrow DataFrameSchema from a pyarrow Schema.
 
-    Columns are marked nullable, since nothing has enforced non-null
-    constraints on this data before now, and we don't want to fail checks on
-    legitimately sparse columns. Only the documented primary key is enforced,
-    as a uniqueness constraint.
+    All columns except those that are part of the primary key are assumed to be
+    nullable. Primary key columns are required to be unique.
     """
-    columns = {
-        field.name: pandera.Column(field.type, nullable=True) for field in schema
-    }
-    primary_key = None
+    primary_key: list[str] = []
     if schema.metadata and b"primary_key" in schema.metadata:
         primary_key = json.loads(schema.metadata[b"primary_key"])
+    columns = {
+        field.name: pandera.Column(field.type, nullable=field.name not in primary_key)
+        for field in schema
+    }
     return pandera.DataFrameSchema(columns, unique=primary_key, strict=False)
 
 

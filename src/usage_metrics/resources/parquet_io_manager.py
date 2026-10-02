@@ -122,17 +122,12 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
 class PyArrowTableReader(ConfigurableResource):
     """Reads parquet outputs directly as pyarrow Tables, bypassing pandas.
 
-    `base_path` may be a local directory or a remote URI (e.g. `gs://bucket`)
-    -- UPath handles both transparently, so a single class covers local and
-    remote storage.
+    `base_path` may be a local directory or a remote URI (e.g. `gs://bucket`) -- UPath
+    handles both transparently, so a single class covers local and remote storage.
 
-    This is a plain reader, not an IOManager: Dagster doesn't allow an asset
-    check to load its own target asset through a second IOManager via
-    `additional_ins` (the same asset key can't be passed to both `asset=` and
-    `additional_ins=`), so schema-validating asset checks call `read_table`
-    directly instead. It's used by pandera asset checks that validate data
-    with pandera's pyarrow backend, so validation runs on the same Arrow data
-    written by PartitionedParquetIOManager with no pandas round-trip.
+    This is not an IOManager. It's used by pandera asset checks that validate data with
+    the pyarrow backend. This allows validation to run on the Arrow data written by
+    PartitionedParquetIOManager without a pandas round-trip.
     """
 
     base_path: str
