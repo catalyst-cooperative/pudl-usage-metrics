@@ -108,3 +108,32 @@ def test_empty_dataframe_is_written_with_the_full_schema(table_name, tmp_path) -
 
     assert loaded.empty
     assert set(loaded.columns) == set(usage_metrics_schemas[table_name].columns)
+
+
+@pytest.mark.parametrize(
+    "table_name", ["core_eel_hole_previews", "core_eel_hole_downloads"]
+)
+def test_request_params_from_the_data_viewer_are_written(table_name, tmp_path) -> None:
+    """The assets keep every ``params_*`` column, so each one needs a place in the schema.
+
+    The viewer began logging these four parameters in September 2026, and a run failed
+    because the IO manager refused the columns it didn't know.
+    """
+    manager = PartitionedParquetIOManager(base_path=str(tmp_path))
+    df = pd.DataFrame(
+        {
+            "insert_id": ["a"],
+            "params_package": ["pudl"],
+            "params_table": ["core_eia861__yearly_sales"],
+            "params_report_date": ["2024-01-01"],
+            "params_state": ["FL"],
+        }
+    )
+
+    with _output_context(table_name) as context:
+        manager.handle_output(context, df)
+    with _input_context(table_name) as context:
+        loaded = manager.load_input(context)
+
+    assert loaded.params_state.tolist() == ["FL"]
+    assert loaded.params_report_date.tolist() == ["2024-01-01"]
