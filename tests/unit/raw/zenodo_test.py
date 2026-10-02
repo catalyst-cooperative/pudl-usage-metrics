@@ -36,6 +36,7 @@ def test_load_file_dates_rows_from_filename(tmp_path):
     df = ZenodoExtractor().load_file(path)
     assert list(df["id"]) == [1, 2]
     assert set(df["metrics_date"]) == {"2024-01-03"}
+    assert set(df["source_record_id"]) == {222}
 
 
 def test_extract_keeps_per_file_metrics_date(
