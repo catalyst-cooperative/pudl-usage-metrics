@@ -61,3 +61,20 @@ def test_daily_summary_id_is_unique_and_not_null(summary_fn, out_s3_logs) -> Non
     result = summary_fn(out_s3_logs)
     assert not result["id"].isna().any()
     assert result["id"].is_unique
+
+
+@pytest.mark.parametrize("unit", ["ms", "us", "ns"])
+def test_daily_summary_id_does_not_depend_on_the_time_unit(unit, out_s3_logs) -> None:
+    """The same row has the same id whatever unit its timestamp is stored in.
+
+    Parquet files written before timestamps became microseconds hold milliseconds, so
+    the ids already in production would otherwise change when a partition is rewritten.
+    """
+    out_s3_logs["time"] = out_s3_logs["time"].astype(f"datetime64[{unit}]")
+
+    result = out_s3_daily_summary_by_table(out_s3_logs)
+
+    assert set(result["id"]) == {
+        "2026-09-25 00:00:00.000_eel_hole_link_core_eia923__monthly_generation.parquet_v2",
+        "2026-09-25 00:00:00.000_other_s3_core_eia860__scd_plants.parquet_v1",
+    }
