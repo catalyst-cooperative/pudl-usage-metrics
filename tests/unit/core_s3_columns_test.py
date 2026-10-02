@@ -8,9 +8,13 @@ caught instead of silently filing values under the wrong names.
 import io
 
 import pandas as pd
+import pandera.errors
+import pyarrow as pa
 import pytest
 
 from usage_metrics.core.s3 import S3_LOG_COLUMNS, name_s3_log_columns
+from usage_metrics.models import usage_metrics_schemas
+from usage_metrics.schemas import arrow_schema
 
 BEFORE_AWS_REGION = "2026-02-15"
 AFTER_AWS_REGION = "2026-02-16"
@@ -89,10 +93,42 @@ def test_wrong_number_of_columns_is_rejected(partition_key, extra_fields) -> Non
         name_s3_log_columns(raw, partition_key)
 
 
+SCHEMA = usage_metrics_schemas["core_s3_logs"]
+PATTERN_COLUMNS = [
+    "bucket_owner",
+    "remote_ip",
+    "operation",
+    "request_uri",
+    "signature_version",
+    "tls_version",
+]
+
+
+def _validate_named_columns(named: pd.DataFrame) -> None:
+    """Validate the columns of core_s3_logs that have patterns, using its schema.
+
+    The other columns are null, since the transform that fills them in isn't run.
+    """
+    arrow = arrow_schema(SCHEMA)
+    rows = len(named)
+    columns = {field.name: pa.array([None] * rows, field.type) for field in arrow}
+    columns["id"] = pa.array([f"id-{i}" for i in range(rows)])
+    for column in PATTERN_COLUMNS:
+        columns[column] = pa.array(named[column].astype(str), pa.string())
+    SCHEMA.validate(pa.table(columns, schema=arrow), lazy=True)
+
+
+def test_correctly_named_columns_pass_the_schema() -> None:
+    named = name_s3_log_columns(_read(list(LOG_FIELDS.values())), BEFORE_AWS_REGION)
+
+    _validate_named_columns(named)
+
+
 @pytest.mark.parametrize("insert_after", ["bucket", "operation", "key", "http_status"])
-def test_field_inserted_mid_row_is_rejected(insert_after) -> None:
+def test_field_inserted_mid_row_is_rejected_by_the_schema(insert_after) -> None:
     """A field AWS adds mid-row keeps the column count right but shifts every
-    later field one column over. That must be caught, not silently misnamed.
+    later field one column over. Naming can't tell, but the formats declared for
+    some columns in the schema can, so that it isn't silently misnamed.
     """
     fields = []
     for column, raw in LOG_FIELDS.items():
@@ -102,9 +138,13 @@ def test_field_inserted_mid_row_is_rejected(insert_after) -> None:
     # One extra field, so this is the right width for the newer layout.
     raw = _read(fields)
     assert raw.shape[1] == len(S3_LOG_COLUMNS) + 1
+    named = name_s3_log_columns(raw, AFTER_AWS_REGION)
 
-    with pytest.raises(ValueError, match="misaligned"):
-        name_s3_log_columns(raw, AFTER_AWS_REGION)
+    with pytest.raises(pandera.errors.SchemaErrors) as error:
+        _validate_named_columns(named)
+
+    failed = set(error.value.failure_cases.to_pandas()["column"])
+    assert failed and failed <= set(PATTERN_COLUMNS)
 
 
 def test_input_is_not_modified() -> None:

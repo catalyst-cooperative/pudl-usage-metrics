@@ -21,6 +21,7 @@ def _make_schema_check(
         asset=AssetKey(table_name),
         name="pandera_schema_check",
         required_resource_keys={"pyarrow_reader"},
+        blocking=True,
     )
     def _check(context) -> AssetCheckResult:
         table = context.resources.pyarrow_reader.read_table(table_name, context)

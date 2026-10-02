@@ -75,6 +75,29 @@ def test_pandas_dtypes_are_nullable() -> None:
     }
 
 
+def test_pattern_must_match_the_whole_value_but_not_nulls() -> None:
+    schema = _table_schema(
+        "t", [_column("tls", str, pattern=r"-|TLSv1\.[0-3]")], comment="t"
+    )
+
+    def failures(values: list) -> list:
+        table = pa.table({"tls": pa.array(values, pa.string())})
+        try:
+            schema.validate(table, lazy=True)
+        except pandera.errors.SchemaErrors as error:
+            return error.failure_cases.to_pandas()["failure_case"].tolist()
+        return []
+
+    assert failures(["-", "TLSv1.2", None]) == []
+    # Not just a prefix, and not just one side of the alternation.
+    assert failures(["-garbage", "xTLSv1.2", "TLSv1.2x", "TLSv1.9"]) == [
+        "-garbage",
+        "xTLSv1.2",
+        "TLSv1.2x",
+        "TLSv1.9",
+    ]
+
+
 def _table(**columns: list) -> pa.Table:
     return pa.table(
         {
