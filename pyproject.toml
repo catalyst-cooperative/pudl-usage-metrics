@@ -29,6 +29,7 @@ test = ["test"]
 [tool.pixi.dependencies]
 dagster = ">=1.13"
 dagster-webserver = ">=1.13"
+narwhals = ">=2.26"
 pandas = ">=3"
 # 0.33 required for Arrow tables. conda-forge splits pandera extras into separate
 # packages (pandera-narwhals); the pyarrow extra is just the pyarrow package.

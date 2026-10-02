@@ -6,7 +6,9 @@ fields in a different order and require that, compared by name, nothing changes.
 """
 
 import pandas as pd
+import pandera.pyarrow as pandera
 import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 from dagster import (
     DailyPartitionsDefinition,
@@ -18,6 +20,7 @@ from usage_metrics.models import usage_metrics_schemas
 from usage_metrics.resources.parquet_io_manager import (
     PartitionedParquetIOManager,
 )
+from usage_metrics.schemas import arrow_schema
 
 PARTITION_KEY = "2025-01-01"
 PARTITIONS_DEF = DailyPartitionsDefinition(start_date="2023-08-16")
@@ -77,7 +80,7 @@ def test_parquet_round_trip_independent_of_column_order(
 ) -> None:
     """Every value comes back in the column with its name, whatever the order."""
     schema = usage_metrics_schemas[table_name]
-    expected = pd.DataFrame(_distinct_values(schema))
+    expected = pd.DataFrame(_distinct_values(arrow_schema(schema)))
 
     df = expected.copy()
     if reverse_dataframe:
@@ -86,10 +89,33 @@ def test_parquet_round_trip_independent_of_column_order(
         monkeypatch.setitem(
             usage_metrics_schemas,
             table_name,
-            pa.schema(list(reversed(list(schema)))).with_metadata(schema.metadata),
+            pandera.DataFrameSchema(
+                dict(reversed(schema.columns.items())),
+                unique=schema.unique,
+                strict=False,
+                description=schema.description,
+            ),
         )
 
     manager = PartitionedParquetIOManager(base_path=str(tmp_path))
     loaded = _write_then_load(manager, table_name, df)
 
     pd.testing.assert_frame_equal(loaded, expected, check_like=True, check_dtype=False)
+
+
+@pytest.mark.parametrize("table_name", list(usage_metrics_schemas))
+def test_written_parquet_passes_its_pandera_check(table_name: str, tmp_path) -> None:
+    """What the IO manager writes is what the schema asset check will validate."""
+    schema = usage_metrics_schemas[table_name]
+    df = pd.DataFrame(_distinct_values(arrow_schema(schema)))
+    manager = PartitionedParquetIOManager(base_path=str(tmp_path))
+
+    with build_output_context(
+        asset_key=table_name,
+        partition_key=PARTITION_KEY,
+        asset_partitions_def=PARTITIONS_DEF,
+    ) as context:
+        manager.handle_output(context, df)
+        written = pq.read_table(str(manager._get_path(context)))
+
+    schema.validate(written, lazy=True)
