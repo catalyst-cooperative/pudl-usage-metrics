@@ -20,21 +20,22 @@ def arrow_schema(schema: pandera.DataFrameSchema) -> pa.Schema:
     """Build the pyarrow schema that a table is written to Parquet with.
 
     Column descriptions become field metadata, and the table description becomes
-    schema metadata, so that they are in the Parquet file footer.
+    schema metadata, both under the key ``description``, so that they are in the
+    Parquet file footer.
     """
     fields = [
         pa.field(
             field.name,
             field.type,
             metadata=(
-                {"comment": description}
+                {"description": description}
                 if (description := schema.columns[field.name].description)
                 else None
             ),
         )
         for field in _narwhals_schema(schema).to_arrow()
     ]
-    return pa.schema(fields).with_metadata({"comment": schema.description})
+    return pa.schema(fields).with_metadata({"description": schema.description})
 
 
 def pandas_dtypes(schema: pandera.DataFrameSchema) -> dict[str, str]:

@@ -18,7 +18,7 @@ SCHEMA = _table_schema(
         _column("ratio", float),
         _column("flag", bool),
     ],
-    comment="A table.",
+    description="A table.",
     primary_key=["id"],
 )
 
@@ -31,8 +31,8 @@ def test_primary_key_columns_are_required_and_others_nullable() -> None:
 
 def test_columns_shared_between_tables_are_not_changed_by_a_primary_key() -> None:
     shared = [_column("a", str), _column("b", str)]
-    _table_schema("t1", shared, comment="keyed on a", primary_key=["a"])
-    _table_schema("t2", shared, comment="keyed on b", primary_key=["b"])
+    _table_schema("t1", shared, description="keyed on a", primary_key=["a"])
+    _table_schema("t2", shared, description="keyed on b", primary_key=["b"])
 
     assert all(column.nullable for column in shared)
 
@@ -58,9 +58,9 @@ def test_arrow_schema_has_types_and_documentation() -> None:
         pa.float64(),
         pa.bool_(),
     ]
-    assert arrow.field("id").metadata == {b"comment": b"A unique ID."}
+    assert arrow.field("id").metadata == {b"description": b"A unique ID."}
     assert arrow.field("count").metadata is None
-    assert arrow.metadata[b"comment"] == b"A table."
+    assert arrow.metadata[b"description"] == b"A table."
     # Nulls in primary keys are reported by the asset checks, not refused on write.
     assert all(field.nullable for field in arrow)
 
@@ -77,7 +77,7 @@ def test_pandas_dtypes_are_nullable() -> None:
 
 def test_pattern_must_match_the_whole_value_but_not_nulls() -> None:
     schema = _table_schema(
-        "t", [_column("tls", str, pattern=r"-|TLSv1\.[0-3]")], comment="t"
+        "t", [_column("tls", str, pattern=r"-|TLSv1\.[0-3]")], description="t"
     )
 
     def failures(values: list) -> list:
