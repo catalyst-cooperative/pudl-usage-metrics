@@ -19,7 +19,8 @@ from dagster import (
 from upath import UPath
 
 from usage_metrics.helpers import get_table_name_from_context
-from usage_metrics.models import ARROW_TO_PANDAS, usage_metrics_schemas
+from usage_metrics.models import usage_metrics_schemas
+from usage_metrics.schemas import arrow_schema, pandas_dtypes
 
 
 def _parquet_path(
@@ -60,8 +61,8 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
                 table_name in usage_metrics_schemas
             ), f"""{table_name} does not have a schema defined.
                 Create a schema for it in usage_metrics.models."""
-            schema = usage_metrics_schemas[table_name]
-            table_dtypes = {f.name: ARROW_TO_PANDAS[f.type] for f in schema}
+            schema = arrow_schema(usage_metrics_schemas[table_name])
+            table_dtypes = pandas_dtypes(usage_metrics_schemas[table_name])
             # Writing with a schema silently drops any column that isn't in it, so a
             # renamed or newly added upstream field would just vanish. Fail instead.
             extra_columns = [c for c in obj.columns if c not in table_dtypes]
@@ -88,7 +89,7 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
                 **{
                     c: pd.to_datetime(obj[c]).dt.tz_localize(None)
                     for c in obj.columns
-                    if c in table_dtypes and table_dtypes[c] == "datetime64[s]"
+                    if c in table_dtypes and table_dtypes[c].startswith("datetime64")
                 }
             )
             # we need the .astype because int nulls in string-object columns make Arrow sad

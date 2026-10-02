@@ -41,7 +41,7 @@ def test_extra_columns_raise_and_nothing_is_written(table_name, tmp_path) -> Non
     """A column that isn't in the schema is an error, not silently dropped."""
     manager = PartitionedParquetIOManager(base_path=str(tmp_path))
     df = pd.DataFrame(
-        {name: [] for name in usage_metrics_schemas[table_name].names}
+        {name: [] for name in list(usage_metrics_schemas[table_name].columns)}
         | {"surprise_column": [], "another_surprise": []}
     )
 
@@ -107,4 +107,4 @@ def test_empty_dataframe_is_written_with_the_full_schema(table_name, tmp_path) -
         loaded = manager.load_input(context)
 
     assert loaded.empty
-    assert set(loaded.columns) == set(usage_metrics_schemas[table_name].names)
+    assert set(loaded.columns) == set(usage_metrics_schemas[table_name].columns)

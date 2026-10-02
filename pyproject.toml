@@ -28,6 +28,7 @@ test = ["test"]
 [tool.pixi.dependencies]
 pandas = ">=3.1"
 pyarrow = ">=24"
+narwhals = ">=2.26"
 # 0.33 required for Arrow tables. conda-forge splits pandera extras into separate
 # packages (pandera-narwhals); the pyarrow extra is just the pyarrow package.
 pandera = ">=0.33"
