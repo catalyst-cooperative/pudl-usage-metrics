@@ -25,10 +25,14 @@ def _with_summary_id(df: pl.DataFrame, group_by: list[str]) -> pl.DataFrame:
     that didn't resolve), so cast to string and fill nulls before
     concatenating -- `concat_str` otherwise propagates any null component to a
     null `id`, defeating the purpose.
+
+    The day is formatted explicitly, to the millisecond, rather than cast to a
+    string: a cast includes the timestamp's unit, so the same row would get a
+    different `id` if the column's unit changed.
     """
     return df.with_columns(
         pl.concat_str(
-            [pl.col("time").cast(pl.String)]
+            [pl.col("time").dt.strftime("%Y-%m-%d %H:%M:%S%.3f")]
             + [pl.col(c).cast(pl.String).fill_null("") for c in group_by],
             separator="_",
         ).alias("id")
