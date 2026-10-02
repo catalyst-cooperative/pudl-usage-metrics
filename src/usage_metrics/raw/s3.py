@@ -1,5 +1,6 @@
 """Extract data from S3 logs."""
 
+import re
 from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
@@ -14,6 +15,39 @@ from dagster import (
 from google.cloud import storage
 
 from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
+
+# Some clients embed raw, unescaped double quotes inside a quoted field --
+# e.g. pip (>= 20) sends a User-Agent like
+# `"pip/24.3.1 {"ci":null,"cpu":"x86_64",...}"`. That violates CSV's quoting
+# rules (an embedded quote must be doubled), so polars refuses to parse the
+# line at all ("not properly escaped").
+#
+# There's no reliable way to *repair* this: any embedded quote is inherently
+# ambiguous (that's exactly why CSV requires escaping), and even AWS's own
+# Athena RegexSerDe and other widely-used S3-log parsers don't attempt
+# to -- they use a `[^"]*` quoted-field pattern that simply fails to match
+# these lines, so the row is silently dropped. We do the same: drop the
+# (rare) offending line and keep the rest of the day's data, rather than
+# guess at its content.
+#
+# A closing `"` immediately followed by whitespace can only be the real end of
+# a quoted field: none of these log's quoted fields (the request line, referer,
+# user-agent) legitimately end a piece of content with `"` right before a
+# space, and compact JSON never puts a raw space right after a quote either
+# (only `:`, `,`, or `}` do -- a string value's closing quote is itself
+# followed by more JSON punctuation, not whitespace). So this reliably finds
+# each quoted field's true extent regardless of what's inside it; a line only
+# needs dropping when a field's content itself still contains a `"`.
+_QUOTED_FIELD = re.compile(r'"(.*?)"(?=\s)', re.DOTALL)
+
+
+def _drop_lines_with_embedded_quotes(text: str) -> str:
+    """Drop any line containing a field with unescaped embedded quotes."""
+    return "".join(
+        line
+        for line in text.splitlines(keepends=True)
+        if not any('"' in field for field in _QUOTED_FIELD.findall(line))
+    )
 
 
 class S3Extractor(GCSExtractor):
@@ -86,6 +120,16 @@ class S3Extractor(GCSExtractor):
                     infer_schema_length=0,
                     schema={f"column_{i + 1}": pl.String for i in range(28)},
                     truncate_ragged_lines=True,
+                )
+            if "not properly escaped" in str(e):
+                cleaned = _drop_lines_with_embedded_quotes(
+                    file_path.read_text(errors="replace")
+                )
+                return pl.read_csv(
+                    cleaned.encode(),
+                    separator=" ",
+                    has_header=False,
+                    infer_schema_length=0,
                 )
             e.add_note(f"Extraction failed for file: {file_path}")
             raise
