@@ -1,6 +1,7 @@
 """Test building pandera table schemas and deriving pyarrow and pandas schemas."""
 
 import pandera.errors
+import pandera.pyarrow
 import pyarrow as pa
 import pytest
 from pandera.dtypes import Timestamp
@@ -38,6 +39,8 @@ def test_columns_shared_between_tables_are_not_changed_by_a_primary_key() -> Non
 
 
 def test_bad_table_definitions_are_rejected() -> None:
+    with pytest.raises(ValueError, match="Table 'bad' has columns without a name"):
+        _table_schema("bad", [pandera.pyarrow.Column(str)], "t")
     with pytest.raises(
         ValueError, match=r"Table 'bad' has primary key columns \['nope'\]"
     ):
