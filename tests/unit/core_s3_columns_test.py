@@ -124,6 +124,14 @@ def test_correctly_named_columns_pass_the_schema() -> None:
     _validate_named_columns(named)
 
 
+def test_invalid_relay_tls_version_passes_the_schema() -> None:
+    """AWS logs this TLS version for some requests, though its documentation doesn't."""
+    fields = {**LOG_FIELDS, "tls_version": "INVALID_RELAY_TLS_VERSION"}
+    named = name_s3_log_columns(_read(list(fields.values())), BEFORE_AWS_REGION)
+
+    _validate_named_columns(named)
+
+
 @pytest.mark.parametrize("insert_after", ["bucket", "operation", "key", "http_status"])
 def test_field_inserted_mid_row_is_rejected_by_the_schema(insert_after) -> None:
     """A field AWS adds mid-row keeps the column count right but shifts every
