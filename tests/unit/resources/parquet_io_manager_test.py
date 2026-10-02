@@ -48,7 +48,7 @@ def test_zstd_output_round_trips_and_keeps_the_columns(manager, frame, tmp_path)
     """The compressed file reads back with the documented columns and values."""
     manager.handle_output(build_output_context(asset_key=AssetKey(TABLE)), frame)
     table = pq.read_table(tmp_path / f"{TABLE}.parquet")
-    assert table.column_names == usage_metrics_schemas[TABLE].names
+    assert table.column_names == list(usage_metrics_schemas[TABLE].columns)
     loaded = manager.load_input(build_input_context(asset_key=AssetKey(TABLE)))
     assert loaded["id"].tolist() == [1, 2, 3]
     assert loaded["login"].tolist() == ["a", "b", "c"]
