@@ -16,7 +16,7 @@ from dagster import (
 
 from usage_metrics.models import usage_metrics_schemas
 from usage_metrics.resources.parquet_io_manager import (
-    LocalPartitionedParquetIOManager,
+    PartitionedParquetIOManager,
 )
 
 PARTITION_KEY = "2025-01-01"
@@ -48,7 +48,7 @@ def _distinct_values(schema: pa.Schema) -> dict[str, list]:
 
 
 def _write_then_load(
-    manager: LocalPartitionedParquetIOManager, table_name: str, df: pd.DataFrame
+    manager: PartitionedParquetIOManager, table_name: str, df: pd.DataFrame
 ) -> pd.DataFrame:
     kwargs = {
         "asset_key": table_name,
@@ -89,7 +89,7 @@ def test_parquet_round_trip_independent_of_column_order(
             pa.schema(list(reversed(list(schema)))).with_metadata(schema.metadata),
         )
 
-    manager = LocalPartitionedParquetIOManager(base_path=str(tmp_path))
+    manager = PartitionedParquetIOManager(base_path=str(tmp_path))
     loaded = _write_then_load(manager, table_name, df)
 
     pd.testing.assert_frame_equal(loaded, expected, check_like=True, check_dtype=False)

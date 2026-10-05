@@ -1,10 +1,8 @@
 """Dagster definitions for the PUDL usage metrics ETL."""
 
-import importlib.resources
 import itertools
 import logging
 import os
-import warnings
 
 from dagster import (
     AssetKey,
@@ -16,11 +14,16 @@ from dagster import (
     load_asset_checks_from_modules,
     load_assets_from_modules,
 )
+from upath import UPath
 
 import usage_metrics
-from usage_metrics.resources.parquet_io_manager import (
-    gcs_parquet_manager,
-    local_parquet_manager,
+from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
+
+PUDL_METRICS_GCS_BASE_PATH = "gs://" + os.environ.get(
+    "PUDL_METRICS_GCS_BUCKET", "metrics.catalyst.coop"
+)
+PUDL_METRICS_LOCAL_BASE_PATH = str(
+    UPath(os.environ.get("PUDL_METRICS_LOCAL_DATA_DIR", ".")) / "usage_metrics"
 )
 
 logger = logging.getLogger(__name__)
@@ -105,10 +108,14 @@ _asset_keys = itertools.chain.from_iterable(
 
 resources_by_env = {
     "prod": {
-        "parquet_manager": gcs_parquet_manager,
+        "parquet_manager": PartitionedParquetIOManager(
+            base_path=PUDL_METRICS_GCS_BASE_PATH
+        ),
     },
     "local": {
-        "parquet_manager": local_parquet_manager,
+        "parquet_manager": PartitionedParquetIOManager(
+            base_path=PUDL_METRICS_LOCAL_BASE_PATH
+        ),
     },
 }
 
