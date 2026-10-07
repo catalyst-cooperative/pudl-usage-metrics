@@ -17,13 +17,16 @@ from dagster import (
 )
 from google.cloud import storage
 
-from usage_metrics.paths import PUDL_METRICS_S3_LOGS_BUCKET
+from usage_metrics.paths import (
+    PUDL_METRICS_S3_LOGS_BUCKET,
+    get_gcs_raw_path,
+    split_gcs_uri,
+)
 from usage_metrics.raw.compose import compose_day
 from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 
-COMPACTED_BUCKET = "metrics.catalyst.coop"
-COMPACTED_PREFIX = "raw/pudl_s3_logs"
-"""Where each day's compacted log artifact (``<date>.log.zst``) is stored."""
+DATASET_NAME = "pudl_s3_logs"
+"""Names the dataset's local ``raw/`` subdirectory and its compacted artifacts in GCS."""
 
 TRANSFER_DELAY = timedelta(days=1, hours=2)
 """How long after the start of a partition's day its logs are fully in GCS.
@@ -80,9 +83,12 @@ class FusedRecordsError(ValueError):
     """Two log records were joined on one line (a source object lacked a newline)."""
 
 
-def compacted_path(partition_key: str) -> str:
-    """Object name of a partition's compacted artifact in ``COMPACTED_BUCKET``."""
-    return f"{COMPACTED_PREFIX}/{partition_key}.log.zst"
+def compacted_location(partition_key: str) -> tuple[str, str]:
+    """Get the bucket and object name of a partition's compacted artifact.
+
+    Artifacts are ``<date>.log.zst`` files under ``get_gcs_raw_path()``.
+    """
+    return split_gcs_uri(f"{get_gcs_raw_path()}/{DATASET_NAME}/{partition_key}.log.zst")
 
 
 def _utcnow() -> datetime:
@@ -148,7 +154,7 @@ class S3Extractor(GCSExtractor):
 
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
-        self.dataset_name = "pudl_s3_logs"
+        self.dataset_name = DATASET_NAME
         self.bucket_name = PUDL_METRICS_S3_LOGS_BUCKET
         super().__init__(*args, **kwargs)
         # Reduce the day's objects server-side before downloading. Turned off
@@ -309,8 +315,8 @@ def compacted_s3_logs(
     key = context.partition_key
     ext = S3Extractor()
     ext.partition_key = key
-    artifacts = ext.gcs_client.bucket(COMPACTED_BUCKET)
-    path = compacted_path(key)
+    bucket_name, path = compacted_location(key)
+    artifacts = ext.gcs_client.bucket(bucket_name)
 
     existing = artifacts.get_blob(path)
     if existing is not None and not config.rebuild:
@@ -364,11 +370,11 @@ def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
     key = context.partition_key
     ext = S3Extractor()
     ext.partition_key = key
-    path = compacted_path(key)
-    blob = ext.gcs_client.bucket(COMPACTED_BUCKET).get_blob(path)
+    bucket_name, path = compacted_location(key)
+    blob = ext.gcs_client.bucket(bucket_name).get_blob(path)
     if blob is None:
         raise FileNotFoundError(
-            f"gs://{COMPACTED_BUCKET}/{path} does not exist; "
+            f"gs://{bucket_name}/{path} does not exist; "
             "materialize compacted_s3_logs for this partition first."
         )
     if (blob.metadata or {}).get("source_object_count") == "0":
