@@ -73,3 +73,19 @@ def get_gcs_base_path() -> str:
             f"PUDL_METRICS_GCS_BASE_PATH must be a gs:// URI, got {path!r}."
         )
     return path
+
+
+def get_gcs_raw_path() -> str:
+    """Get the GCS location of raw-layer artifacts, mirroring ``get_raw_dir()``.
+
+    Like the processed outputs, it is under ``get_gcs_base_path()``, so pointing
+    ``PUDL_METRICS_GCS_BASE_PATH`` at another bucket redirects everything we write
+    to GCS.
+    """
+    return f"{get_gcs_base_path().rstrip('/')}/raw"
+
+
+def split_gcs_uri(uri: str) -> tuple[str, str]:
+    """Split a ``gs://`` URI into its bucket name and object name."""
+    bucket, _, object_name = uri.removeprefix("gs://").partition("/")
+    return bucket, object_name
