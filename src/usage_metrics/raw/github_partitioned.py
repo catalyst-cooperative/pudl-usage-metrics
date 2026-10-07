@@ -20,6 +20,7 @@ from dagster import (
 from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
+from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
 from usage_metrics.raw.extract import GCSExtractor
 
 DAILY_METRIC_TYPES = ["clones", "popular_paths", "popular_referrers", "views"]
@@ -33,7 +34,7 @@ class GithubExtractor(GCSExtractor):
     def __init__(self, metric: Literal[*GITHUB_METRIC_TYPES], *args, **kwargs):
         """Initialize the extrator."""
         self.dataset_name = "pudl_github_logs"
-        self.bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
+        self.bucket_name = PUDL_METRICS_ARCHIVES_BUCKET
         self.metric = metric
         super().__init__(*args, **kwargs)
 

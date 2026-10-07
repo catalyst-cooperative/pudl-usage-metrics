@@ -19,6 +19,7 @@ from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 from pydantic import BaseModel
 
+from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
 from usage_metrics.raw.extract import GCSExtractor
 
 
@@ -54,7 +55,7 @@ class ZenodoExtractor(GCSExtractor):
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
         self.dataset_name = "pudl_zenodo_logs"
-        self.bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
+        self.bucket_name = PUDL_METRICS_ARCHIVES_BUCKET
         super().__init__(*args, **kwargs)
 
     def filter_blobs(

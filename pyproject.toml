@@ -40,6 +40,7 @@ kaggle = ">=1.6.3"
 s3fs = ">=2025.10.0"
 polars = ">=1.43.2"
 google-cloud-sdk = ">=580"
+platformdirs = ">=4"
 
 [tool.pixi.pypi-dependencies]
 # Install the local package in editable mode. Assume dependencies are specified either

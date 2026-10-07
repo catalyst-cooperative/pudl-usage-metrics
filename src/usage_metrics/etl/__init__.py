@@ -14,17 +14,10 @@ from dagster import (
     load_asset_checks_from_modules,
     load_assets_from_modules,
 )
-from upath import UPath
 
 import usage_metrics
+from usage_metrics.paths import get_gcs_base_path, get_parquet_dir
 from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
-
-PUDL_METRICS_GCS_BASE_PATH = "gs://" + os.environ.get(
-    "PUDL_METRICS_GCS_BUCKET", "metrics.catalyst.coop"
-)
-PUDL_METRICS_LOCAL_BASE_PATH = str(
-    UPath(os.environ.get("PUDL_METRICS_LOCAL_DATA_DIR", ".")) / "usage_metrics"
-)
 
 logger = logging.getLogger(__name__)
 
@@ -108,13 +101,11 @@ _asset_keys = itertools.chain.from_iterable(
 
 resources_by_env = {
     "prod": {
-        "parquet_manager": PartitionedParquetIOManager(
-            base_path=PUDL_METRICS_GCS_BASE_PATH
-        ),
+        "parquet_manager": PartitionedParquetIOManager(base_path=get_gcs_base_path()),
     },
     "local": {
         "parquet_manager": PartitionedParquetIOManager(
-            base_path=PUDL_METRICS_LOCAL_BASE_PATH
+            base_path=str(get_parquet_dir())
         ),
     },
 }

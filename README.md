@@ -30,14 +30,25 @@ The ETL uses [ipinfo](https://ipinfo.io/) to geocode ip addresses.
 Grab the [ipinfo token](https://ipinfo.io/account/token) by logging in using the credentials saved in our [Bitwarden Shared Inframundo Logins collection](https://vault.bitwarden.com/#/vault?collectionId=b53a14cf-48bd-4b53-a59e-b29600217e8b&itemId=50afdcf5-8cec-42a3-b366-b296013ba389&action=view).
 The ETL will look for this token in the `IPINFO_TOKEN` environment variable.
 
-The ``PUDL_METRICS_LOCAL_DATA_DIR`` environment variable is required for local
-development. In this directory, the script will cache input data and save the processed
-database. If it is unset, the ETL will create a `usage_metrics` directory in the current
-working directory and use that as the local data directory.
+The `PUDL_METRICS_LOCAL_DATA_DIR` environment variable is optional. It is the root of
+everything the ETL stores on the local machine, in production and in development alike.
+If it is unset, a per-user cache directory is used (`~/Library/Caches/pudl-usage-metrics`
+on macOS, `~/.cache/pudl-usage-metrics` on Linux), so nothing lands in the repository
+or the current working directory. Set it if you want the data somewhere specific. It
+contains:
 
-Dagster stores run logs and caches in a directory stored in the `DAGSTER_HOME` environment variable.
-The `usage_metrics/dagster_home/dagster.yaml` file contains configuration for the dagster instance.
-**Note:** The `usage_metrics/dagster_home/storage` directory could grow to become a couple GBs because all op outputs for every run are stored there.
+- `raw/<dataset_name>/`: raw logs downloaded from GCS. Files that are already present
+  are not downloaded again.
+- `parquet/`: processed outputs, when running locally (`METRICS_PROD_ENV=local`, the
+  default). With `METRICS_PROD_ENV=prod`, outputs are written to the GCS bucket
+  `PUDL_METRICS_GCS_BASE_PATH` (default `gs://metrics.catalyst.coop`) instead.
+- `ipinfo/`: cached IPInfo geocoding results, so each IP address is only looked up once.
+
+All of these locations, and the GCS buckets, are defined in `src/usage_metrics/paths.py`.
+
+Dagster stores run logs and caches in the directory given by the `DAGSTER_HOME` environment variable.
+The `dagster_home/dagster.yaml` file contains configuration for the dagster instance.
+**Note:** The `dagster_home/storage` directory could grow to become a couple GBs because all op outputs for every run are stored there.
 You can read more about the dagster_home directory in the [dagster docs](https://docs.dagster.io/deployment/dagster-instance#default-local-behavior).
 
 To use the Kaggle API, [sign up for a Kaggle account](https://www.kaggle.com).
@@ -50,7 +61,7 @@ To set these environment variables, run these commands:
 ```
 export IPINFO_TOKEN="{your_token_here}"
 export DAGSTER_HOME="$(pwd)/dagster_home/"
-export PUDL_METRICS_LOCAL_DATA_DIR="$(pwd)/data/" # Required for local development. Input and output data will be saved here.
+export PUDL_METRICS_LOCAL_DATA_DIR="$(pwd)/data/" # Optional. Where raw, processed and cached data is saved.
 export KAGGLE_USER="{your_kaggle_username_here}" # If setting manually
 export KAGGLE_KEY="{your_kaggle_api_key_here}" # If setting manually
 ```
@@ -175,10 +186,10 @@ By default prod runs will write to `gs://metrics.catalyst.coop`.
 You can examine the contents of the default bucket at
 https://console.cloud.google.com/storage/browser/metrics.catalyst.coop.
 
-To update a different path or bucket, set `PUDL_METRICS_GCS_BUCKET`:
+To write to a different path or bucket, set `PUDL_METRICS_GCS_BASE_PATH` to a `gs://` URI:
 
 ```
-export PUDL_METRICS_GCS_BUCKET="test.catalyst.coop"
+export PUDL_METRICS_GCS_BASE_PATH="gs://test.catalyst.coop"
 ```
 
 ### IP Geocoding with ipinfo

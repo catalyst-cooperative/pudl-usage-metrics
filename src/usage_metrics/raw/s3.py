@@ -12,6 +12,7 @@ from dagster import (
 from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
+from usage_metrics.paths import PUDL_METRICS_S3_LOGS_BUCKET
 from usage_metrics.raw.extract import GCSExtractor
 
 
@@ -21,7 +22,7 @@ class S3Extractor(GCSExtractor):
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
         self.dataset_name = "pudl_s3_logs"
-        self.bucket_name = "pudl-s3-logs.catalyst.coop"
+        self.bucket_name = PUDL_METRICS_S3_LOGS_BUCKET
         super().__init__(*args, **kwargs)
 
     def filter_blobs(
