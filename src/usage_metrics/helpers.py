@@ -86,7 +86,7 @@ def geocode_ips(df: pd.DataFrame) -> pd.DataFrame:
     # that are missing -- e.g. a bogon IP's response has no asn/country -- as
     # NaN, instead of raising a KeyError) and rename them to their usage_metrics
     # column names.
-    geocoded_ips = geocoded_ips.reindex(columns=_IPINFO_FIELD_MAP.keys())
+    geocoded_ips = geocoded_ips.reindex(columns=list(_IPINFO_FIELD_MAP.keys()))
     geocoded_ips = geocoded_ips.rename(columns=_IPINFO_FIELD_MAP)
 
     # Add the component fields back to the logs
@@ -100,7 +100,7 @@ def get_table_name_from_context(context: OutputContext) -> str:
     """Retrieves the table name from the context object."""
     if context.has_asset_key:
         return context.asset_key.to_python_identifier()
-    return context.get_identifier()
+    return "-".join(context.get_identifier())
 
 
 def retry_request(retries: int = 3, delay: int = 2, backoff: int = 2):

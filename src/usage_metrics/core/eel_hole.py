@@ -4,7 +4,7 @@ import datetime
 import json
 import math
 import os
-from typing import Annotated, Any, Literal, get_args
+from typing import Annotated, Any, Literal, cast, get_args
 from urllib.parse import urlsplit
 
 import pandas as pd
@@ -170,11 +170,11 @@ def _core_eel_hole_logs(
         context.log.warning(f"No data found for the week of {context.partition_key}")
         return pd.DataFrame()
 
-    # Flatten the many nested columns and coerce them into the expected class
-    models = [
-        EelHoleLogs(**row).model_dump()
-        for row in raw_eel_hole_logs.to_dict(orient="records")
-    ]
+    # Flatten the many nested columns and coerce them into the expected class.
+    # to_dict()'s declared return type keys columns as Hashable (the general case
+    # for a DataFrame index/columns), but our columns are always strings.
+    records = cast("list[dict[str, Any]]", raw_eel_hole_logs.to_dict(orient="records"))
+    models = [EelHoleLogs(**row).model_dump() for row in records]
     converted_df = pd.json_normalize(models, sep="_")
     # Drop any columns that we exploded into many other columns and thus are now
     # empty. json_payload will only show up here if at least one record had its
@@ -226,9 +226,9 @@ def _core_eel_hole_logs(
             [filters_only[i].apply(pd.Series) for i in filters_only], axis=1
         )
         normalized.columns = [
-            f"json_payload_params_filters_{col.replace('.', '_')}"
+            f"json_payload_params_filters_{str(col).replace('.', '_')}"
             for col in pd.io.common.dedup_names(
-                normalized.columns, is_potential_multiindex=False
+                list(normalized.columns), is_potential_multiindex=False
             )
         ]
         converted_df = converted_df.merge(
