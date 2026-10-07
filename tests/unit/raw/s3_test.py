@@ -12,12 +12,11 @@ from dagster import MaterializeResult, build_asset_context
 from usage_metrics.raw import extract
 from usage_metrics.raw import s3 as s3_module
 from usage_metrics.raw.s3 import (
-    COMPACTED_BUCKET,
     CompactedS3LogsConfig,
     FusedRecordsError,
     S3Extractor,
     _drop_lines_with_embedded_quotes,
-    compacted_path,
+    compacted_location,
     compacted_s3_logs,
     raw_s3_logs,
     zstd_with_guard,
@@ -325,7 +324,9 @@ def s3_client(make_client, patch_download_many, download_dir, monkeypatch):
     def _make(
         source_blobs: dict[str, bytes], artifacts: dict[str, bytes] | None = None
     ):
-        client = make_client({BUCKET: source_blobs, COMPACTED_BUCKET: artifacts or {}})
+        client = make_client(
+            {BUCKET: source_blobs, compacted_location(DAY)[0]: artifacts or {}}
+        )
         monkeypatch.setattr(
             s3_module, "S3Extractor", lambda *a, **k: S3Extractor(client=client)
         )
@@ -335,11 +336,13 @@ def s3_client(make_client, patch_download_many, download_dir, monkeypatch):
 
 
 def _artifact(client, key=DAY):
-    return client.bucket(COMPACTED_BUCKET).get_blob(compacted_path(key))
+    bucket, path = compacted_location(key)
+    return client.bucket(bucket).get_blob(path)
 
 
 def _put_artifact(client, data: bytes, count: int, key=DAY):
-    blob = client.bucket(COMPACTED_BUCKET).blob(compacted_path(key))
+    bucket, path = compacted_location(key)
+    blob = client.bucket(bucket).blob(path)
     blob._data = zstd.compress(data)
     blob.metadata = {"source_object_count": str(count)}
     blob._store()
@@ -469,3 +472,17 @@ def test_compact_then_read_end_to_end(s3_client, s3_fixture_blobs):
     df = _raw()
     assert len(df) == sum(v.count(b"\n") for v in blobs.values())
     assert df.shape[1] == 27
+
+
+def test_compacted_location_follows_output_path(monkeypatch):
+    """The compacted artifact is under the configured output location."""
+    monkeypatch.delenv("PUDL_METRICS_GCS_BASE_PATH", raising=False)
+    assert compacted_location("2024-01-01") == (
+        "metrics.catalyst.coop",
+        "raw/pudl_s3_logs/2024-01-01.log.zst",
+    )
+    monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", "gs://test-bucket/trial")
+    assert compacted_location("2024-01-01") == (
+        "test-bucket",
+        "trial/raw/pudl_s3_logs/2024-01-01.log.zst",
+    )
