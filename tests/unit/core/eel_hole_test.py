@@ -1,169 +1,606 @@
-"""Tests for usage_metrics.core.eel_hole."""
+"""Tests for the eel hole (PUDL Viewer) log transform assets."""
 
-from typing import cast
+from collections import Counter
+from collections.abc import Iterator
+from typing import Any, cast
 
 import pandas as pd
 import pytest
-from dagster import AssetExecutionContext, build_asset_context
+from dagster import AssetCheckResult, Output, build_asset_context
 
-from usage_metrics.core.eel_hole import _core_eel_hole_logs
+from usage_metrics.core.eel_hole import (
+    EEL_HOLE_EVENT_COVERAGE_CHECK,
+    EelHoleLogs,
+    _core_eel_hole_logs,
+    _coverage_report,
+    _event_coverage_check,
+    core_eel_hole_duckdb_other,
+    core_eel_hole_email_verification_refresh_failures,
+    core_eel_hole_table_views,
+    core_eel_hole_verify_email_failures,
+    core_eel_hole_verify_email_requests,
+    payload_is_event,
+)
+
+PARTITION = "2026-09-06"
+TS = "2026-09-06T00:00:00Z"
+
+_UNSET = object()
 
 
-def _run(context: AssetExecutionContext, raw: pd.DataFrame) -> pd.DataFrame:
-    """Call the asset function, restoring the DataFrame type dagster's stubs erase.
+def _ctx(partition_key: str = PARTITION):
+    return build_asset_context(partition_key=partition_key)
+
+
+def _materialize(
+    raw: pd.DataFrame, ctx=None
+) -> list[Output[pd.DataFrame] | AssetCheckResult]:
+    """Call the asset function, restoring the type dagster's stubs erase.
 
     ``@asset``-decorated functions type as returning ``object`` when called
     directly (bypassing the Dagster asset machinery), even though at runtime
-    they just run the wrapped function body and return its actual value.
+    they just run the wrapped generator body and yield the actual results.
     """
-    return cast(pd.DataFrame, _core_eel_hole_logs(context, raw))
+    results = cast(
+        "Iterator[Output[pd.DataFrame] | AssetCheckResult]",
+        _core_eel_hole_logs(ctx or _ctx(), raw),
+    )
+    return list(results)
 
 
-RESOURCE = {
-    "type": "cloud_run_revision",
-    "labels": {
-        "configuration_name": "eel-hole",
-        "location": "us-central1",
-        "project_id": "p",
-        "revision_name": "eel-hole-00001",
-        "service_name": "eel-hole",
-    },
+def _run(raw: pd.DataFrame, ctx=None) -> pd.DataFrame:
+    """Materialize ``_core_eel_hole_logs`` and return its output DataFrame."""
+    results = _materialize(raw, ctx)
+    return next(r.value for r in results if isinstance(r, Output))
+
+
+def _check(raw: pd.DataFrame, ctx=None) -> AssetCheckResult:
+    """Materialize ``_core_eel_hole_logs`` and return its event-coverage check."""
+    results = _materialize(raw, ctx)
+    return next(r for r in results if isinstance(r, AssetCheckResult))
+
+
+def _coverage(rows: list[dict], partition_key: str = PARTITION) -> AssetCheckResult:
+    """Run ``_event_coverage_check`` on ``rows`` (parsed the way the asset does)."""
+    models = [EelHoleLogs(**row).model_dump() for row in rows]
+    return _event_coverage_check(_ctx(partition_key), rows, models)
+
+
+def _record(
+    insert_id: str,
+    *,
+    event: str = "search",
+    params: dict | None = None,
+    user_id: str | None = None,
+    text_payload: str | None = None,
+    payload=_UNSET,
+    timestamp: str = TS,
+) -> dict:
+    """Build a raw eel-hole log record shaped like the extractor output.
+
+    Pass ``payload`` to set ``jsonPayload`` verbatim (including to a non-dict or
+    ``None``); otherwise it is built from ``event`` / ``params`` / ``user_id``.
+    """
+    if payload is _UNSET:
+        payload: dict[str, Any] = {"event": event, "timestamp": timestamp}
+        if user_id is not None:
+            payload["userId"] = user_id
+        if event == "search":
+            payload["url"] = "/search?q=coal"
+        if params is not None:
+            payload["params"] = params
+    return {
+        "insertId": insert_id,
+        "jsonPayload": payload,
+        "labels": {"instanceId": "0e1b2c3d"},
+        "logName": "projects/x/logs/run.googleapis.com%2Fstdout",
+        "receiveTimestamp": timestamp,
+        "resource": {
+            "type": "cloud_run_revision",
+            "labels": {
+                "configuration_name": "pudl-viewer",
+                "location": "us-east1",
+                "project_id": "catalyst-cooperative-pudl",
+                "revision_name": "pudl-viewer-00001-abc",
+                "service_name": "pudl-viewer",
+            },
+        },
+        "timestamp": timestamp,
+        "textPayload": text_payload,
+    }
+
+
+_FILTER = {
+    "fieldName": "report_year",
+    "fieldType": "number",
+    "operation": "equals",
+    "value": "2022",
+}
+_PARAMS_WITH_FILTERS = {
+    "filters": [_FILTER],
+    "name": "out_eia__yearly_generators",
+    "page": 1,
+    "perPage": 50,
 }
 
 
-def _row(event: str, **json_payload_extra) -> dict:
-    return {
-        "insertId": "abc123",
-        "jsonPayload": {
-            "event": event,
-            "timestamp": "2026-09-01T00:00:00Z",
-            **json_payload_extra,
+# --- payload_is_event: is this a usable structured event? -------------------
+
+_IS_EVENT = [
+    pytest.param({"event": "search", "timestamp": TS}, id="minimal-search"),
+    pytest.param({"event": "hit", "timestamp": TS}, id="dead-hit-event-still-parses"),
+    pytest.param(
+        {"event": "privacy-policy", "timestamp": TS, "accepted": True}, id="privacy"
+    ),
+    pytest.param(
+        {"event": "preview", "timestamp": TS, "package": "pudl", "table_name": "x"},
+        id="new-preview-event",
+    ),
+    pytest.param(
+        {
+            "event": "duckdb_other",
+            "timestamp": TS,
+            "params": {"filters": "[]", "name": "x", "page": "1", "perPage": "10"},
         },
-        "labels": {"instanceId": "i-1"},
-        "logName": "projects/x/logs/run.googleapis.com%2Fstdout",
-        "receiveTimestamp": "2026-09-01T00:00:01Z",
-        "resource": RESOURCE,
-        "timestamp": "2026-09-01T00:00:00Z",
-        "textPayload": "some log line",
-    }
+        id="new-duckdb_other-event",
+    ),
+    pytest.param(
+        {"event": "verify-email-failed", "timestamp": TS, "status_code": 500},
+        id="verify-email-failed",
+    ),
+    pytest.param({"event": "search", "timestamp": TS, "params": {}}, id="empty-params"),
+    pytest.param(
+        {"event": "search", "timestamp": TS, "params": {"name": "t"}},
+        id="partial-params",
+    ),
+    pytest.param(
+        {"event": "duckdb_preview", "timestamp": TS, "params": {"table": "x"}},
+        id="reshaped-params",
+    ),
+    pytest.param(
+        {"event": "search", "timestamp": TS, "params": _PARAMS_WITH_FILTERS},
+        id="filters-list",
+    ),
+    pytest.param(
+        {"event": "search", "timestamp": TS, "somethingBrandNew": 123},
+        id="unknown-extra-key",
+    ),
+]
+
+_NOT_EVENT = [
+    pytest.param({}, id="empty-dict"),
+    pytest.param(None, id="none"),
+    pytest.param("loading data...", id="string"),
+    pytest.param([1, 2, 3], id="list"),
+    pytest.param(5, id="int"),
+    pytest.param({"timestamp": TS}, id="missing-event"),
+    pytest.param({"event": "search"}, id="missing-timestamp"),
+    pytest.param({"event": 123, "timestamp": TS}, id="non-string-event"),
+    pytest.param({"event": "loading", "timestamp": TS}, id="ignored-noise-event"),
+    pytest.param(
+        {"event": "Loading prebuilt search index from .idx", "timestamp": TS},
+        id="prose-event",
+    ),
+    pytest.param({"event": "PageView", "timestamp": TS}, id="capitalized-event"),
+    pytest.param({"event": "search", "timestamp": "not-a-date"}, id="bad-timestamp"),
+    pytest.param(
+        {"event": "search", "timestamp": TS, "params": {"filters": "nonsense"}},
+        id="filters-not-json",
+    ),
+    pytest.param(
+        {"event": "search", "timestamp": TS, "params": {"filters": "{}"}},
+        id="filters-json-not-a-list",
+    ),
+    pytest.param(
+        {
+            "event": "search",
+            "timestamp": TS,
+            # DuckDBFilters (AG Grid's own shape) is validated strictly: an
+            # unrecognized operation means the grid changed, not that
+            # eel-hole's own logging broke, but it's still a real gap we want
+            # to know about (a malformed event in the coverage check) rather
+            # than quietly accept.
+            "params": {"filters": '[{"fieldName": "y", "operation": "between"}]'},
+        },
+        id="filters-json-string-unknown-op",
+    ),
+]
 
 
-def test_tolerates_a_partition_with_no_search_filters():
-    """A partition with eel-hole traffic but no filtered searches shouldn't crash.
+@pytest.mark.parametrize("payload", _IS_EVENT)
+def test_payload_is_event_true(payload):
+    assert payload_is_event(payload) is True
 
-    Regression test: `json_payload_params_filters` is only produced by
-    `pd.json_normalize` when at least one record in the partition carries
-    `jsonPayload.params.filters`. A partition where every event lacks
-    `params` (e.g. a day with only `hit` events, no `duckdb_preview`/
-    `duckdb_csv` searches) never creates that column, so unconditionally
-    referencing it raised `AttributeError` and failed the whole partition.
+
+@pytest.mark.parametrize("payload", _NOT_EVENT)
+def test_payload_is_event_false(payload):
+    assert payload_is_event(payload) is False
+
+
+# --- _core_eel_hole_logs ---------------------------------------------------
+
+
+def test_returns_empty_frame_for_empty_input():
+    """An empty raw partition yields an empty DataFrame rather than raising."""
+    out = _run(pd.DataFrame())
+    assert out.empty
+
+
+def test_handles_partition_with_no_search_filters():
+    """A partition where no search event carries ``params.filters`` transforms fine.
+
+    ``pd.json_normalize`` only emits the ``json_payload_params_filters`` column
+    when at least one record has search filters, so the transform must not
+    assume that column exists.
     """
-    raw = pd.DataFrame([_row("hit")])
-    context = build_asset_context(partition_key="2026-09-01")
-    df = _run(context, raw)
-    assert list(df["event"]) == ["hit"]
+    raw = pd.DataFrame(
+        [
+            _record("a", event="search", user_id="user-1"),
+            _record("b", event="duckdb_csv", user_id="user-1"),
+        ]
+    )
+
+    out = _run(raw)
+
+    assert sorted(out["insert_id"]) == ["a", "b"]
+    assert not any("filters" in col for col in out.columns)
+
+
+def test_explodes_search_filters_when_present():
+    """When a search carries ``params.filters`` they are split into columns."""
+    raw = pd.DataFrame(
+        [
+            _record("a", event="search", params=_PARAMS_WITH_FILTERS, user_id="user-1"),
+            _record("b", event="search", user_id="user-1"),
+        ]
+    )
+
+    out = _run(raw)
+
+    assert sorted(out["insert_id"]) == ["a", "b"]
+    assert [col for col in out.columns if "params_filters_" in col]
+    assert "json_payload_params_filters" not in out.columns
+
+
+def test_unknown_event_flows_through_non_fatally():
+    """A brand-new event type parses and reaches _core_eel_hole_logs (Option 1)."""
+    raw = pd.DataFrame(
+        [
+            _record("s", event="search", user_id="u"),
+            _record(
+                "p",
+                payload={
+                    "event": "preview",
+                    "timestamp": TS,
+                    "package": "pudl",
+                    "table_name": "core_eia860__cooling_equipment",
+                },
+            ),
+        ]
+    )
+
+    out = _run(raw)
+
+    assert set(out["insert_id"]) == {"s", "p"}
+    row = out.loc[out.insert_id == "p"].iloc[0]
+    assert row["event"] == "preview"
+    assert row["table_name"] == "core_eia860__cooling_equipment"
 
 
 @pytest.mark.parametrize(
-    "params",
+    "bad_payload",
     [
-        {},
-        {"name": "x"},
-        {"name": "x", "page": 1},
+        pytest.param({}, id="empty-dict"),
+        pytest.param({"event": "search"}, id="missing-timestamp"),
+        pytest.param({"timestamp": TS}, id="missing-event"),
+        pytest.param({"event": "loading", "timestamp": TS}, id="ignored-noise"),
+        pytest.param({"event": "Loading prebuilt idx", "timestamp": TS}, id="prose"),
+        pytest.param("some app log line", id="string-payload"),
+        pytest.param({"event": "search", "timestamp": "nope"}, id="bad-timestamp"),
     ],
-    ids=["empty", "missing_most_fields", "missing_filters_and_perPage"],
 )
-def test_drops_malformed_params_instead_of_raising(params):
-    """A `params` dict missing required DuckDBParams fields is dropped, not raised.
+def test_non_event_payloads_are_dropped(bad_payload):
+    """A non-event payload drops that row; the partition still processes."""
+    raw = pd.DataFrame(
+        [
+            _record("good", event="search", user_id="user-1"),
+            _record("bad", payload=bad_payload, text_payload=None),
+        ]
+    )
 
-    Regression test: `jsonPayload.params = {}` (and other incomplete shapes)
-    used to sail through to `DuckDBParams` validation, which requires every
-    field, raising a `ValidationError` and failing the whole partition. The
-    row should just fall out (no event survives to the output) instead.
-    """
-    raw = pd.DataFrame([_row("duckdb_preview", params=params)])
-    context = build_asset_context(partition_key="2026-09-01")
-    df = _run(context, raw)
-    assert df.empty
+    out = _run(raw)
 
-
-def test_keeps_events_with_complete_params():
-    """A fully-populated `params` dict still parses and survives."""
-    params = {"filters": "[]", "name": "x", "page": 1, "perPage": 10}
-    raw = pd.DataFrame([_row("duckdb_preview", params=params)])
-    context = build_asset_context(partition_key="2026-09-01")
-    df = _run(context, raw)
-    assert list(df["event"]) == ["duckdb_preview"]
+    assert list(out["insert_id"]) == ["good"]
 
 
-def test_accepts_ends_with_filter_operation():
-    """An `endsWith` search filter parses instead of raising.
+def test_partition_with_no_events_returns_empty():
+    """A day of nothing but app-noise log lines yields an empty DataFrame."""
+    raw = pd.DataFrame(
+        [
+            _record("a", payload="Starting server on :8080", text_payload="noise"),
+            _record("b", payload={}, text_payload="more noise"),
+            _record("c", payload=None, text_payload=None),
+        ]
+    )
 
-    Regression test: `DuckDBFilters.operation`'s allowed values included
-    `startsWith` but not its counterpart `endsWith` -- an easy oversight to
-    miss, but a real filter operation the viewer's search UI offers, so a
-    `ValidationError` failed the whole partition instead of just being an
-    unrecognized/malformed shape.
-    """
-    params = {
-        "filters": [
-            {
-                "fieldName": "utility_name",
-                "fieldType": "text",
-                "operation": "endsWith",
-                "value": "Co",
-            }
+    assert _run(raw).empty
+
+
+def test_synthesizes_log_in_from_callback_text_payload():
+    """A callback hit (text payload only, no JSON payload) becomes a log_in row."""
+    raw = pd.DataFrame(
+        [
+            _record(
+                "login",
+                payload=None,
+                text_payload="https://viewer.catalyst.coop/callback?next=/search?q%3Dcoal",
+            ),
+        ]
+    )
+
+    out = _run(raw)
+
+    assert list(out["event"]) == ["log_in"]
+    assert out.loc[0, "log_in_query"] == "coal"
+
+
+# --- _event_coverage_check -----------------------------------------------
+
+
+def test_coverage_check_passes_when_all_events_routed():
+    rows = [_record(str(i), event="search", user_id="u") for i in range(5)]
+    result = _coverage(rows)
+    assert result.passed is True
+    assert result.metadata["parsed_events"].value == 5
+    assert result.metadata["unrouted_events"].value == "none"
+
+
+def test_coverage_check_ignores_noise_and_prose_events():
+    rows = [
+        *(_record(f"s{i}", event="search", user_id="u") for i in range(5)),
+        _record("n", payload={"event": "loading", "timestamp": TS}),
+        *(
+            _record(
+                f"log{i}", payload={"event": "Loading prebuilt idx", "timestamp": TS}
+            )
+            for i in range(6)
+        ),
+    ]
+    result = _coverage(rows)
+    assert result.passed is True
+    assert result.metadata["non_slug_payloads_nulled"].value == 6
+
+
+def test_coverage_check_warns_non_fatally_on_unrouted_event():
+    """A parsed-but-unrouted event -> WARN (non-blocking), not ERROR."""
+    rows = [
+        *(_record(f"s{i}", event="search", user_id="u") for i in range(10)),
+        *(
+            _record(f"p{i}", payload={"event": "some_future_event", "timestamp": TS})
+            for i in range(903)
+        ),
+    ]
+    result = _coverage(rows)
+    assert result.passed is False
+    assert result.severity.value == "WARN"  # non-blocking
+    # count AND percentage of the day's traffic, in both surfaces
+    assert "some_future_event×903 (99%)" in cast(
+        str, result.metadata["unrouted_events"].value
+    )
+    assert result.metadata["unrouted_pct"].value == pytest.approx(98.9, abs=0.1)
+    assert "903 (99%)" in cast(str, result.description)
+    # The full report travels as metadata, not just a pointer to the mid-run
+    # log line, so it's still visible in a trailing summary of failed checks.
+    assert "EEL-HOLE EVENT COVERAGE" in cast(str, result.metadata["report"].value)
+
+
+def test_coverage_check_unrouted_event_blocks_in_prod(monkeypatch):
+    """The same unrouted-event gap is a blocking ERROR when METRICS_PROD_ENV=prod."""
+    monkeypatch.setenv("METRICS_PROD_ENV", "prod")
+    rows = [
+        _record("s1", event="search", user_id="u"),
+        _record("p1", payload={"event": "some_future_event", "timestamp": TS}),
+    ]
+    result = _coverage(rows)
+    assert result.passed is False
+    assert result.severity.value == "ERROR"  # blocking, unlike the non-prod default
+
+
+def test_coverage_check_errors_when_slug_events_fail_to_parse():
+    """Slug events that can't be parsed at all -> ERROR (blocking)."""
+    rows = [
+        *(_record(f"ok{i}", event="duckdb_csv", user_id="u") for i in range(20)),
+        *(
+            _record(f"bad{i}", payload={"event": "search", "timestamp": "not-a-date"})
+            for i in range(20)
+        ),
+    ]
+    result = _coverage(rows)
+    assert result.passed is False
+    assert result.severity.value == "ERROR"
+    assert result.metadata["malformed_slug_events"].value == 20
+    assert "EEL-HOLE EVENT COVERAGE" in cast(str, result.metadata["report"].value)
+
+
+def test_coverage_report_is_actionable():
+    """Each event shows count AND % of the day's traffic, plus keys and a sample."""
+    unrouted = {
+        "preview": [
+            {"event": "preview", "timestamp": TS, "package": "pudl", "table_name": "x"},
+            {"event": "preview", "timestamp": TS, "partition": None, "table_name": "y"},
         ],
-        "name": "x",
-        "page": 1,
-        "perPage": 10,
-    }
-    raw = pd.DataFrame([_row("duckdb_preview", params=params)])
-    context = build_asset_context(partition_key="2026-09-17")
-    df = _run(context, raw)
-    assert list(df["event"]) == ["duckdb_preview"]
-
-
-def test_accepts_mismatched_case_filter_values():
-    """Filters with unexpectedly-cased `operation`/`field_type` values still parse.
-
-    Regression test: the viewer's search UI doesn't consistently match the
-    casing used elsewhere (e.g. `inrange` instead of `inRange`), and has been
-    observed sending `field_type: "string"` where `"text"` was expected. These
-    used to raise a `ValidationError` and fail the whole partition instead of
-    just being normalized.
-    """
-    params = {
-        "filters": [
+        "duckdb_other": [
             {
-                "fieldName": "utility_name",
-                "fieldType": "STRING",
-                "operation": "inrange",
-                "value": "Co",
-            }
+                "event": "duckdb_other",
+                "timestamp": TS,
+                "params": {"name": "x", "page": 1},
+            },
         ],
-        "name": "x",
-        "page": 1,
-        "perPage": 10,
     }
-    raw = pd.DataFrame([_row("duckdb_preview", params=params)])
-    context = build_asset_context(partition_key="2026-08-28")
-    df = _run(context, raw)
-    assert list(df["event"]) == ["duckdb_preview"]
-    assert df["params_filters_field_type"].iloc[0] == "text"
-    assert df["params_filters_operation"].iloc[0] == "inRange"
+    report = _coverage_report(
+        "2026-06-16",
+        total=10,  # 7 routed + 2 preview + 1 duckdb_other
+        routed=Counter({"search": 7}),
+        unrouted=unrouted,
+        malformed=[],
+    )
+
+    assert "EEL-HOLE EVENT COVERAGE -- 2026-06-16 (10 slug events)" in report
+    assert "NOT routed to a core_eel_hole_* table -- 3 (30%) of events" in report
+    assert "preview -- 2 (20%)" in report
+    assert "duckdb_other -- 1 (10%)" in report
+    assert "package" in report and "partition" in report and "table_name" in report
+    assert "params keys seen: name, page" in report
+    assert "Routed OK: search×7 (70%)" in report
+    assert "To route a new event" in report
 
 
-def test_tolerates_a_partition_with_no_parseable_payloads():
-    """A partition of nothing but app noise (no jsonPayload) shouldn't KeyError.
+def test_coverage_report_shows_malformed_events():
+    report = _coverage_report(
+        "2026-06-16",
+        total=10,
+        routed=Counter({"duckdb_csv": 9}),
+        unrouted={},
+        malformed=[{"event": "search", "timestamp": "not-a-date"}],
+    )
+    assert "FAILED to parse -- 1 (10%) of events" in report
+    assert "search -- 1 (10%) -- timestamp:" in report
 
-    Regression test: when no record in the partition has a jsonPayload at all,
-    `pd.json_normalize` never creates any `json_payload_*` column, so selecting
-    e.g. `.event` downstream raised `KeyError` instead of producing an empty
-    result.
-    """
-    noise_row = _row("hit") | {"jsonPayload": None}
-    raw = pd.DataFrame([noise_row])
-    context = build_asset_context(partition_key="2026-09-01")
-    df = _run(context, raw)
-    assert df.empty
+
+def test_core_eel_hole_logs_emits_coverage_check():
+    """The asset yields the coverage check alongside its output."""
+    raw = pd.DataFrame(
+        [_record(f"s{i}", event="search", user_id="u") for i in range(3)]
+    )
+    result = _check(raw)
+    assert result.check_name == EEL_HOLE_EVENT_COVERAGE_CHECK
+    assert result.passed is True
+
+
+# --- newly-routed per-event tables ------------------------------------------
+
+
+def test_core_eel_hole_table_views_selects_preview_fields():
+    """core_eel_hole_table_views keeps only the preview page-view rows/fields."""
+    raw = pd.DataFrame(
+        [
+            _record("s", event="search", user_id="u"),
+            _record(
+                "p1",
+                payload={
+                    "event": "preview",
+                    "timestamp": TS,
+                    "package": "pudl",
+                    "tableName": "core_eia860__cooling_equipment",
+                    "partition": None,
+                },
+            ),
+            _record(
+                "p2",
+                payload={
+                    "event": "preview",
+                    "timestamp": TS,
+                    "package": "ferceqr",
+                    "tableName": "out_ferceqr__yearly_projections",
+                    "partition": "2024q1",
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_table_views(_ctx(), core_logs))
+
+    assert sorted(out["insert_id"]) == ["p1", "p2"]
+    assert set(out["table_name"]) == {
+        "core_eia860__cooling_equipment",
+        "out_ferceqr__yearly_projections",
+    }
+    row = out.loc[out.insert_id == "p2"].iloc[0]
+    assert row["package"] == "ferceqr"
+    assert row["partition"] == "2024q1"
+
+
+def test_core_eel_hole_duckdb_other_selects_matching_rows():
+    raw = pd.DataFrame(
+        [
+            _record("a", event="duckdb_preview", user_id="u"),
+            _record(
+                "b",
+                payload={
+                    "event": "duckdb_other",
+                    "timestamp": TS,
+                    "url": "/api/duckdb?perPage=42",
+                    "params": {"name": "x", "page": 1, "perPage": 42},
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_duckdb_other(_ctx(), core_logs))
+    assert list(out["insert_id"]) == ["b"]
+    assert out.iloc[0]["params_name"] == "x"
+
+
+def test_core_eel_hole_verify_email_requests_selects_matching_rows():
+    raw = pd.DataFrame(
+        [
+            _record("a", event="search", user_id="u"),
+            _record(
+                "b",
+                payload={
+                    "event": "verify-email-requested",
+                    "timestamp": TS,
+                    "userId": "u1",
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_verify_email_requests(_ctx(), core_logs))
+    assert list(out["insert_id"]) == ["b"]
+    assert out.iloc[0]["user_id"] == "u1"
+
+
+def test_core_eel_hole_verify_email_failures_selects_matching_rows():
+    raw = pd.DataFrame(
+        [
+            _record("a", event="search", user_id="u"),
+            _record(
+                "b",
+                payload={
+                    "event": "verify-email-failed",
+                    "timestamp": TS,
+                    "statusCode": 502,
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_verify_email_failures(_ctx(), core_logs))
+    assert list(out["insert_id"]) == ["b"]
+    assert out.iloc[0]["status_code"] == 502
+
+
+def test_core_eel_hole_email_verification_refresh_failures_selects_matching_rows():
+    raw = pd.DataFrame(
+        [
+            _record("a", event="search", user_id="u"),
+            _record(
+                "b",
+                payload={
+                    "event": "refresh-email-verification-failed",
+                    "timestamp": TS,
+                    "statusCode": 502,
+                    "userId": "u1",
+                },
+            ),
+        ]
+    )
+    core_logs = _run(raw)
+    out = cast(
+        pd.DataFrame,
+        core_eel_hole_email_verification_refresh_failures(_ctx(), core_logs),
+    )
+    assert list(out["insert_id"]) == ["b"]
+    assert out.iloc[0]["status_code"] == 502
+    assert out.iloc[0]["user_id"] == "u1"

@@ -35,6 +35,31 @@ def _execute(job, **execute_kwargs) -> bool:
     """Run a job to completion without raising; log and return whether it succeeded."""
     logger.info(f"Starting {job.name}.")
     result = job.execute_in_process(raise_on_error=False, **execute_kwargs)
+    # Surface non-passing asset checks at the end of the run so a reviewer sees
+    # them without scrolling the Dagster event log. A blocking check, like the pandera
+    # schema check of every table, or eel_hole_event_coverage in prod, fails the job
+    # and stops the assets downstream of it. Other checks are WARN, like
+    # eel_hole_event_coverage outside prod: they don't fail the job, but flag a gap.
+    for check in result.get_asset_check_evaluations():
+        if not check.passed:
+            level = (
+                logging.ERROR
+                if str(check.severity).endswith("ERROR")
+                else logging.WARNING
+            )
+            message = (
+                f"{job.name}: asset check "
+                f"{check.asset_key.to_user_string()}.{check.check_name} "
+                f"[{check.severity}] -- {check.description}"
+            )
+            # Some checks (e.g. eel_hole_event_coverage) attach a full,
+            # copy-paste-actionable report as metadata rather than cramming it
+            # into the one-line description. Print it here too, not just where
+            # it was first logged mid-run, so it's the last thing in the log
+            # instead of scrolled past.
+            if "report" in check.metadata:
+                message += f"\n{check.metadata['report'].value}"
+            logger.log(level, message)
     logger.info(f"{job.name} {'succeeded' if result.success else 'FAILED'}.")
     return result.success
 
