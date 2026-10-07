@@ -12,6 +12,7 @@ from google.cloud import storage
 from pydantic import BaseModel, StringConstraints
 
 from usage_metrics.helpers import retry_request
+from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
 
 Doi = Annotated[str, StringConstraints(pattern=r"10\.5281/zenodo\.\d+")]
 SandboxDoi = Annotated[str, StringConstraints(pattern=r"10\.5072/zenodo\.\d+")]
@@ -87,7 +88,7 @@ def save_zenodo_logs() -> pd.DataFrame():
         record_versions = requests.get(url=url, timeout=100)
         return record_versions.json()
 
-    bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
+    bucket_name = PUDL_METRICS_ARCHIVES_BUCKET
     client = storage.Client()
     bucket = client.get_bucket(bucket_name)
 

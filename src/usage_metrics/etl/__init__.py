@@ -1,10 +1,8 @@
 """Dagster definitions for the PUDL usage metrics ETL."""
 
-import importlib.resources
 import itertools
 import logging
 import os
-import warnings
 
 from dagster import (
     AssetKey,
@@ -18,10 +16,8 @@ from dagster import (
 )
 
 import usage_metrics
-from usage_metrics.resources.parquet_io_manager import (
-    gcs_parquet_manager,
-    local_parquet_manager,
-)
+from usage_metrics.paths import get_gcs_base_path, get_parquet_dir
+from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
 
 logger = logging.getLogger(__name__)
 
@@ -105,10 +101,12 @@ _asset_keys = itertools.chain.from_iterable(
 
 resources_by_env = {
     "prod": {
-        "parquet_manager": gcs_parquet_manager,
+        "parquet_manager": PartitionedParquetIOManager(base_path=get_gcs_base_path()),
     },
     "local": {
-        "parquet_manager": local_parquet_manager,
+        "parquet_manager": PartitionedParquetIOManager(
+            base_path=str(get_parquet_dir())
+        ),
     },
 }
 

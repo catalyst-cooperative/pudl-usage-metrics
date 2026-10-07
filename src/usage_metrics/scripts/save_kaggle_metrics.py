@@ -10,6 +10,8 @@ from pathlib import Path
 from google.cloud import storage
 from kaggle.api.kaggle_api_extended import KaggleApi
 
+from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
+
 logger = logging.getLogger()
 logging.basicConfig(level="INFO")
 
@@ -41,7 +43,7 @@ def get_kaggle_dataset_metadata() -> str:
 
 def upload_to_bucket(data):
     """Upload a gcp object."""
-    bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
+    bucket_name = PUDL_METRICS_ARCHIVES_BUCKET
 
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)

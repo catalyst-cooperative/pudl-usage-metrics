@@ -4,15 +4,11 @@ Adapted from example at
 https://github.com/dagster-io/dagster/blob/master/examples/project_fully_featured/project_fully_featured/resources/parquet_io_manager.py
 """
 
-import os
-
 import pandas as pd
 from dagster import (
     ConfigurableIOManager,
-    Field,
     InputContext,
     OutputContext,
-    io_manager,
 )
 from upath import UPath
 
@@ -24,16 +20,17 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
     """An IOManager that writes and retrieves data frames from parquet files.
 
     It stores partitioned outputs nested under the primary asset key.
+
+    `base_path` may be a local directory or a remote URI (e.g. `gs://bucket`) -- UPath
+    handles both transparently, so a single class covers local and remote storage.
     """
 
-    @property
-    def _base_path(self):
-        raise NotImplementedError
+    base_path: str
 
     def handle_output(self, context: OutputContext, obj: pd.DataFrame):
         """Save a data frame to a parquet file."""
         path = self._get_path(context)
-        if "://" not in self._base_path:
+        if "://" not in self.base_path:
             path.parent.mkdir(parents=True, exist_ok=True)
 
         if isinstance(obj, pd.DataFrame):
@@ -100,57 +97,5 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
             start, end = context.asset_partitions_time_window
             dt_format = "%Y-%m-%d"
             partition_str = start.strftime(dt_format) + "--" + end.strftime(dt_format)
-            return UPath(self._base_path) / key / f"{partition_str}.parquet"
-        return UPath(self._base_path) / f"{key}.parquet"
-
-
-class LocalPartitionedParquetIOManager(PartitionedParquetIOManager):
-    """Development version of the parquet IO manager which stores files locally."""
-
-    base_path: str
-
-    @property
-    def _base_path(self):
-        return self.base_path
-
-
-@io_manager(
-    config_schema={
-        "base_path": Field(
-            str,
-            description="Base path for local parquet storage.",
-            default_value=str(UPath(os.environ.get("DATA_DIR", ".")) / "usage_metrics"),
-        )
-    }
-)
-def local_parquet_manager(init_context) -> LocalPartitionedParquetIOManager:
-    """Create LocalPartitionedParquetIOManager dagster resource."""
-    return LocalPartitionedParquetIOManager(
-        base_path=init_context.resource_config["base_path"]
-    )
-
-
-class GCSPartitionedParquetIOManager(PartitionedParquetIOManager):
-    """Prod version of the parquet IO manager which stores files on GCS."""
-
-    gcs_bucket: str
-
-    @property
-    def _base_path(self):
-        return "gs://" + self.gcs_bucket
-
-
-@io_manager(
-    config_schema={
-        "gcs_bucket": Field(
-            str,
-            description="GCS bucket for remote parquet storage.",
-            default_value=os.environ.get("GCS_BUCKET", "metrics.catalyst.coop"),
-        )
-    }
-)
-def gcs_parquet_manager(init_context) -> GCSPartitionedParquetIOManager:
-    """Create GCSPartitionedParquetIOManager dagster resource."""
-    return GCSPartitionedParquetIOManager(
-        gcs_bucket=init_context.resource_config["gcs_bucket"]
-    )
+            return UPath(self.base_path) / key / f"{partition_str}.parquet"
+        return UPath(self.base_path) / f"{key}.parquet"

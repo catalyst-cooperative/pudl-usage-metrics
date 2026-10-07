@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 import requests
 from google.cloud import storage
 
+from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
+
 logger = logging.getLogger()
 logging.basicConfig(level="INFO")
 
@@ -99,7 +101,7 @@ def get_persistent_metrics(owner: str, repo: str, token: str, metric: str) -> st
 
 def upload_to_bucket(data, metric):
     """Upload a gcp object."""
-    bucket_name = "pudl-usage-metrics-archives.catalyst.coop"
+    bucket_name = PUDL_METRICS_ARCHIVES_BUCKET
     storage_client = storage.Client()
     bucket = storage_client.bucket(bucket_name)
     today = datetime.now(tz=UTC).date()

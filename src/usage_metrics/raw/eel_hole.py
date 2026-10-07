@@ -12,6 +12,7 @@ from dagster import (
 from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
+from usage_metrics.paths import PUDL_METRICS_EEL_HOLE_LOGS_BUCKET
 from usage_metrics.raw.extract import GCSExtractor
 
 
@@ -21,7 +22,7 @@ class EelHoleExtractor(GCSExtractor):
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
         self.dataset_name = "eel_hole_logs"
-        self.bucket_name = "pudl-viewer-logs.catalyst.coop"
+        self.bucket_name = PUDL_METRICS_EEL_HOLE_LOGS_BUCKET
         super().__init__(*args, **kwargs)
 
     def filter_blobs(
