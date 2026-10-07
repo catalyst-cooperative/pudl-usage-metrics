@@ -1206,6 +1206,16 @@ _eel_hole_preview_columns = [
         dtype=str,
         description="The state parameter of the request, e.g. 'FL'.",
     ),
+    _column(
+        name="params_database",
+        dtype=str,
+        description="The database parameter of the request, e.g. 'ferc1_dbf'.",
+    ),
+    _column(
+        name="params_perspective_filters",
+        dtype=str,
+        description="The perspective filters parameter of the request, as a JSON-encoded string, e.g. '[]'.",
+    ),
     *(
         column
         for i in range(7)
