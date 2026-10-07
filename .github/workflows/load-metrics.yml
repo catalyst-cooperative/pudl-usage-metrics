@@ -24,16 +24,21 @@ on:
           - github_nonpartitioned
           - zenodo
           - eel_hole
+      rebuild:
+        description: "Only with job 's3'. Rebuild the compacted S3 log artifact for EVERY day in the range, replacing any that exists (each is a full re-list, compose and upload). Default: reuse existing artifacts."
+        required: false
+        type: boolean
+        default: false
 
   schedule:
     - cron: "14 7 * * *" # Every day at 7:14 AM UTC
 
 env:
   METRICS_PROD_ENV: "prod"
-  # Concurrent GCS blob download threads. The S3 log extract fetches >100k tiny
-  # objects per day and is latency-bound. Left at the code default (32); tune
-  # here if a run's download phase is the bottleneck.
+  # default is 32.
   GCS_DOWNLOAD_WORKERS: "32"
+  # default is 128
+  GCS_COMPOSE_WORKERS: "128"
 
 jobs:
   # Turns start_partition/end_partition into a JSON list of dates, so a backfill
@@ -50,6 +55,16 @@ jobs:
       # (see the comment on that step for why).
       multiple: ${{ steps.compute.outputs.multiple }}
     steps:
+      # Fail once, up front, instead of once per matrix job: the CLI only
+      # accepts --rebuild together with --job s3.
+      - name: Reject rebuild for anything but the s3 job
+        if: ${{ github.event.inputs.rebuild == 'true' && github.event.inputs.job != 's3' }}
+        env:
+          JOB: ${{ github.event.inputs.job }}
+        run: |
+          echo "::error::The 'rebuild' input only applies to the 's3' job, but job is '${JOB:-all}'."
+          exit 1
+
       - uses: actions/checkout@v7
 
       - name: Install usage metrics environment using pixi
@@ -90,21 +105,23 @@ jobs:
           to: "pudl-deployments"
           topic: "pudl-usage-metrics"
           content: |
-            # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})): job `${{ github.event.inputs.job || 'all' }}`, partitions `${{ steps.compute.outputs.partitions }}`
+            # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})): job `${{ github.event.inputs.job || 'all' }}`, partitions `${{ steps.compute.outputs.partitions }}`${{ github.event.inputs.rebuild == 'true' && ' -- **rebuilding the compacted S3 log artifacts**' || '' }}
 
   load-metrics:
     needs: compute-partitions
     # Larger third-party runner: the S3 log extract is I/O-heavy and the default
     # 4-vCPU runner is the tightest resource. Downloads scale with concurrency,
     # not cores, so 8 vCPUs / 32 GB is plenty.
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    # Fast-fail: a healthy run finishes in well under an hour. This applies per
-    # matrix job (i.e. per partition), not to the matrix as a whole -- each
-    # partition gets its own fresh 60-minute budget, so a month-long backfill
-    # (~30 independent jobs) is no different from this job's perspective than a
-    # single day. If a run regresses to multi-hour, kill it early instead of
-    # burning the full 6-hour default.
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    # Fast-fail: a healthy run finishes in minutes. Measured for the S3 job, a
+    # fresh partition of ~137k log objects took 5-7 minutes end to end and
+    # re-running an already-compacted one took ~2. The 30-minute limit is about
+    # 4x the slowest of those. This applies per matrix job (i.e. per partition), not to the matrix as a
+    # whole -- each partition gets its own fresh 30-minute budget, so a
+    # month-long backfill (~30 independent jobs) is no different from this
+    # job's perspective than a single day. If a run regresses to much longer,
+    # kill it early instead of burning the full 6-hour default.
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -160,6 +177,10 @@ jobs:
           # exclusive with this flag, and the CLI itself rejects a
           # non-partitioned job paired with a real date range.
           SKIP_NONPARTITIONED: ${{ needs.compute-partitions.outputs.multiple }}
+          # "true" only for a manual dispatch that ticked "rebuild" (empty on
+          # scheduled runs). compute-partitions has already rejected it for
+          # any job other than s3, which is all the CLI's --rebuild accepts.
+          REBUILD: ${{ github.event.inputs.rebuild }}
         shell: bash -l {0}
         run: |
           args=()
@@ -184,6 +205,7 @@ jobs:
                 ;;
             esac
           fi
+          [[ "$REBUILD" == "true" ]] && args+=(--rebuild)
           pixi run usage-metrics etl "${args[@]}"
 
       - name: Notify Zulip
