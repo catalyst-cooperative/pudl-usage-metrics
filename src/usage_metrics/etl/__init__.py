@@ -1,23 +1,26 @@
 """Dagster definitions for the PUDL usage metrics ETL."""
 
+import importlib.resources
 import itertools
 import logging
 import os
+import warnings
 
 from dagster import (
-    AssetKey,
-    AssetsDefinition,
     AssetSelection,
     Definitions,
-    SourceAsset,
     define_asset_job,
     load_asset_checks_from_modules,
     load_assets_from_modules,
 )
 
 import usage_metrics
+from usage_metrics.checks import pandera_schema_checks
 from usage_metrics.paths import get_gcs_base_path, get_parquet_dir
-from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
+from usage_metrics.resources.parquet_io_manager import (
+    PartitionedParquetIOManager,
+    PyArrowTableReader,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -74,39 +77,17 @@ default_asset_checks = list(
 )
 
 
-def _get_keys_from_assets(
-    asset_def: AssetsDefinition | SourceAsset,
-) -> list[AssetKey]:
-    """Get a list of asset keys.
-
-    Most assets have one key, which can be retrieved as a list from
-    ``asset.keys``.
-
-    Multi-assets have multiple keys, which can also be retrieved as a list from
-    ``asset.keys``.
-
-    SourceAssets always only have one key, and don't have ``asset.keys``. So we
-    look for ``asset.key`` and wrap it in a list.
-    """
-    if isinstance(asset_def, AssetsDefinition):
-        return list(asset_def.keys)
-    if isinstance(asset_def, SourceAsset):
-        return [asset_def.key]
-    return []
-
-
-_asset_keys = itertools.chain.from_iterable(
-    _get_keys_from_assets(asset_def) for asset_def in default_assets
-)
+gcs_base_path = get_gcs_base_path()
+local_base_path = str(get_parquet_dir())
 
 resources_by_env = {
     "prod": {
-        "parquet_manager": PartitionedParquetIOManager(base_path=get_gcs_base_path()),
+        "parquet_manager": PartitionedParquetIOManager(base_path=gcs_base_path),
+        "pyarrow_reader": PyArrowTableReader(base_path=gcs_base_path),
     },
     "local": {
-        "parquet_manager": PartitionedParquetIOManager(
-            base_path=str(get_parquet_dir())
-        ),
+        "parquet_manager": PartitionedParquetIOManager(base_path=local_base_path),
+        "pyarrow_reader": PyArrowTableReader(base_path=local_base_path),
     },
 }
 
@@ -114,7 +95,7 @@ resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
 
 defs: Definitions = Definitions(
     assets=default_assets,
-    # asset_checks=default_asset_checks,
+    asset_checks=default_asset_checks + pandera_schema_checks,
     resources=resources,
     jobs=[
         define_asset_job(
