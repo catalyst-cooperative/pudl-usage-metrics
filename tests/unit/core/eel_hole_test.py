@@ -1,5 +1,6 @@
 """Tests for usage_metrics.core.eel_hole."""
 
+import json
 from typing import cast
 
 import pandas as pd
@@ -150,8 +151,9 @@ def test_accepts_mismatched_case_filter_values():
     context = build_asset_context(partition_key="2026-08-28")
     df = _run(context, raw)
     assert list(df["event"]) == ["duckdb_preview"]
-    assert df["params_filters_field_type"].iloc[0] == "text"
-    assert df["params_filters_operation"].iloc[0] == "inRange"
+    filters = json.loads(df["params_filters"].iloc[0])
+    assert filters[0]["field_type"] == "text"
+    assert filters[0]["operation"] == "inRange"
 
 
 def test_tolerates_a_partition_with_no_parseable_payloads():
@@ -167,3 +169,60 @@ def test_tolerates_a_partition_with_no_parseable_payloads():
     context = build_asset_context(partition_key="2026-09-01")
     df = _run(context, raw)
     assert df.empty
+
+
+def _filter(i: int, **extra) -> dict:
+    return {
+        "fieldName": f"col_{i}",
+        "fieldType": "number",
+        "operation": "equals",
+        "value": i,
+        **extra,
+    }
+
+
+def test_keeps_any_number_of_filters_as_one_json_column():
+    """A query's filters are not capped at a fixed number of columns.
+
+    The filters of each query are kept, in order and losslessly (including the
+    upper bound of a range, `valueTo`), as one JSON array in `params_filters`;
+    a query with no filters gets a null.
+    """
+    many = [_filter(i) for i in range(12)]
+    ranged = [_filter(0, operation="inRange", valueTo=9)]
+    raw = pd.DataFrame(
+        [
+            _row(
+                "duckdb_preview",
+                params={"filters": many, "name": "x", "page": 1, "perPage": 10},
+            )
+            | {"insertId": "many"},
+            _row(
+                "duckdb_preview",
+                params={"filters": ranged, "name": "x", "page": 1, "perPage": 10},
+            )
+            | {"insertId": "ranged"},
+            _row(
+                "duckdb_preview",
+                params={"filters": "[]", "name": "x", "page": 1, "perPage": 10},
+            )
+            | {"insertId": "none"},
+        ]
+    )
+    df = _run(build_asset_context(partition_key="2026-10-06"), raw).set_index(
+        "insert_id"
+    )
+
+    assert not any(col.startswith("params_filters_") for col in df.columns)
+    parsed = json.loads(str(df.loc["many", "params_filters"]))
+    assert [f["field_name"] for f in parsed] == [f"col_{i}" for i in range(12)]
+    assert json.loads(str(df.loc["ranged", "params_filters"])) == [
+        {
+            "field_name": "col_0",
+            "field_type": "number",
+            "operation": "inRange",
+            "value": 0,
+            "value_to": 9,
+        }
+    ]
+    assert pd.isna(df.loc["none", "params_filters"])
