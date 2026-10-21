@@ -52,6 +52,22 @@ surfaces (non-fatally). Add an entry here only alongside a new downstream table.
 
 EEL_HOLE_EVENT_COVERAGE_CHECK = "eel_hole_event_coverage"
 
+KNOWN_PARAM_KEYS: frozenset[str] = frozenset({"filters", "name", "page", "perPage"})
+"""The ``params`` keys the viewer's data grid sends with a ``/api/duckdb`` request.
+
+eel-hole logs ``dict(request.args)``, so ``params`` also holds whatever else a caller
+put in the query string (``sql``, ``limit``, ...). Those aren't ours to model: they are
+dropped from the outputs and counted by ``eel_hole_event_coverage`` instead."""
+
+PARAM_COLUMNS: tuple[str, ...] = (
+    "params_name",
+    "params_page",
+    "params_per_page",
+    "params_filters",
+)
+"""The ``params`` columns of the ``core_eel_hole_{previews,downloads,duckdb_other}``
+tables: ``KNOWN_PARAM_KEYS`` as they appear in ``_core_eel_hole_logs``."""
+
 IGNORED_EVENT_TYPES: frozenset[str] = frozenset({"loading"})
 """Slug ``jsonPayload.event`` values that are known viewer noise, not user
 events (``loading`` is a client-side "still loading" marker). These are dropped
@@ -161,10 +177,11 @@ def filters_to_json(filters: Any) -> str | None:
 class DuckDBParams(BaseModel):
     """DuckDB search query parameters.
 
-    eel-hole logs these as ``dict(request.args)``, so extra keys are allowed
-    (a new query param shouldn't drop the event), but ``name``/``page``/
-    ``per_page`` are left optional too: real backfills have hit events with
-    an empty or partial ``params`` dict (e.g. ``duckdb_other`` or a request
+    eel-hole logs these as ``dict(request.args)``, so a caller can add any key to
+    them. Only ``KNOWN_PARAM_KEYS`` are modeled; other keys are ignored here (they
+    neither drop the event nor become columns) and counted by the coverage check.
+    ``name``/``page``/``per_page`` are optional too: real backfills have hit events
+    with an empty or partial ``params`` dict (e.g. ``duckdb_other`` or a request
     that never reached the search step), and those should still parse and
     show up as an ordinary (if unrouted) event rather than being dropped as
     malformed.
@@ -178,7 +195,7 @@ class DuckDBParams(BaseModel):
     per_page: int | None = None
 
     model_config = ConfigDict(
-        alias_generator=to_camel, populate_by_name=True, extra="allow"
+        alias_generator=to_camel, populate_by_name=True, extra="ignore"
     )
 
 
@@ -404,6 +421,34 @@ def _strict_coverage() -> bool:
     return os.getenv("METRICS_PROD_ENV", "local") == "prod"
 
 
+def _unmodeled_params_metadata(
+    context: AssetExecutionContext, rows: list[dict], models: list[dict], total: int
+) -> dict[str, Any]:
+    """Count kept events with ``params`` keys outside ``KNOWN_PARAM_KEYS``.
+
+    Those keys are dropped from the outputs, which is not worth failing a run for, so
+    they are only logged and reported in the check's metadata. Callers choose the
+    keys, so their length is capped to keep the report readable.
+    """
+    events = 0
+    keys: Counter = Counter()
+    for row, model in zip(rows, models, strict=True):
+        payload = row.get("jsonPayload")
+        if model["json_payload"] is None or not isinstance(payload, dict):
+            continue
+        if isinstance(params := payload.get("params"), dict):
+            extra = params.keys() - KNOWN_PARAM_KEYS
+            events += bool(extra)
+            keys.update(str(key)[:40] for key in extra)
+    summary = ", ".join(f"{key}×{n}" for key, n in keys.most_common(20)) or "none"
+    if events:
+        context.log.warning(
+            f"{context.partition_key}: {_n_pct(events, total)} eel-hole events carry "
+            f"request params that aren't in the schema and were dropped: {summary}"
+        )
+    return {"events_with_unmodeled_params": events, "unmodeled_param_keys": summary}
+
+
 def _event_coverage_check(
     context: AssetExecutionContext, rows: list[dict], models: list[dict]
 ) -> AssetCheckResult:
@@ -462,6 +507,7 @@ def _event_coverage_check(
         "unrouted_pct": (round(100 * unrouted_n / total, 1) if total else 0.0),
         "malformed_slug_events": len(malformed),
         "non_slug_payloads_nulled": non_slug_nulled,
+        **_unmodeled_params_metadata(context, rows, models, total),
     }
 
     if malformed_over_tol:
@@ -730,7 +776,7 @@ def core_eel_hole_previews(
     preview_df = preview_df.loc[
         :,
         ["insert_id", "user_id", "user_domain", "timestamp", "url", "session_id"]
-        + [col for col in preview_df.columns if col.startswith("params_")],
+        + [col for col in PARAM_COLUMNS if col in preview_df.columns],
     ]
 
     return preview_df.reset_index(drop=True)
@@ -757,7 +803,7 @@ def core_eel_hole_downloads(
     download_df = download_df.loc[
         :,
         ["insert_id", "user_id", "user_domain", "timestamp", "url", "session_id"]
-        + [col for col in download_df.columns if col.startswith("params_")],
+        + [col for col in PARAM_COLUMNS if col in download_df.columns],
     ]
 
     return download_df.reset_index(drop=True)
@@ -792,7 +838,7 @@ def core_eel_hole_duckdb_other(
     other_df = other_df.loc[
         :,
         ["insert_id", "user_id", "user_domain", "timestamp", "url", "session_id"]
-        + [col for col in other_df.columns if col.startswith("params_")],
+        + [col for col in PARAM_COLUMNS if col in other_df.columns],
     ]
 
     return other_df.reset_index(drop=True)

@@ -11,12 +11,15 @@ from dagster import AssetCheckResult, Output, build_asset_context
 
 from usage_metrics.core.eel_hole import (
     EEL_HOLE_EVENT_COVERAGE_CHECK,
+    PARAM_COLUMNS,
     EelHoleLogs,
     _core_eel_hole_logs,
     _coverage_report,
     _event_coverage_check,
+    core_eel_hole_downloads,
     core_eel_hole_duckdb_other,
     core_eel_hole_email_verification_refresh_failures,
+    core_eel_hole_previews,
     core_eel_hole_table_views,
     core_eel_hole_verify_email_failures,
     core_eel_hole_verify_email_requests,
@@ -640,3 +643,61 @@ def test_core_eel_hole_email_verification_refresh_failures_selects_matching_rows
     assert list(out["insert_id"]) == ["b"]
     assert out.iloc[0]["status_code"] == 502
     assert out.iloc[0]["user_id"] == "u1"
+
+
+# --- request params the viewer doesn't send ----------------------------------
+
+_JUNK_PARAMS = {
+    "name": "core_eia860__scd_plants",
+    "page": 1,
+    "perPage": 10_000,
+    "filters": "[]",
+    "sql": "SELECT 1",
+    "filters[report_year]": "2024",
+    "_method": "POST",
+}
+
+
+def _junk_param_logs() -> pd.DataFrame:
+    """Preview, download and other-sized requests, all with junk params."""
+    return pd.DataFrame(
+        [
+            _record("p", event="duckdb_preview", params=_JUNK_PARAMS),
+            _record("d", event="duckdb_csv", params=_JUNK_PARAMS),
+            _record("o", event="duckdb_other", params=_JUNK_PARAMS),
+            _record("p2", event="duckdb_preview", params=_JUNK_PARAMS),
+        ]
+    )
+
+
+@pytest.mark.parametrize(
+    "asset",
+    [core_eel_hole_previews, core_eel_hole_downloads, core_eel_hole_duckdb_other],
+)
+def test_request_params_outside_the_schema_never_become_columns(asset):
+    """Callers can put any key in the query string; only the grid's keys are kept."""
+    core_logs = _run(_junk_param_logs())
+    assert not any(
+        col.startswith("params_") and col not in PARAM_COLUMNS
+        for col in core_logs.columns
+    )
+
+    out = cast(pd.DataFrame, asset(_ctx(), core_logs))
+
+    assert not out.empty
+    assert {c for c in out.columns if c.startswith("params_")} <= set(PARAM_COLUMNS)
+    assert (out["params_name"] == "core_eia860__scd_plants").all()
+
+
+def test_unmodeled_request_params_are_counted_not_fatal():
+    """The coverage check reports dropped param keys, without failing the run."""
+    raw = _junk_param_logs()
+
+    result = _check(raw)
+
+    assert result.passed is True
+    metadata = result.metadata
+    assert metadata["events_with_unmodeled_params"].value == 4
+    keys = str(metadata["unmodeled_param_keys"].value)
+    assert "sql×4" in keys
+    assert "filters[report_year]×4" in keys
