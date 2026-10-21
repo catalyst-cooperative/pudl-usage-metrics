@@ -1,5 +1,6 @@
 """Tests for the eel hole (PUDL Viewer) log transform assets."""
 
+import json
 from collections import Counter
 from collections.abc import Iterator
 from typing import Any, cast
@@ -246,20 +247,55 @@ def test_handles_partition_with_no_search_filters():
     assert not any("filters" in col for col in out.columns)
 
 
-def test_explodes_search_filters_when_present():
-    """When a search carries ``params.filters`` they are split into columns."""
+def test_keeps_any_number_of_filters_as_one_json_column():
+    """A query's filters are kept, in order and losslessly, as one JSON array.
+
+    There is no cap on how many filters a user can apply, so they are not spread
+    over numbered columns. The upper bound of a range (``valueTo``) is kept, and
+    a query without filters gets a null.
+    """
+
+    def filt(i: int, **extra) -> dict:
+        return {
+            "fieldName": f"col_{i}",
+            "fieldType": "number",
+            "operation": "equals",
+            "value": i,
+            **extra,
+        }
+
+    def params(filters) -> dict:
+        return {"filters": filters, "name": "x", "page": 1, "perPage": 50}
+
     raw = pd.DataFrame(
         [
-            _record("a", event="search", params=_PARAMS_WITH_FILTERS, user_id="user-1"),
-            _record("b", event="search", user_id="user-1"),
+            _record("many", params=params([filt(i) for i in range(12)])),
+            _record(
+                "ranged",
+                params=params([filt(0, operation="inRange", valueTo=9)]),
+            ),
+            _record("empty", params=params("[]")),
+            _record("absent", user_id="user-1"),
         ]
     )
 
-    out = _run(raw)
+    out = _run(raw).set_index("insert_id")
 
-    assert sorted(out["insert_id"]) == ["a", "b"]
-    assert [col for col in out.columns if "params_filters_" in col]
+    assert not any(col.startswith("params_filters_") for col in out.columns)
     assert "json_payload_params_filters" not in out.columns
+    many = json.loads(str(out.loc["many", "params_filters"]))
+    assert [f["field_name"] for f in many] == [f"col_{i}" for i in range(12)]
+    assert json.loads(str(out.loc["ranged", "params_filters"])) == [
+        {
+            "field_name": "col_0",
+            "field_type": "number",
+            "operation": "inRange",
+            "value": 0,
+            "value_to": 9,
+        }
+    ]
+    assert pd.isna(out.loc["empty", "params_filters"])
+    assert pd.isna(out.loc["absent", "params_filters"])
 
 
 def test_unknown_event_flows_through_non_fatally():
