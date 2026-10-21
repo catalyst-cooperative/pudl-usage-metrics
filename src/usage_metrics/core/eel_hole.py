@@ -13,7 +13,6 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from pandas.io.common import dedup_names
 from pydantic import (
     BaseModel,
     BeforeValidator,
@@ -92,9 +91,17 @@ class DuckDBFilters(BaseModel):
     field_name: str
     field_type: Annotated[ALLOWABLE_FIELD_TYPES, BeforeValidator(normalize_field_type)]
     operation: Annotated[ALLOWABLE_OPERATIONS, BeforeValidator(normalize_operation)]
-    value: str | int | float | None = None
+    value: str | int | float | bool | None = None
+    value_to: str | int | float | bool | None = None
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+def filters_to_json(filters: Any) -> str | None:
+    """Serialize a query's validated filters as a JSON array, or None if it has none."""
+    if not isinstance(filters, list) or not filters:
+        return None
+    return json.dumps(filters, separators=(",", ":"))
 
 
 class DuckDBParams(BaseModel):
@@ -256,42 +263,14 @@ def _core_eel_hole_logs(
         columns=["json_payload_timestamp", "receive_timestamp"], errors="ignore"
     )
 
-    # The filters are a list of dictionaries, so we manually split these out into
-    # multiple columns for each field per query.
-    # This column only exists if at least one record in the partition had search
-    # filters, so we have to check before trying to process it.
+    # The filters are a list of dictionaries of unbounded length, so rather than
+    # spreading them over numbered columns we keep each query's list as one JSON
+    # string. This column only exists if at least one record in the partition had
+    # search filters, so we have to check before trying to process it.
     if "json_payload_params_filters" in converted_df.columns:
-        # Grab only the records which are neither null nor contain an empty list in
-        # this column.
-        filters_df = converted_df.loc[
-            (converted_df.json_payload_params_filters.notnull())
-            & (converted_df.json_payload_params_filters),
-            ["json_payload_params_filters"],
-        ]
-        filters_only = pd.DataFrame(
-            filters_df["json_payload_params_filters"].to_list(), index=filters_df.index
-        )
-
-        if not filters_only.empty:
-            # If we have search filters, do some maneuvering to process them
-            normalized = pd.concat(
-                [filters_only[i].apply(pd.Series) for i in filters_only], axis=1
-            )
-            normalized.columns = [
-                f"json_payload_params_filters_{str(col).replace('.', '_')}"
-                for col in dedup_names(
-                    list(normalized.columns), is_potential_multiindex=False
-                )
-            ]
-            converted_df = converted_df.merge(
-                normalized,
-                how="left",
-                left_index=True,
-                right_index=True,
-                validate="1:1",
-            )
-
-        converted_df = converted_df.drop(columns="json_payload_params_filters")
+        converted_df["json_payload_params_filters"] = converted_df[
+            "json_payload_params_filters"
+        ].map(filters_to_json)
 
     # Remove json_payload from the column names
     converted_df.columns = converted_df.columns.str.replace("json_payload_", "")

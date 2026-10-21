@@ -1134,36 +1134,6 @@ core_eel_hole_hits = _table_schema(
 )
 
 
-def _eel_hole_filter_columns(suffix: str) -> list[pandera.Column]:
-    """Columns describing one DuckDB filter in an eel hole preview/download query.
-
-    The viewer logs up to seven filters per query, with the columns of the first
-    unsuffixed and the rest suffixed ``_1`` through ``_6``.
-    """
-    return [
-        _column(
-            name=f"params_filters_field_name{suffix}",
-            dtype=str,
-            description="The variable on which a user is performing a filter using DuckDB.",
-        ),
-        _column(
-            name=f"params_filters_field_type{suffix}",
-            dtype=str,
-            description="The data type of the variable on which a user is performing a filter using DuckDB.",
-        ),
-        _column(
-            name=f"params_filters_operation{suffix}",
-            dtype=str,
-            description="The operation performed on the variable a user is using to perform a filter using DuckDB (e.g., greater than, contains).",
-        ),
-        _column(
-            name=f"params_filters_value{suffix}",
-            dtype=str,
-            description="The value that a user is using to perform a filter using DuckDB (e.g., greater than 2017, contains 'natural gas').",
-        ),
-    ]
-
-
 _eel_hole_preview_columns = [
     _column(
         name="insert_id",
@@ -1197,10 +1167,17 @@ _eel_hole_preview_columns = [
         dtype=int,
         description="The number of records returned per DuckDB query. This is set by us, so it should be expected to hold constant without our intervention.",
     ),
-    *(
-        column
-        for i in range(7)
-        for column in _eel_hole_filter_columns(suffix="" if i == 0 else f"_{i}")
+    _column(
+        name="params_filters",
+        dtype=str,
+        description=(
+            "The filters a user applied to the query, as a JSON array with one object "
+            "per filter, in the order they were applied. Each object has the keys "
+            "field_name (the variable being filtered), field_type (text, number or "
+            "date), operation (e.g. equals, contains, greaterThan, inRange), value "
+            "(e.g. 2017, 'natural gas') and value_to (the upper bound of an inRange "
+            "filter). Null when the query had no filters."
+        ),
     ),
     _column(
         name="session_id",
