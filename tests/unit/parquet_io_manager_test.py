@@ -13,6 +13,7 @@ import pyarrow.types as pat
 import pytest
 from dagster import (
     DailyPartitionsDefinition,
+    PythonObjectDagsterType,
     build_input_context,
     build_output_context,
 )
@@ -75,7 +76,9 @@ def _write_then_load(
     # Close the contexts explicitly; see parquet_io_manager_schema_test.py.
     with build_output_context(**kwargs) as output_context:
         manager.handle_output(output_context, df)
-    with build_input_context(**kwargs) as input_context:
+    with build_input_context(
+        dagster_type=PythonObjectDagsterType(object), **kwargs
+    ) as input_context:
         return manager.load_input(input_context)
 
 

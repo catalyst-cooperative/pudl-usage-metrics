@@ -10,9 +10,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 from dagster import (
-    AssetCheckExecutionContext,
     ConfigurableIOManager,
-    ConfigurableResource,
     InputContext,
     OutputContext,
 )
@@ -104,10 +102,16 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
 
         context.add_output_metadata({"row_count": row_count, "path": str(path)})
 
-    def load_input(self, context) -> pd.DataFrame:
-        """Load a data frame from a parquet file."""
-        path = self._get_path(context)
-        return pd.read_parquet(str(path))
+    def load_input(self, context: InputContext) -> pd.DataFrame | pa.Table:
+        """Load a parquet file as a data frame, or as a pyarrow Table if one is asked for.
+
+        The pandera schema asset checks annotate their input as ``pa.Table`` so that they
+        validate the data as it is stored, without a pandas round trip.
+        """
+        path = str(self._get_path(context))
+        if context.dagster_type.typing_type is pa.Table:
+            return pq.read_table(path)
+        return pd.read_parquet(path)
 
     def _get_path(self, context: InputContext | OutputContext) -> UPath:
         """Compute the parquet path for this asset."""
@@ -118,25 +122,3 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
             else None
         )
         return _parquet_path(self.base_path, key, window)
-
-
-class PyArrowTableReader(ConfigurableResource):
-    """Reads parquet outputs directly as pyarrow Tables, bypassing pandas.
-
-    `base_path` may be a local directory or a remote URI (e.g. `gs://bucket`) -- UPath
-    handles both transparently, so a single class covers local and remote storage.
-
-    This is not an IOManager. It's used by pandera asset checks that validate data with
-    the pyarrow backend. This allows validation to run on the Arrow data written by
-    PartitionedParquetIOManager without a pandas round-trip.
-    """
-
-    base_path: str
-
-    def read_table(
-        self, table_name: str, context: AssetCheckExecutionContext
-    ) -> pa.Table:
-        """Read a table's parquet file(s) as a pyarrow Table."""
-        window = context.partition_time_window if context.has_partition_key else None
-        path = _parquet_path(self.base_path, table_name, window)
-        return pq.read_table(str(path))

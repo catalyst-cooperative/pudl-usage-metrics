@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from dagster import (
     DailyPartitionsDefinition,
+    PythonObjectDagsterType,
     build_input_context,
     build_output_context,
 )
@@ -33,7 +34,11 @@ def _output_context(table_name: str):
 
 
 def _input_context(table_name: str):
-    return build_input_context(asset_key=table_name, **CONTEXT_KWARGS)
+    return build_input_context(
+        asset_key=table_name,
+        dagster_type=PythonObjectDagsterType(object),
+        **CONTEXT_KWARGS,
+    )
 
 
 @pytest.mark.parametrize("table_name", list(usage_metrics_schemas))
