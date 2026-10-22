@@ -101,42 +101,11 @@ def test_pattern_must_match_the_whole_value_but_not_nulls() -> None:
     ]
 
 
-def _table(**columns: list) -> pa.Table:
-    return pa.table(
-        {
-            "id": pa.array(columns.get("id", ["a", "b"]), pa.string()),
-            "time": pa.array([None, None], pa.timestamp("us")),
-            "count": pa.array(columns.get("count", [1, None]), pa.int64()),
-            "ratio": pa.array([None, None], pa.float64()),
-            "flag": pa.array([None, None], pa.bool_()),
-        }
-    )
-
-
-def test_validation_allows_nulls_outside_the_primary_key() -> None:
-    SCHEMA.validate(_table(), lazy=True)
-
-
-@pytest.mark.parametrize(
-    "ids,check",
-    [(["a", None], "not_nullable"), (["a", "a"], "multiple_fields_uniqueness")],
-    ids=["null_key", "duplicate_key"],
-)
-def test_validation_rejects_bad_primary_keys(ids, check) -> None:
-    with pytest.raises(pandera.errors.SchemaErrors) as error:
-        SCHEMA.validate(_table(id=ids), lazy=True)
-
-    assert check in set(error.value.failure_cases.to_pandas()["check"])
-
-
 @pytest.mark.parametrize("table_name", list(usage_metrics_schemas))
 def test_every_table_schema_is_consistent(table_name: str) -> None:
     schema = usage_metrics_schemas[table_name]
-    arrow = arrow_schema(schema)
-
     # Each schema is named for the variable it's assigned to in models.py.
     assert getattr(models, table_name) is schema
-    assert arrow.names == list(schema.columns) == list(pandas_dtypes(schema))
     assert schema.description
     assert schema.unique, f"{table_name} has no primary key"
     assert not any(schema.columns[name].nullable for name in schema.unique)

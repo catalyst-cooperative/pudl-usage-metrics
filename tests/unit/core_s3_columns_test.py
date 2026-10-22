@@ -94,14 +94,7 @@ def test_wrong_number_of_columns_is_rejected(partition_key, extra_fields) -> Non
 
 
 SCHEMA = usage_metrics_schemas["core_s3_logs"]
-PATTERN_COLUMNS = [
-    "bucket_owner",
-    "remote_ip",
-    "operation",
-    "request_uri",
-    "signature_version",
-    "tls_version",
-]
+PATTERN_COLUMNS = [name for name, column in SCHEMA.columns.items() if column.checks]
 
 
 def _validate_named_columns(named: pd.DataFrame) -> None:
@@ -118,15 +111,17 @@ def _validate_named_columns(named: pd.DataFrame) -> None:
     SCHEMA.validate(pa.table(columns, schema=arrow), lazy=True)
 
 
-def test_correctly_named_columns_pass_the_schema() -> None:
-    named = name_s3_log_columns(_read(list(LOG_FIELDS.values())), BEFORE_AWS_REGION)
-
-    _validate_named_columns(named)
-
-
-def test_invalid_relay_tls_version_passes_the_schema() -> None:
-    """AWS logs this TLS version for some requests, though its documentation doesn't."""
-    fields = {**LOG_FIELDS, "tls_version": "INVALID_RELAY_TLS_VERSION"}
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {},
+        # AWS logs this TLS version for some requests, though its documentation doesn't.
+        {"tls_version": "INVALID_RELAY_TLS_VERSION"},
+    ],
+    ids=["documented_values", "invalid_relay_tls_version"],
+)
+def test_correctly_named_columns_pass_the_schema(overrides) -> None:
+    fields = {**LOG_FIELDS, **overrides}
     named = name_s3_log_columns(_read(list(fields.values())), BEFORE_AWS_REGION)
 
     _validate_named_columns(named)

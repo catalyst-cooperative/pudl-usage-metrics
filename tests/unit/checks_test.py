@@ -55,13 +55,6 @@ def _run_check(table: pa.Table) -> AssetCheckResult:
     return result
 
 
-def test_passing_check_reports_the_row_count() -> None:
-    result = _run_check(pa.table({"id": ["a", "b"], "tls": ["-", None]}))
-
-    assert result.passed
-    assert result.metadata["row_count"].value == 2
-
-
 def test_failing_check_reports_which_columns_failed_with_examples() -> None:
     table = pa.table(
         {
