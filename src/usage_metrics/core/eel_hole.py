@@ -13,6 +13,7 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
+from pandas.io.common import dedup_names
 from pydantic import (
     BaseModel,
     BeforeValidator,
@@ -227,7 +228,7 @@ def _core_eel_hole_logs(
         )
         normalized.columns = [
             f"json_payload_params_filters_{str(col).replace('.', '_')}"
-            for col in pd.io.common.dedup_names(
+            for col in dedup_names(
                 list(normalized.columns), is_potential_multiindex=False
             )
         ]
