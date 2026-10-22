@@ -1,10 +1,8 @@
 """Dagster definitions for the PUDL usage metrics ETL."""
 
-import importlib.resources
 import itertools
 import logging
 import os
-import warnings
 
 from dagster import (
     AssetSelection,
