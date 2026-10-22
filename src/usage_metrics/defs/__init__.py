@@ -79,8 +79,11 @@ if os.getenv("METRICS_PROD_ENV", "local") == "prod":
 else:
     parquet_base_path = get_parquet_dir()
 
+# The IO manager accepts a Path as well as a str, but its signature says only str.
 resources = {
-    "parquet_manager": PartitionedParquetIOManager(base_path=parquet_base_path)
+    "parquet_manager": PartitionedParquetIOManager(
+        base_path=parquet_base_path  # type: ignore[bad-argument-type]
+    )
 }
 
 defs: Definitions = Definitions(
