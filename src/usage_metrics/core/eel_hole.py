@@ -1,4 +1,4 @@
-"""Transform data from viewer.catalyst.coop logs."""
+"""Transform data from data.catalyst.coop (the PUDL Data Viewer) logs."""
 
 import datetime
 import json
@@ -567,7 +567,7 @@ def _core_eel_hole_logs(
     context: AssetExecutionContext,
     raw_eel_hole_logs: pd.DataFrame,
 ) -> Iterator[Output[pd.DataFrame] | AssetCheckResult]:
-    """Transform viewer.catalyst.coop logs."""
+    """Transform data.catalyst.coop (the PUDL Data Viewer) logs."""
     context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_eel_hole_logs.empty:
@@ -639,7 +639,7 @@ def _core_eel_hole_logs(
     converted_df["url"] = converted_df["url"].replace({None: pd.NA})
 
     # Reformat some information about the log ins
-    # A log in is made when someone hits http://viewer.catalyst.coop/callback
+    # A log in is made when someone hits https://data.catalyst.coop/callback
     converted_df.loc[
         (converted_df.event.isnull())
         & (converted_df.text_payload.str.contains("callback", na=False)),
