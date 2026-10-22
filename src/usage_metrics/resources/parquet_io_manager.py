@@ -5,6 +5,7 @@ https://github.com/dagster-io/dagster/blob/master/examples/project_fully_feature
 """
 
 from datetime import datetime
+from typing import Annotated
 
 import pandas as pd
 import pyarrow as pa
@@ -14,6 +15,7 @@ from dagster import (
     InputContext,
     OutputContext,
 )
+from pydantic import BeforeValidator
 from upath import UPath
 
 from usage_metrics.helpers import get_table_name_from_context
@@ -40,10 +42,11 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
 
     `base_path` may be a local directory or a remote URI (e.g. `gs://bucket`)
     -- UPath handles both transparently, so a single class covers local and
-    remote storage.
+    remote storage. It can be given as a `str`, `Path` or `UPath`, and is stored as a
+    string, which is the only form Dagster can put in the resource's config schema.
     """
 
-    base_path: str
+    base_path: Annotated[str, BeforeValidator(str)]
 
     def handle_output(self, context: OutputContext, obj: pd.DataFrame):
         """Save a data frame to a parquet file."""

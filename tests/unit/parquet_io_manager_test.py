@@ -9,6 +9,8 @@ schema, and comes back as pandas with exactly the dtypes the schema declares, wi
 nulls where they were and its values unchanged.
 """
 
+from pathlib import Path
+
 import pandas as pd
 import pandera.pyarrow as pandera
 import pyarrow as pa
@@ -20,6 +22,7 @@ from dagster import (
     build_input_context,
     build_output_context,
 )
+from upath import UPath
 
 from usage_metrics.models import usage_metrics_schemas
 from usage_metrics.resources.parquet_io_manager import (
@@ -175,3 +178,20 @@ def test_table_is_stored_and_read_back_with_the_types_of_its_schema(
     for column in df.columns.drop("partition_key", errors="ignore"):
         assert loaded[column].isna().tolist() == df[column].isna().tolist(), column
         assert loaded[column].dropna().tolist() == df[column].dropna().tolist(), column
+
+
+@pytest.mark.parametrize(
+    "to_base_path",
+    [str, Path, UPath],
+    ids=["str", "Path", "UPath"],
+)
+def test_base_path_is_stored_as_a_string(to_base_path, tmp_path) -> None:
+    """A str, Path or UPath base path is kept as the equivalent string."""
+    manager = PartitionedParquetIOManager(base_path=to_base_path(tmp_path))
+    assert manager.base_path == str(tmp_path)
+
+
+def test_remote_base_path_keeps_its_scheme() -> None:
+    """A remote UPath is stored as its URI, so it is still detected as remote."""
+    manager = PartitionedParquetIOManager(base_path=UPath("gs://bucket/prefix"))
+    assert manager.base_path == "gs://bucket/prefix"
