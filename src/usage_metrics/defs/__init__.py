@@ -72,19 +72,16 @@ default_asset_checks = list(
 )
 
 
-gcs_base_path = get_gcs_base_path()
-local_base_path = str(get_parquet_dir())
+# Only the selected environment's location is looked up, so a setting that matters
+# only in production (e.g. PUDL_METRICS_GCS_BASE_PATH) can't break a local run.
+if os.getenv("METRICS_PROD_ENV", "local") == "prod":
+    parquet_base_path = get_gcs_base_path()
+else:
+    parquet_base_path = get_parquet_dir()
 
-resources_by_env = {
-    "prod": {
-        "parquet_manager": PartitionedParquetIOManager(base_path=gcs_base_path),
-    },
-    "local": {
-        "parquet_manager": PartitionedParquetIOManager(base_path=local_base_path),
-    },
+resources = {
+    "parquet_manager": PartitionedParquetIOManager(base_path=parquet_base_path)
 }
-
-resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
 
 defs: Definitions = Definitions(
     assets=default_assets,
