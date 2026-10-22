@@ -87,7 +87,7 @@ def core_zenodo_logs(
         # pandas-stubs' overload resolution for `.dt` loses its DatetimeProperties
         # return type when the column name comes from a loop variable; `.dt.date`
         # is valid pandas usage regardless.
-        df[col] = df[col].dt.date  # type: ignore[missing-attribute]
+        df[col] = df[col].dt.date
 
     # Convert string to datetime using Pandas
     for col in [
