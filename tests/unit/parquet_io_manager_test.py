@@ -104,5 +104,7 @@ def test_base_path_accepts_a_path_and_keeps_a_remote_uri_intact(tmp_path) -> Non
     create directories for it.
     """
     assert PartitionedParquetIOManager(base_path=tmp_path).base_path == str(tmp_path)
-    remote = PartitionedParquetIOManager(base_path=UPath("gs://bucket/prefix"))
+    remote = PartitionedParquetIOManager(
+        base_path=UPath("gs://bucket/prefix")  # type: ignore[bad-argument-type]
+    )
     assert remote.base_path == "gs://bucket/prefix"
