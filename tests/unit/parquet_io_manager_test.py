@@ -1,8 +1,12 @@
-"""Test that nothing in the Parquet IO manager depends on column order.
+"""Test the fidelity of what the Parquet IO manager writes and reads back.
 
 Column order is not meaningful in this project: columns should always be looked up
-by name. These tests write each table with its dataframe columns and/or its schema
+by name. The first tests write each table with its dataframe columns and/or its schema
 fields in a different order and require that, compared by name, nothing changes.
+
+The last tests require that every table is stored with exactly the Arrow types of its
+schema, and comes back as pandas with exactly the dtypes the schema declares, with its
+nulls where they were and its values unchanged.
 """
 
 import pandas as pd
@@ -22,7 +26,7 @@ from usage_metrics.models import usage_metrics_schemas
 from usage_metrics.resources.parquet_io_manager import (
     PartitionedParquetIOManager,
 )
-from usage_metrics.schemas import arrow_schema
+from usage_metrics.schemas import arrow_schema, pandas_dtypes
 
 PARTITION_KEY = "2025-01-01"
 PARTITIONS_DEF = DailyPartitionsDefinition(start_date="2023-08-16")
@@ -97,7 +101,9 @@ def test_parquet_round_trip_independent_of_column_order(
 ) -> None:
     """Every value comes back in the column with its name, whatever the order."""
     schema = usage_metrics_schemas[table_name]
-    expected = pd.DataFrame(_distinct_values(arrow_schema(schema)))
+    expected = pd.DataFrame(_distinct_values(arrow_schema(schema))).astype(
+        pandas_dtypes(schema)
+    )
 
     df = expected.copy()
     if reverse_dataframe:
@@ -117,7 +123,7 @@ def test_parquet_round_trip_independent_of_column_order(
     manager = PartitionedParquetIOManager(base_path=str(tmp_path))
     loaded = _write_then_load(manager, table_name, df)
 
-    pd.testing.assert_frame_equal(loaded, expected, check_like=True, check_dtype=False)
+    pd.testing.assert_frame_equal(loaded, expected, check_like=True)
 
 
 @pytest.mark.parametrize("table_name", list(usage_metrics_schemas))
@@ -136,3 +142,37 @@ def test_written_parquet_passes_its_pandera_check(table_name: str, tmp_path) -> 
         written = pq.read_table(str(manager._get_path(context)))
 
     schema.validate(written, lazy=True)
+
+
+def _rows_with_and_without_nulls(schema: pandera.DataFrameSchema) -> pd.DataFrame:
+    """Two rows: one of distinct values, and one with every non-key column null."""
+    values = _distinct_values(arrow_schema(schema))
+    key = set(schema.unique or [])
+    return pd.DataFrame(
+        {
+            name: column if name in key else [column[0], None]
+            for name, column in values.items()
+        }
+    )
+
+
+@pytest.mark.parametrize("table_name", list(usage_metrics_schemas))
+def test_table_is_stored_and_read_back_with_the_types_of_its_schema(
+    table_name: str, tmp_path
+) -> None:
+    """The types in the file, the dtypes in pandas, the nulls and the values all hold."""
+    schema = usage_metrics_schemas[table_name]
+    df = _rows_with_and_without_nulls(schema)
+    manager = PartitionedParquetIOManager(base_path=str(tmp_path))
+
+    loaded = _write_then_load(manager, table_name, df)
+
+    (path,) = (tmp_path / table_name).glob("*.parquet")
+    stored = pq.read_schema(str(path))
+    declared = arrow_schema(schema)
+    assert {f.name: f.type for f in stored} == {f.name: f.type for f in declared}
+    assert {c: str(t) for c, t in loaded.dtypes.items()} == pandas_dtypes(schema)
+    # The IO manager fills in partition_key itself, so it isn't one of the inputs.
+    for column in df.columns.drop("partition_key", errors="ignore"):
+        assert loaded[column].isna().tolist() == df[column].isna().tolist(), column
+        assert loaded[column].dropna().tolist() == df[column].dropna().tolist(), column
