@@ -13,12 +13,9 @@ from dagster import (
 )
 
 import usage_metrics
-from usage_metrics.checks import pandera_schema_checks
+from usage_metrics.checks import build_schema_checks
 from usage_metrics.paths import get_gcs_base_path, get_parquet_dir
-from usage_metrics.resources.parquet_io_manager import (
-    PartitionedParquetIOManager,
-    PyArrowTableReader,
-)
+from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
 
 logger = logging.getLogger(__name__)
 
@@ -81,11 +78,9 @@ local_base_path = str(get_parquet_dir())
 resources_by_env = {
     "prod": {
         "parquet_manager": PartitionedParquetIOManager(base_path=gcs_base_path),
-        "pyarrow_reader": PyArrowTableReader(base_path=gcs_base_path),
     },
     "local": {
         "parquet_manager": PartitionedParquetIOManager(base_path=local_base_path),
-        "pyarrow_reader": PyArrowTableReader(base_path=local_base_path),
     },
 }
 
@@ -93,7 +88,7 @@ resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
 
 defs: Definitions = Definitions(
     assets=default_assets,
-    asset_checks=default_asset_checks + pandera_schema_checks,
+    asset_checks=default_asset_checks + build_schema_checks(default_assets),
     resources=resources,
     jobs=[
         define_asset_job(

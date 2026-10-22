@@ -5,14 +5,20 @@ asset check that validates the materialized parquet data against that schema: it
 types, which columns may be null, and its primary key.
 """
 
+from collections.abc import Iterable
+
 import pandas as pd
 import pandera.errors
 import pandera.pyarrow as pandera
+import pyarrow as pa
 from dagster import (
+    AssetCheckExecutionContext,
     AssetCheckResult,
     AssetChecksDefinition,
     AssetCheckSeverity,
     AssetKey,
+    AssetsDefinition,
+    PartitionsDefinition,
     asset_check,
 )
 
@@ -40,18 +46,27 @@ def _failure_report(failure_cases: pd.DataFrame) -> str:
 
 
 def _make_schema_check(
-    table_name: str, schema: pandera.DataFrameSchema
+    table_name: str,
+    schema: pandera.DataFrameSchema,
+    partitions_def: PartitionsDefinition | None,
 ) -> AssetChecksDefinition:
-    """Build an asset check that validates a table against its pandera schema."""
+    """Build an asset check that validates a table against its pandera schema.
+
+    The check is partitioned like the asset it checks, so that it validates the
+    partition being run, and loads the table through that asset's IO manager. Annotating
+    the input as ``pa.Table`` makes :class:`PartitionedParquetIOManager` return the
+    Arrow table as it is stored, without a pandas round trip.
+    """
 
     @asset_check(
         asset=AssetKey(table_name),
         name="pandera_schema_check",
-        required_resource_keys={"pyarrow_reader"},
         blocking=True,
+        partitions_def=partitions_def,
     )
-    def _check(context) -> AssetCheckResult:
-        table = context.resources.pyarrow_reader.read_table(table_name, context)
+    def _check(
+        context: AssetCheckExecutionContext, table: pa.Table
+    ) -> AssetCheckResult:
         try:
             schema.validate(table, lazy=True)
         except pandera.errors.SchemaErrors as err:
@@ -74,7 +89,16 @@ def _make_schema_check(
     return _check
 
 
-pandera_schema_checks: list[AssetChecksDefinition] = [
-    _make_schema_check(table_name, schema)
-    for table_name, schema in usage_metrics_schemas.items()
-]
+def build_schema_checks(assets: Iterable[object]) -> list[AssetChecksDefinition]:
+    """Build a schema check for every asset that has a pandera schema."""
+    return [
+        _make_schema_check(
+            key.to_user_string(),
+            usage_metrics_schemas[key.to_user_string()],
+            asset.partitions_def,
+        )
+        for asset in assets
+        if isinstance(asset, AssetsDefinition)
+        for key in asset.keys
+        if key.to_user_string() in usage_metrics_schemas
+    ]
