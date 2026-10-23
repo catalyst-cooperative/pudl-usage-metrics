@@ -29,22 +29,40 @@ _ALL_PARTITIONED = _fake_job_def(
     "all_partitioned_metrics_etl", ["2026-09-24", "2026-09-25"]
 )
 _ALL_NONPARTITIONED = _fake_job_def("all_nonpartitioned_metrics_etl", None)
+_S3 = _fake_job_def(
+    "s3_metrics_etl", ["2026-09-22", "2026-09-23", "2026-09-24", "2026-09-25"]
+)
 _EEL_HOLE = _fake_job_def("eel_hole_metrics_etl", ["2026-09-24", "2026-09-25"])
 _GITHUB_NONPARTITIONED = _fake_job_def("github_nonpartitioned_metrics_etl", None)
 
 _JOB_DEFS_BY_NAME = {
     j.name: j
-    for j in [_ALL_PARTITIONED, _ALL_NONPARTITIONED, _EEL_HOLE, _GITHUB_NONPARTITIONED]
+    for j in [
+        _ALL_PARTITIONED,
+        _ALL_NONPARTITIONED,
+        _S3,
+        _EEL_HOLE,
+        _GITHUB_NONPARTITIONED,
+    ]
 }
+
+
+class _Calls(list):
+    """``(job, partition_key)`` calls, plus the run_config each was given."""
+
+    def __init__(self):
+        super().__init__()
+        self.run_configs: list[dict | None] = []
 
 
 @pytest.fixture
 def executed(monkeypatch):
     """Stub out defs.resolve_job_def and _execute; record every _execute call."""
-    calls: list[tuple[str, str | None]] = []
+    calls = _Calls()
 
     def fake_execute(job, **kwargs):
         calls.append((job.name, kwargs.get("partition_key")))
+        calls.run_configs.append(kwargs.get("run_config"))
         return True
 
     monkeypatch.setattr(
@@ -179,6 +197,55 @@ def test_execute_skips_report_line_when_absent(caplog):
         _execute(job)
     assert "broke" in caplog.text
     assert "EEL-HOLE" not in caplog.text
+
+
+def test_window_runs_the_last_n_days_oldest_first(executed):
+    result = _run(["--job", "s3", "--window", "3"])
+    assert result.exit_code == 0, result.output
+    assert executed == [
+        ("s3_metrics_etl", "2026-09-23"),
+        ("s3_metrics_etl", "2026-09-24"),
+        ("s3_metrics_etl", "2026-09-25"),
+    ]
+
+
+def test_window_ends_at_the_given_partition(executed):
+    result = _run(["--job", "s3", "--window", "2", "--partition", "2026-09-24"])
+    assert result.exit_code == 0, result.output
+    assert executed == [
+        ("s3_metrics_etl", "2026-09-23"),
+        ("s3_metrics_etl", "2026-09-24"),
+    ]
+
+
+def test_window_before_the_first_partition_is_rejected(executed):
+    result = _run(["--job", "s3", "--window", "9"])
+    assert result.exit_code != 0
+    assert "not a valid partition" in result.output
+    assert executed == []
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--window", "2"],
+        ["--job", "eel_hole", "--window", "2"],
+        ["--rebuild"],
+        ["--job", "eel_hole", "--rebuild"],
+        ["--job", "s3", "--window", "2", "--start", "2026-09-22"],
+    ],
+)
+def test_window_and_rebuild_are_s3_only(executed, args):
+    result = _run(args)
+    assert result.exit_code != 0
+    assert executed == []
+
+
+def test_rebuild_passes_run_config_to_the_job(executed):
+    result = _run(["--job", "s3", "--rebuild"])
+    assert result.exit_code == 0, result.output
+    assert executed == [("s3_metrics_etl", "2026-09-25")]
+    assert executed.run_configs == [etl_module.REBUILD_RUN_CONFIG]
 
 
 def test_execute_fails_the_job_when_a_blocking_check_fails(caplog):
