@@ -4,16 +4,35 @@ Adapted from example at
 https://github.com/dagster-io/dagster/blob/master/examples/project_fully_featured/project_fully_featured/resources/parquet_io_manager.py
 """
 
+from datetime import datetime
+from typing import Annotated
+
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 from dagster import (
     ConfigurableIOManager,
     InputContext,
     OutputContext,
 )
+from pydantic import BeforeValidator
 from upath import UPath
 
 from usage_metrics.helpers import get_table_name_from_context
-from usage_metrics.models import ARROW_TO_PANDAS, usage_metrics_schemas
+from usage_metrics.models import usage_metrics_schemas
+from usage_metrics.schemas import arrow_schema, pandas_dtypes
+
+
+def _parquet_path(
+    base_path: str, table_name: str, partition_window: tuple[datetime, datetime] | None
+) -> UPath:
+    """Compute the parquet path for a table, partitioned or not."""
+    if partition_window is not None:
+        start, end = partition_window
+        dt_format = "%Y-%m-%d"
+        partition_str = start.strftime(dt_format) + "--" + end.strftime(dt_format)
+        return UPath(base_path) / table_name / f"{partition_str}.parquet"
+    return UPath(base_path) / f"{table_name}.parquet"
 
 
 class PartitionedParquetIOManager(ConfigurableIOManager):
@@ -21,11 +40,13 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
 
     It stores partitioned outputs nested under the primary asset key.
 
-    `base_path` may be a local directory or a remote URI (e.g. `gs://bucket`) -- UPath
-    handles both transparently, so a single class covers local and remote storage.
+    `base_path` may be a local directory or a remote URI (e.g. `gs://bucket`)
+    -- UPath handles both transparently, so a single class covers local and
+    remote storage. It can be given as a `str`, `Path` or `UPath`, and is stored as a
+    string, which is the only form Dagster can put in the resource's config schema.
     """
 
-    base_path: str
+    base_path: Annotated[str, BeforeValidator(str)]
 
     def handle_output(self, context: OutputContext, obj: pd.DataFrame):
         """Save a data frame to a parquet file."""
@@ -41,8 +62,8 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
                 table_name in usage_metrics_schemas
             ), f"""{table_name} does not have a schema defined.
                 Create a schema for it in usage_metrics.models."""
-            schema = usage_metrics_schemas[table_name]
-            table_dtypes = {f.name: ARROW_TO_PANDAS[f.type] for f in schema}
+            schema = arrow_schema(usage_metrics_schemas[table_name])
+            table_dtypes = pandas_dtypes(usage_metrics_schemas[table_name])
             # Writing with a schema silently drops any column that isn't in it, so a
             # renamed or newly added upstream field would just vanish. Fail instead.
             extra_columns = [c for c in obj.columns if c not in table_dtypes]
@@ -69,7 +90,7 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
                 **{
                     c: pd.to_datetime(obj[c]).dt.tz_localize(None)
                     for c in obj.columns
-                    if c in table_dtypes and table_dtypes[c] == "datetime64[s]"
+                    if c in table_dtypes and table_dtypes[c].startswith("datetime64")
                 }
             )
             # we need the .astype because int nulls in string-object columns make Arrow sad
@@ -84,18 +105,23 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
 
         context.add_output_metadata({"row_count": row_count, "path": str(path)})
 
-    def load_input(self, context) -> pd.DataFrame:
-        """Load a data frame from a parquet file."""
-        path = self._get_path(context)
-        return pd.read_parquet(str(path))
+    def load_input(self, context: InputContext) -> pd.DataFrame | pa.Table:
+        """Load a parquet file as a data frame, or as a pyarrow Table if one is asked for.
+
+        The pandera schema asset checks annotate their input as ``pa.Table`` so that they
+        validate the data as it is stored, without a pandas round trip.
+        """
+        path = str(self._get_path(context))
+        if context.dagster_type.typing_type is pa.Table:
+            return pq.read_table(path)
+        return pd.read_parquet(path)
 
     def _get_path(self, context: InputContext | OutputContext) -> UPath:
         """Compute the parquet path for this asset."""
         key = context.asset_key.path[-1]
-
-        if context.has_asset_partitions:
-            start, end = context.asset_partitions_time_window
-            dt_format = "%Y-%m-%d"
-            partition_str = start.strftime(dt_format) + "--" + end.strftime(dt_format)
-            return UPath(self.base_path) / key / f"{partition_str}.parquet"
-        return UPath(self.base_path) / f"{key}.parquet"
+        window = (
+            context.asset_partitions_time_window
+            if context.has_asset_partitions
+            else None
+        )
+        return _parquet_path(self.base_path, key, window)
