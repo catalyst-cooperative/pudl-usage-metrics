@@ -13,7 +13,6 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from pandas.io.common import dedup_names
 from pydantic import (
     BaseModel,
     BeforeValidator,
@@ -41,30 +40,68 @@ def json_string_to_list(value: Any):
     return value
 
 
+ALLOWABLE_FIELD_TYPES = Literal["text", "number", "date"]
+ALLOWABLE_OPERATIONS = Literal[
+    "equals",
+    "contains",
+    "greaterThan",
+    "greaterThanOrEqual",
+    "lessThan",
+    "lessThanOrEqual",
+    "notBlank",
+    "startsWith",
+    "endsWith",
+    "notEqual",
+    "notContains",
+    "inRange",
+    "blank",
+    "false",
+    "true",
+]
+
+# The frontend's grid library is case-consistent about these values, but the
+# search UI sometimes isn't (e.g. "inrange" instead of "inRange"), so match
+# case-insensitively against the canonical casing instead of rejecting the row.
+_FIELD_TYPE_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_FIELD_TYPES)}
+_OPERATION_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_OPERATIONS)}
+# "string" shows up as a field_type synonym for "text", apparently from some
+# code path that reports a JS `typeof` instead of the grid's column type.
+_FIELD_TYPE_ALIASES = {"string": "text"}
+
+
+def normalize_field_type(value: Any):
+    """Canonicalize field_type casing and known synonyms."""
+    if isinstance(value, str):
+        lower = value.lower()
+        lower = _FIELD_TYPE_ALIASES.get(lower, lower)
+        return _FIELD_TYPE_BY_LOWER.get(lower, value)
+    return value
+
+
+def normalize_operation(value: Any):
+    """Canonicalize operation casing."""
+    if isinstance(value, str):
+        return _OPERATION_BY_LOWER.get(value.lower(), value)
+    return value
+
+
 class DuckDBFilters(BaseModel):
     """DuckDB filter format class."""
 
     field_name: str
-    field_type: Literal["text", "number", "date"]
-    operation: Literal[
-        "equals",
-        "contains",
-        "greaterThan",
-        "greaterThanOrEqual",
-        "lessThan",
-        "lessThanOrEqual",
-        "notBlank",
-        "startsWith",
-        "notEqual",
-        "notContains",
-        "inRange",
-        "blank",
-        "false",
-        "true",
-    ]
-    value: str | int | float | None = None
+    field_type: Annotated[ALLOWABLE_FIELD_TYPES, BeforeValidator(normalize_field_type)]
+    operation: Annotated[ALLOWABLE_OPERATIONS, BeforeValidator(normalize_operation)]
+    value: str | int | float | bool | None = None
+    value_to: str | int | float | bool | None = None
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+
+
+def filters_to_json(filters: Any) -> str | None:
+    """Serialize a query's validated filters as a JSON array, or None if it has none."""
+    if not isinstance(filters, list) or not filters:
+        return None
+    return json.dumps(filters, separators=(",", ":"))
 
 
 class DuckDBParams(BaseModel):
@@ -143,11 +180,18 @@ class EelHoleLogs(BaseModel):
                     (event := data["jsonPayload"].get("event"))
                     and event not in get_args(ALLOWABLE_EVENT_TYPES)
                 )
-                # Or if params are malformed
+                # Or if params are malformed: absent is fine (no search happened),
+                # but present and not a complete DuckDBParams -- including an
+                # empty {} -- means every required field would otherwise raise.
                 or (
-                    (params := data["jsonPayload"].get("params"))
-                    and (params.get("name") is not None)
-                    and (params.get("page") is None)
+                    (params := data["jsonPayload"].get("params")) is not None
+                    and (
+                        not isinstance(params, dict)
+                        or not all(
+                            key in params
+                            for key in ("filters", "name", "page", "perPage")
+                        )
+                    )
                 )
             ):
                 data.pop("jsonPayload", None)
@@ -165,10 +209,10 @@ def _core_eel_hole_logs(
     raw_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Transform viewer.catalyst.coop logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     # Flatten the many nested columns and coerce them into the expected class.
@@ -185,8 +229,18 @@ def _core_eel_hole_logs(
         columns=[c for c in empty_candidates if c in converted_df.columns]
     )
 
-    # Also drop some columns that just provide constant metadata about the GCS logging
-    # instance
+    # If every record in the partition had its payload dropped (e.g. a day of
+    # nothing but app noise, or every search's params happened to be malformed),
+    # none of the json_payload_* columns exist at all. Synthesize the (all-null)
+    # event columns the rest of this transform selects, so it doesn't KeyError.
+    if "json_payload_event" not in converted_df.columns:
+        for field in JsonPayload.model_fields:
+            if field not in ("timestamp", "params"):
+                converted_df[f"json_payload_{field}"] = pd.NA
+
+    # Also drop some columns that just provide constant metadata about the GCS
+    # logging instance. errors="ignore": the resource/labels shape depends on the
+    # deployment and GCP's logging schema, neither of which we control.
     converted_df = converted_df.drop(
         columns=[
             "log_name",
@@ -197,8 +251,8 @@ def _core_eel_hole_logs(
             "resource_labels_project_id",
             "resource_labels_revision_name",
             "resource_labels_service_name",
-            "resource_labels_service_name",
-        ]
+        ],
+        errors="ignore",
     )
 
     # JSON payload timestamp is least complete, and receive timestamp just
@@ -206,37 +260,17 @@ def _core_eel_hole_logs(
     # These vary by sub-seconds, so we'll just pick the standard 'timestamp'.
     # See https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry#FIELDS.timestamp
     converted_df = converted_df.drop(
-        columns=["json_payload_timestamp", "receive_timestamp"]
+        columns=["json_payload_timestamp", "receive_timestamp"], errors="ignore"
     )
 
-    # The filters are a list of dictionaries, so we manually split these out into
-    # multiple columns for each field per query.
-    # Grab only the records which are neither null nor contain an empty list in this column.
-    filters_df = converted_df.loc[
-        (converted_df.json_payload_params_filters.notnull())
-        & (converted_df.json_payload_params_filters),
-        ["json_payload_params_filters"],
-    ]
-    filters_only = pd.DataFrame(
-        filters_df["json_payload_params_filters"].to_list(), index=filters_df.index
-    )
-
-    if not filters_only.empty:
-        # If we have search filters, do some maneuvering to process them
-        normalized = pd.concat(
-            [filters_only[i].apply(pd.Series) for i in filters_only], axis=1
-        )
-        normalized.columns = [
-            f"json_payload_params_filters_{str(col).replace('.', '_')}"
-            for col in dedup_names(
-                list(normalized.columns), is_potential_multiindex=False
-            )
-        ]
-        converted_df = converted_df.merge(
-            normalized, how="left", left_index=True, right_index=True, validate="1:1"
-        )
-
-    converted_df = converted_df.drop(columns="json_payload_params_filters")
+    # The filters are a list of dictionaries of unbounded length, so rather than
+    # spreading them over numbered columns we keep each query's list as one JSON
+    # string. This column only exists if at least one record in the partition had
+    # search filters, so we have to check before trying to process it.
+    if "json_payload_params_filters" in converted_df.columns:
+        converted_df["json_payload_params_filters"] = converted_df[
+            "json_payload_params_filters"
+        ].map(filters_to_json)
 
     # Remove json_payload from the column names
     converted_df.columns = converted_df.columns.str.replace("json_payload_", "")
@@ -248,7 +282,7 @@ def _core_eel_hole_logs(
     # A log in is made when someone hits http://viewer.catalyst.coop/callback
     converted_df.loc[
         (converted_df.event.isnull())
-        & (converted_df.text_payload.str.contains("callback")),
+        & (converted_df.text_payload.str.contains("callback", na=False)),
         "event",
     ] = "log_in"
 
@@ -312,10 +346,10 @@ def core_eel_hole_log_ins(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of log-in events from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     login_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "log_in"]
@@ -337,10 +371,10 @@ def core_eel_hole_searches(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of search events from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     search_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "search"]
@@ -371,10 +405,10 @@ def core_eel_hole_hits(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of search hits from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     hit_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "hit"]
@@ -394,10 +428,10 @@ def core_eel_hole_previews(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of DuckDB preview requests from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     preview_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_preview"]
@@ -421,10 +455,10 @@ def core_eel_hole_downloads(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of DuckDB download requests from eel-hole logs."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     download_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "duckdb_csv"]
@@ -448,10 +482,10 @@ def core_eel_hole_user_settings_updates(
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
     """Create table of user setting updates."""
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return pd.DataFrame()
 
     settings_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "privacy-policy"]
