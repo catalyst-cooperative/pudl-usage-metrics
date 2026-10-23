@@ -47,10 +47,7 @@ class KaggleExtractor(GCSExtractor):
         ]
         return filtered_blobs
 
-    # Unlike the base class, this needs the partition key, so it takes the context.
-    def load_file(  # type: ignore[bad-override]
-        self, context: AssetExecutionContext, file_path: Path
-    ) -> pd.DataFrame:
+    def load_file(self, file_path: Path) -> pd.DataFrame:
         """Read in JSON file as dataframe."""
         with Path.open(file_path, "r") as file:
             data = json.load(file)
@@ -62,24 +59,16 @@ class KaggleExtractor(GCSExtractor):
             # Prior to this partition, we had everything nested under the "info" key,
             # except for metrics_date. In the newer data, there isn't the same
             # nesting structure and all fields are housed in the top-level.
-            if pd.to_datetime(context.partition_key) < pd.to_datetime("2025-09-21"):
+            if self.partition_key is None:
+                raise ValueError(
+                    "partition_key must be set before load_file() is called."
+                )
+            if pd.to_datetime(self.partition_key) < pd.to_datetime("2025-09-21"):
                 df = pd.json_normalize(data["info"])
                 df["metrics_date"] = data["metrics_date"]
             else:
                 df = pd.json_normalize(data)
             return df
-
-    def extract_logs_into_list(
-        self, context: AssetExecutionContext, file_paths: list[Path]
-    ) -> list[pd.DataFrame]:
-        """Read files into a list of Pandas DataFrames, passing context into load method."""
-        dict_dfs = []
-        for path in file_paths:
-            try:
-                dict_dfs.append(self.load_file(context, path))
-            except pd.errors.EmptyDataError:
-                context.log.warning(f"{path} is an empty file, couldn't read.")
-        return dict_dfs
 
 
 @asset(
