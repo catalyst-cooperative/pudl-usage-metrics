@@ -135,8 +135,8 @@ def core_s3_logs(
         return raw_s3_logs
     raw_s3_logs = name_s3_log_columns(raw_s3_logs, context.partition_key)
 
-    # Combine time and timezone columns
-    raw_s3_logs.time = raw_s3_logs.time + " " + raw_s3_logs.timezone
+    # Combine time and timezone columns.
+    raw_s3_logs["time"] = raw_s3_logs["time"] + " " + raw_s3_logs["timezone"]
     raw_s3_logs = raw_s3_logs.drop(columns=["timezone"])
 
     # Drop S3 lifecycle transitions

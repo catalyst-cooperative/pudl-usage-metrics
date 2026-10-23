@@ -5,11 +5,8 @@ import logging
 import os
 
 from dagster import (
-    AssetKey,
-    AssetsDefinition,
     AssetSelection,
     Definitions,
-    SourceAsset,
     define_asset_job,
     load_asset_checks_from_modules,
     load_assets_from_modules,
@@ -73,31 +70,6 @@ default_asset_checks = list(
     )
 )
 
-
-def _get_keys_from_assets(
-    asset_def: AssetsDefinition | SourceAsset,
-) -> list[AssetKey]:
-    """Get a list of asset keys.
-
-    Most assets have one key, which can be retrieved as a list from
-    ``asset.keys``.
-
-    Multi-assets have multiple keys, which can also be retrieved as a list from
-    ``asset.keys``.
-
-    SourceAssets always only have one key, and don't have ``asset.keys``. So we
-    look for ``asset.key`` and wrap it in a list.
-    """
-    if isinstance(asset_def, AssetsDefinition):
-        return list(asset_def.keys)
-    if isinstance(asset_def, SourceAsset):
-        return [asset_def.key]
-    return []
-
-
-_asset_keys = itertools.chain.from_iterable(
-    _get_keys_from_assets(asset_def) for asset_def in default_assets
-)
 
 resources_by_env = {
     "prod": {

@@ -2,22 +2,23 @@
 
 import json
 import logging
-import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
 from google.cloud import storage
-from kaggle.api.kaggle_api_extended import KaggleApi
 
 from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
 
-logger = logging.getLogger()
-logging.basicConfig(level="INFO")
+logger = logging.getLogger(__name__)
 
 
 def get_kaggle_dataset_metadata() -> str:
     """Get PUDL project usage metadata from Kaggle site."""
+    # Imported here, not at module scope: the kaggle package authenticates on
+    # import, which breaks any caller that doesn't have Kaggle credentials set.
+    from kaggle.api.kaggle_api_extended import KaggleApi
+
     # Instantiate and authenticate to the Kaggle API
     api = KaggleApi()
     api.authenticate()
@@ -60,7 +61,3 @@ def save_metrics():
     """Save github traffic metrics to google cloud bucket."""
     kaggle_dataset_metrics = get_kaggle_dataset_metadata()
     upload_to_bucket(kaggle_dataset_metrics)
-
-
-if __name__ == "__main__":
-    sys.exit(save_metrics())

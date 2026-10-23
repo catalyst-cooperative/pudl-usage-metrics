@@ -1,6 +1,7 @@
 """Extract data from Kaggle logs."""
 
 import json
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
@@ -10,7 +11,6 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
@@ -27,7 +27,7 @@ class KaggleExtractor(GCSExtractor):
         super().__init__(*args, **kwargs)
 
     def filter_blobs(
-        self, context: AssetExecutionContext, blobs: HTTPIterator
+        self, context: AssetExecutionContext, blobs: Iterable[storage.Blob]
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
@@ -42,10 +42,13 @@ class KaggleExtractor(GCSExtractor):
         partition_date = date.fromisoformat(day_start_date_str).strftime("%Y-%m-%d")
         file_name_prefix = f"kaggle/{partition_date}.json"
 
-        blobs = [blob for blob in blobs if blob.name == file_name_prefix]
-        return blobs
+        filtered_blobs: list[storage.Blob] = [
+            blob for blob in blobs if blob.name == file_name_prefix
+        ]
+        return filtered_blobs
 
-    def load_file(
+    # Unlike the base class, this needs the partition key, so it takes the context.
+    def load_file(  # type: ignore[bad-override]
         self, context: AssetExecutionContext, file_path: Path
     ) -> pd.DataFrame:
         """Read in JSON file as dataframe."""
@@ -75,7 +78,7 @@ class KaggleExtractor(GCSExtractor):
             try:
                 dict_dfs.append(self.load_file(context, path))
             except pd.errors.EmptyDataError:
-                context.log.warnings(f"{path} is an empty file, couldn't read.")
+                context.log.warning(f"{path} is an empty file, couldn't read.")
         return dict_dfs
 
 

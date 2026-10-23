@@ -1,5 +1,6 @@
 """Extract data from S3 logs."""
 
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
 
@@ -9,7 +10,6 @@ from dagster import (
     DailyPartitionsDefinition,
     asset,
 )
-from google.api_core.page_iterator import HTTPIterator
 from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_S3_LOGS_BUCKET
@@ -26,7 +26,7 @@ class S3Extractor(GCSExtractor):
         super().__init__(*args, **kwargs)
 
     def filter_blobs(
-        self, context: AssetExecutionContext, blobs: HTTPIterator
+        self, context: AssetExecutionContext, blobs: Iterable[storage.Blob]
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
@@ -46,7 +46,11 @@ class S3Extractor(GCSExtractor):
         """
         day_start_date_str = context.partition_key
         partition_date = date.fromisoformat(day_start_date_str).strftime("%Y-%m-%d")
-        return [blob for blob in blobs if blob.name.startswith(partition_date)]
+        return [
+            blob
+            for blob in blobs
+            if blob.name is not None and blob.name.startswith(partition_date)
+        ]
 
     def load_file(self, file_path: Path) -> pd.DataFrame:
         """Read in file as dataframe."""

@@ -7,6 +7,7 @@ fields in a different order and require that, compared by name, nothing changes.
 
 import pandas as pd
 import pyarrow as pa
+import pyarrow.types as pat
 import pytest
 from dagster import (
     DailyPartitionsDefinition,
@@ -27,13 +28,13 @@ def _distinct_values(schema: pa.Schema) -> dict[str, list]:
     """Make two rows of values that differ per column, so a column mix-up shows up."""
     values = {}
     for i, field in enumerate(schema):
-        if pa.types.is_boolean(field.type):
+        if pat.is_boolean(field.type):
             column = [i % 2 == 0, i % 2 == 1]
-        elif pa.types.is_integer(field.type):
+        elif pat.is_integer(field.type):
             column = [i, i + 1000]
-        elif pa.types.is_floating(field.type):
+        elif pat.is_floating(field.type):
             column = [i + 0.25, i + 0.75]
-        elif pa.types.is_timestamp(field.type):
+        elif pat.is_timestamp(field.type):
             column = [
                 pd.Timestamp("2025-01-01") + pd.Timedelta(days=i),
                 pd.Timestamp("2025-06-01") + pd.Timedelta(days=i),
