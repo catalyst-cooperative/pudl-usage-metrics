@@ -14,7 +14,7 @@ import sys
 import click
 import coloredlogs
 
-from usage_metrics.etl import defs
+from usage_metrics.defs import defs
 from usage_metrics.scripts import CONTEXT_SETTINGS
 from usage_metrics.scripts.partitions import compute_partitions
 

@@ -29,6 +29,7 @@ test = ["test"]
 pandas = ">=3.1"
 pyarrow = ">=24"
 dagster = ">=1.13"
+dagster-dg-cli = ">=1.13"
 dagster-webserver = ">=1.13"
 pydata-google-auth = ">=1.9.1"
 joblib = ">=1.6"
@@ -59,12 +60,12 @@ pyrefly = ">=1.4.0"
 ruff = ">=0.17"
 
 [tool.pixi.tasks.update-local]
-cmd = "dagster dev -m usage_metrics.etl"
+cmd = "dg dev"
 env = { METRICS_PROD_ENV = "local" }
 description = "Start dagster server that stores ETL results locally"
 
 [tool.pixi.tasks.update-prod]
-cmd = "dagster dev -m usage_metrics.etl"
+cmd = "dg dev"
 env = { METRICS_PROD_ENV = "prod" }
 description = "Start dagster server that stores ETL results in GCS"
 
@@ -101,6 +102,13 @@ description = "Run all the software unit tests"
 cmd = "coverage report --sort=cover"
 depends-on = ["coverage-erase", "linters", "pytest-unit"]
 description = "Run all CI tests and report test coverage"
+
+[tool.dg]
+directory_type = "project"
+
+[tool.dg.project]
+root_module = "usage_metrics"
+code_location_target_module = "usage_metrics.definitions"
 
 [tool.pyrefly]
 project-includes = ["src", "tests"]
