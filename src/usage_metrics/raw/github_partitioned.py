@@ -21,7 +21,7 @@ from dagster import (
 from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
-from usage_metrics.raw.extract import GCSExtractor
+from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 
 DailyMetricType = Literal["clones", "popular_paths", "popular_referrers", "views"]
 CumulativeMetricType = Literal["stargazers", "forks"]
@@ -45,6 +45,10 @@ class GithubExtractor(GCSExtractor):
         self.bucket_name = PUDL_METRICS_ARCHIVES_BUCKET
         self.metric = metric
         super().__init__(*args, **kwargs)
+
+    def get_blob_prefix(self, context: AssetExecutionContext) -> str:
+        """Filter the bucket listing to this metric's blobs server-side."""
+        return f"github/{self.metric}/"
 
     def filter_blobs(
         self, context: AssetExecutionContext, blobs: Iterable[storage.Blob]
@@ -154,6 +158,7 @@ def daily_metrics_extraction_factory(
         name=f"raw_github_{metric}",
         partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
         tags={"source": "github_partitioned"},
+        retry_policy=GCS_EXTRACT_RETRY_POLICY,
     )
     def _raw_github_logs(context: AssetExecutionContext) -> pd.DataFrame:
         """Extract Github logs from daily files and return one daily DataFrame."""
