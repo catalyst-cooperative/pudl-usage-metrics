@@ -100,6 +100,12 @@ class ZenodoExtractor(GCSExtractor):
         if date_match is None:
             raise ValueError(f"Could not find a date in file path {file_path}")
         df["metrics_date"] = date_match.group()
+        # A file is named for the id of the latest version of the record it archives,
+        # which grows as versions are published, so it orders the archives of one day.
+        id_match = re.search(r"\d{4}-\d{2}-\d{2}-(\d+)\.json$", str(file_path))
+        if id_match is None:
+            raise ValueError(f"Could not find a record id in file path {file_path}")
+        df["source_record_id"] = int(id_match.group(1))
         return df
 
 
