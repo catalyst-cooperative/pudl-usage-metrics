@@ -25,12 +25,17 @@ SCHEMA = _table_schema(
 
 
 def test_primary_key_columns_are_required_and_others_nullable() -> None:
+    """Primary key columns are non-nullable and unique together; all others are nullable."""
     assert not SCHEMA.columns["id"].nullable
     assert all(c.nullable for name, c in SCHEMA.columns.items() if name != "id")
     assert SCHEMA.unique == ["id"]
 
 
 def test_columns_shared_between_tables_are_not_changed_by_a_primary_key() -> None:
+    """Making a column part of one table's primary key doesn't affect other tables.
+
+    Columns are shared between table definitions, so each table has to get its own copy.
+    """
     shared = [_column("a", str, "A."), _column("b", str, "B.")]
     _table_schema("t1", shared, description="keyed on a", primary_key=["a"])
     _table_schema("t2", shared, description="keyed on b", primary_key=["b"])
@@ -39,6 +44,7 @@ def test_columns_shared_between_tables_are_not_changed_by_a_primary_key() -> Non
 
 
 def test_bad_table_definitions_are_rejected() -> None:
+    """Unnamed or repeated columns, and primary keys that aren't columns, raise ValueError."""
     with pytest.raises(ValueError, match="Table 'bad' has columns without a name"):
         _table_schema("bad", [pandera.pyarrow.Column(str)], "t")
     with pytest.raises(
@@ -54,6 +60,10 @@ def test_bad_table_definitions_are_rejected() -> None:
 
 
 def test_arrow_schema_has_types_and_documentation() -> None:
+    """The Arrow schema has the column types, with the descriptions as metadata.
+
+    Column descriptions are field metadata and the table description is schema metadata, so that they are written into the Parquet file footer.
+    """
     arrow = arrow_schema(SCHEMA)
 
     assert arrow.types == [
@@ -71,6 +81,7 @@ def test_arrow_schema_has_types_and_documentation() -> None:
 
 
 def test_pandas_dtypes_are_nullable() -> None:
+    """Each column gets the nullable pandas dtype for its type, so nulls survive in any column."""
     assert pandas_dtypes(SCHEMA) == {
         "id": "string",
         "time": "datetime64[us]",
@@ -81,6 +92,14 @@ def test_pandas_dtypes_are_nullable() -> None:
 
 
 def test_pattern_must_match_the_whole_value_but_not_nulls() -> None:
+    r"""A column's pattern has to match its whole value, and nulls are exempt from it.
+
+    The pattern is `-|TLSv1\.[0-3]`, with two alternatives at the top level. The values
+    that must fail each go wrong in a different way: `-garbage` and `TLSv1.2x` have
+    extra characters after a match, `xTLSv1.2` has them before it, and `TLSv1.9` has
+    the right shape but a digit outside the range. Together they catch a check that
+    matches only a prefix, or that applies its anchors to just one alternative.
+    """
     schema = _table_schema(
         "t",
         [_column("tls", str, "TLS version.", pattern=r"-|TLSv1\.[0-3]")],
@@ -96,7 +115,6 @@ def test_pattern_must_match_the_whole_value_but_not_nulls() -> None:
         return []
 
     assert failures(["-", "TLSv1.2", None]) == []
-    # Not just a prefix, and not just one side of the alternation.
     assert failures(["-garbage", "xTLSv1.2", "TLSv1.2x", "TLSv1.9"]) == [
         "-garbage",
         "xTLSv1.2",
@@ -107,6 +125,7 @@ def test_pattern_must_match_the_whole_value_but_not_nulls() -> None:
 
 @pytest.mark.parametrize("table_name", list(usage_metrics_schemas))
 def test_every_table_schema_is_consistent(table_name: str) -> None:
+    """Every table schema is documented, named for its variable, and has a valid primary key."""
     schema = usage_metrics_schemas[table_name]
     # Each schema is named for the variable it's assigned to in models.py.
     assert getattr(models, table_name) is schema

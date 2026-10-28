@@ -69,9 +69,11 @@ def test_parquet_round_trip_independent_of_column_order(
 def test_table_is_stored_and_read_back_with_the_types_of_its_schema(
     table_name: str, tmp_path, write_then_load, distinct_values
 ) -> None:
-    """The file passes the pandera check, and its types, nulls and values all hold.
+    """A table survives a round trip through the IO manager unchanged.
 
-    The same file is what the schema asset check validates, and what pandas reads back.
+    The Parquet file has exactly the Arrow types of the table's schema and passes its
+    pandera check. Read back as pandas, the table has exactly the dtypes of the schema,
+    with its nulls where they were and its values unchanged.
     """
     schema = usage_metrics_schemas[table_name]
     # Two rows: one of distinct values, and one with every non-key column null.

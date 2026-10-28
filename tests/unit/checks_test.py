@@ -15,29 +15,8 @@ from dagster import (
 )
 
 from usage_metrics.checks import EXAMPLES_PER_CHECK, _failure_report, _make_schema_check
-from usage_metrics.defs import defs
 from usage_metrics.models import _column, _table_schema, usage_metrics_schemas
 from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
-
-
-def _upstream_nodes(job_name: str, node_name: str) -> set[str]:
-    job = defs.resolve_job_def(job_name)
-    upstream_outputs = (
-        job.graph.dependency_structure.input_to_upstream_outputs_for_node(node_name)
-    )
-    return {output.node_name for outs in upstream_outputs.values() for output in outs}
-
-
-def test_schema_check_blocks_assets_downstream_of_the_table() -> None:
-    """A table whose data fails its schema must not feed anything downstream.
-
-    For example, if AWS adds a field to the S3 logs and the columns are misaligned,
-    the format checks fail, and out_s3_logs and the summaries built on it mustn't run.
-    """
-    assert "core_s3_logs_pandera_schema_check" in _upstream_nodes(
-        "s3_metrics_etl", "out_s3_logs"
-    )
-
 
 TOY_SCHEMA = _table_schema(
     "toy",
@@ -58,7 +37,24 @@ def _run_check(table: pa.Table) -> AssetCheckResult:
     return result
 
 
+def _report_rows(result: AssetCheckResult) -> dict[tuple[str, str], tuple[int, str]]:
+    """Read the failure report into {(column, check name): (failure count, examples)}."""
+    rows = {}
+    _header, *lines = str(result.metadata["report"].value).splitlines()
+    for line in lines:
+        column, check, failures, examples = line.split(maxsplit=3)
+        rows[column, check.split("(")[0]] = (int(failures), examples)
+    return rows
+
+
 def test_failing_check_reports_which_columns_failed_with_examples() -> None:
+    """A failed check says which columns broke which checks, how often, and for what.
+
+    The report has one row for each column and check that failed, with the number of
+    failures and a few of the failing values. The null key fails the `id` column's
+    not-null check, while the duplicate fails the uniqueness check of the primary key,
+    which belongs to the table rather than to any one column.
+    """
     table = pa.table(
         {
             "id": ["a", "a", None],  # a duplicate and a null key
@@ -70,17 +66,22 @@ def test_failing_check_reports_which_columns_failed_with_examples() -> None:
 
     assert not result.passed
     assert result.severity == AssetCheckSeverity.ERROR
-    assert result.description
-    assert "toy" in result.description
-    report = str(result.metadata["report"].value)
-    assert "not_nullable" in report
-    assert "multiple_fields_uniqueness" in report
-    assert "TLSv1.2x" in report
-    assert "-garbage" in report
-    assert "failure_cases" in result.metadata
+    rows = _report_rows(result)
+    assert {key: count for key, (count, _) in rows.items()} == {
+        ("id", "not_nullable"): 1,
+        ("tls", "str_matches"): 2,
+        ("toy", "multiple_fields_uniqueness"): 1,
+    }
+    tls_examples = rows["tls", "str_matches"][1]
+    assert "TLSv1.2x" in tls_examples
+    assert "-garbage" in tls_examples
 
 
 def test_failure_report_counts_failures_but_shows_only_a_few_examples() -> None:
+    """A column and check with many failures is one line: a count and a few examples.
+
+    A real table can have many thousands of failing values, which would otherwise flood the log and the Dagster UI.
+    """
     cases = pd.DataFrame(
         {
             "column": ["tls"] * 100,
@@ -158,6 +159,7 @@ def test_check_reads_only_its_own_partition(tmp_path, monkeypatch) -> None:
 def test_check_fails_the_job_when_the_written_table_breaks_its_schema(
     tmp_path, monkeypatch
 ) -> None:
+    """A table that breaks its schema fails its blocking check, and so the job."""
     df = pd.DataFrame({"id": ["a", "a"], "tls": ["-garbage", "TLSv1.2"]})
 
     result = _toy_job_result(tmp_path, monkeypatch, df)

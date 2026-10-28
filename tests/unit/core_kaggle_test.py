@@ -49,6 +49,7 @@ def test_transformed_columns_are_all_in_the_schema() -> None:
 
 
 def test_expected_update_frequency_is_kept() -> None:
+    """The expectedUpdateFrequency field of the raw record becomes a column."""
     transformed = _transform(RAW_KAGGLE_RECORD)
 
     assert transformed["expected_update_frequency"].tolist() == ["not specified"]

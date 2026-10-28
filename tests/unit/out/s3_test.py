@@ -52,12 +52,7 @@ def out_s3_logs() -> pd.DataFrame:
     ],
 )
 def test_daily_summary_id_is_unique_and_not_null(summary_fn, out_s3_logs) -> None:
-    """Every summary row must get a non-null, unique id.
-
-    Regression test: these assets never constructed an `id` column, so the
-    Parquet IO manager backfilled it as all-null to match the declared schema,
-    which fails the pandera uniqueness check on every row, every day.
-    """
+    """Every summary row must get a non-null, unique id."""
     result = summary_fn(out_s3_logs)
     assert not result["id"].isna().any()
     assert result["id"].is_unique
@@ -65,11 +60,7 @@ def test_daily_summary_id_is_unique_and_not_null(summary_fn, out_s3_logs) -> Non
 
 @pytest.mark.parametrize("unit", ["ms", "us", "ns"])
 def test_daily_summary_id_does_not_depend_on_the_time_unit(unit, out_s3_logs) -> None:
-    """The same row has the same id whatever unit its timestamp is stored in.
-
-    Parquet files written before timestamps became microseconds hold milliseconds, so
-    the ids already in production would otherwise change when a partition is rewritten.
-    """
+    """The same row has the same id whatever unit its timestamp is stored in."""
     out_s3_logs["time"] = out_s3_logs["time"].astype(f"datetime64[{unit}]")
 
     result = out_s3_daily_summary_by_table(out_s3_logs)

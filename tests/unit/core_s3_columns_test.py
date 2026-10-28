@@ -88,6 +88,10 @@ def test_aws_region_is_dropped_from_the_newer_layout() -> None:
     ],
 )
 def test_wrong_number_of_columns_is_rejected(partition_key, extra_fields) -> None:
+    """A row with too many or too few fields for its date's layout is an error.
+
+    Naming columns by position is only safe if the number of fields is what we expect.
+    """
     raw = _read([*LOG_FIELDS.values(), *extra_fields])
     with pytest.raises(ValueError, match="Expected .* columns"):
         name_s3_log_columns(raw, partition_key)
@@ -121,6 +125,10 @@ def _validate_named_columns(named: pd.DataFrame) -> None:
     ids=["documented_values", "invalid_relay_tls_version"],
 )
 def test_correctly_named_columns_pass_the_schema(overrides) -> None:
+    """Columns named from a well-formed row pass the format checks in the schema.
+
+    This includes a TLS version AWS logs for some requests but doesn't document.
+    """
     fields = {**LOG_FIELDS, **overrides}
     named = name_s3_log_columns(_read(list(fields.values())), BEFORE_AWS_REGION)
 
@@ -151,6 +159,7 @@ def test_field_inserted_mid_row_is_rejected_by_the_schema(insert_after) -> None:
 
 
 def test_input_is_not_modified() -> None:
+    """Naming the columns returns a new dataframe and leaves the raw one as it was."""
     raw = _read(list(LOG_FIELDS.values()))
     before = raw.copy()
     name_s3_log_columns(raw, BEFORE_AWS_REGION)
