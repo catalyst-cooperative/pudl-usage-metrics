@@ -163,6 +163,7 @@ def core_zenodo_logs(
         "18315222": "rus12",
         "18251901": "ferceqr_metadata",
         "21629427": "eiabluesky",
+        "23669279": "pacificorpqueue",
     }
 
     missed_mapping = df[
