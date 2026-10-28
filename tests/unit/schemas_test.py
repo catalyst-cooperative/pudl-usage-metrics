@@ -15,9 +15,9 @@ SCHEMA = _table_schema(
     columns=[
         _column("id", str, "A unique ID."),
         _column("time", Timestamp, "When it happened."),
-        _column("count", int),
-        _column("ratio", float),
-        _column("flag", bool),
+        _column("count", int, "How many."),
+        _column("ratio", float, "A ratio."),
+        _column("flag", bool, "A flag."),
     ],
     description="A table.",
     primary_key=["id"],
@@ -31,7 +31,7 @@ def test_primary_key_columns_are_required_and_others_nullable() -> None:
 
 
 def test_columns_shared_between_tables_are_not_changed_by_a_primary_key() -> None:
-    shared = [_column("a", str), _column("b", str)]
+    shared = [_column("a", str, "A."), _column("b", str, "B.")]
     _table_schema("t1", shared, description="keyed on a", primary_key=["a"])
     _table_schema("t2", shared, description="keyed on b", primary_key=["b"])
 
@@ -44,11 +44,13 @@ def test_bad_table_definitions_are_rejected() -> None:
     with pytest.raises(
         ValueError, match=r"Table 'bad' has primary key columns \['nope'\]"
     ):
-        _table_schema("bad", [_column("a", str)], "t", primary_key=["nope"])
+        _table_schema("bad", [_column("a", str, "A.")], "t", primary_key=["nope"])
     with pytest.raises(
         ValueError, match=r"Table 'bad' repeats column names: \['a', 'b'\]"
     ):
-        _table_schema("bad", [_column(n, str) for n in ["a", "b", "a", "c", "b"]], "t")
+        _table_schema(
+            "bad", [_column(n, str, n) for n in ["a", "b", "a", "c", "b"]], "t"
+        )
 
 
 def test_arrow_schema_has_types_and_documentation() -> None:
@@ -62,7 +64,7 @@ def test_arrow_schema_has_types_and_documentation() -> None:
         pa.bool_(),
     ]
     assert arrow.field("id").metadata == {b"description": b"A unique ID."}
-    assert arrow.field("count").metadata is None
+    assert arrow.field("count").metadata == {b"description": b"How many."}
     assert arrow.metadata[b"description"] == b"A table."
     # Nulls in primary keys are reported by the asset checks, not refused on write.
     assert all(field.nullable for field in arrow)
@@ -80,7 +82,9 @@ def test_pandas_dtypes_are_nullable() -> None:
 
 def test_pattern_must_match_the_whole_value_but_not_nulls() -> None:
     schema = _table_schema(
-        "t", [_column("tls", str, pattern=r"-|TLSv1\.[0-3]")], description="t"
+        "t",
+        [_column("tls", str, "TLS version.", pattern=r"-|TLSv1\.[0-3]")],
+        description="t",
     )
 
     def failures(values: list) -> list:
@@ -107,5 +111,7 @@ def test_every_table_schema_is_consistent(table_name: str) -> None:
     # Each schema is named for the variable it's assigned to in models.py.
     assert getattr(models, table_name) is schema
     assert schema.description
+    undescribed = [name for name, col in schema.columns.items() if not col.description]
+    assert not undescribed, f"{table_name} columns have no description: {undescribed}"
     assert schema.unique, f"{table_name} has no primary key"
     assert not any(schema.columns[name].nullable for name in schema.unique)

@@ -41,7 +41,10 @@ def test_schema_check_blocks_assets_downstream_of_the_table() -> None:
 
 TOY_SCHEMA = _table_schema(
     "toy",
-    [_column("id", str), _column("tls", str, pattern=r"-|TLSv1\.[0-3]")],
+    [
+        _column("id", str, "ID."),
+        _column("tls", str, "TLS version.", pattern=r"-|TLSv1\.[0-3]"),
+    ],
     "A toy table.",
     primary_key=["id"],
 )

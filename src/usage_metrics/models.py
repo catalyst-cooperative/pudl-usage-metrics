@@ -24,11 +24,18 @@ from typing import cast
 import pandera.pyarrow as pandera
 from pandera.dtypes import Timestamp
 
+PARTITION_KEY_DESCRIPTION = (
+    "The Dagster daily partition (YYYY-MM-DD) of the ETL run that produced this row. "
+    "Set when the Parquet file is written, so a single partition can be selected "
+    "when reading."
+)
+VERSION_DESCRIPTION = "The version of the PUDL database (e.g., stable, nightly, 2026.1) accessed by a user."
+
 
 def _column(
-    name: str, dtype: type, description: str | None = None, pattern: str | None = None
+    name: str, dtype: type, description: str, pattern: str | None = None
 ) -> pandera.Column:
-    """Build a nullable pandera Column with an optional description and pattern.
+    """Build a nullable pandera Column with a description and optional pattern.
 
     Columns are nullable unless they are part of a primary key; see
     :func:`_table_schema`.
@@ -266,7 +273,7 @@ core_s3_logs = _table_schema(
             dtype=str,
             description="The version ID in the request, or - if the operation doesn't take a versionId parameter.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description="Cleaned per-request S3 access logs for PUDL's data distribution bucket.",
     primary_key=["id"],
@@ -290,7 +297,7 @@ out_s3_daily_summary_by_table = _table_schema(
         _column(
             name="version",
             dtype=str,
-            description="The version of the PUDL database (e.g., stable, nightly, 2026.1) accessed by a user.",
+            description=VERSION_DESCRIPTION,
         ),
         _column(
             name="usage_type",
@@ -312,7 +319,7 @@ out_s3_daily_summary_by_table = _table_schema(
             dtype=int,
             description="The number of requests made per table, usage method and day.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description="Daily S3 usage totals, aggregated by table and download/usage method.",
     primary_key=["id"],
@@ -335,7 +342,7 @@ out_s3_daily_summary_by_user = _table_schema(
         _column(
             name="version",
             dtype=str,
-            description="The version of the PUDL database (e.g., stable, nightly, 2026.1) accessed by a user.",
+            description=VERSION_DESCRIPTION,
         ),
         _column(
             name="usage_type",
@@ -373,7 +380,7 @@ out_s3_daily_summary_by_user = _table_schema(
             dtype=int,
             description="The number of requests made per table, usage method and day.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description="Daily S3 usage totals, aggregated by requester IP and download/usage method.",
     primary_key=["id"],
@@ -393,7 +400,7 @@ out_s3_daily_summary_by_db = _table_schema(
             dtype=str,
             description="Which type of database the record is accessing (e.g., pudl.sqlite, ferc1.duckdb). Parquet files are lumped into one parquet_file record.",
         ),
-        _column(name="version", dtype=str),
+        _column(name="version", dtype=str, description=VERSION_DESCRIPTION),
         _column(
             name="usage_type",
             dtype=str,
@@ -414,7 +421,7 @@ out_s3_daily_summary_by_db = _table_schema(
             dtype=int,
             description="The number of requests made per table, usage method and day.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description=(
         "Daily S3 usage totals, aggregated by database (e.g. pudl.sqlite, "
@@ -493,15 +500,19 @@ core_kaggle_logs = _table_schema(
         _column(
             name="licenses",
             dtype=str,
-            description="A list of licenses attributed to the dataset. This is a list of dictionaries that has been dumped into a string during processing as it has no analytical value.",
+            description="A list of licenses attributed to the dataset. This is a list of dictionaries that has been dumped into a string during processing.",
         ),
         _column(
             name="collaborators",
             dtype=str,
-            description="A list of Kaggle users who are listed as collaborators on this dataset. This is a list of dictionaries that has been dumped into a string during processing as it has no analytical value.",
+            description="A list of Kaggle users who are listed as collaborators on this dataset. This is a list of dictionaries that has been dumped into a string during processing.",
         ),
-        _column(name="data", dtype=str),
-        _column(name="partition_key", dtype=str),
+        _column(
+            name="data",
+            dtype=str,
+            description="The Kaggle API's data field for the dataset, dumped into a string during processing as it has no analytical value. It is null because rather than storing data on Kaggle we reference the nightly build outputs in S3.",
+        ),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description="Daily snapshot of PUDL's Kaggle dataset usage and metadata.",
     primary_key=["metrics_date"],
@@ -527,7 +538,7 @@ core_github_popular_referrers = _table_schema(
             dtype=int,
             description="Unique number of referrals over the last 14 days.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description=(
         "Top 10 external referrers to the PUDL GitHub repository over a "
@@ -561,7 +572,7 @@ core_github_popular_paths = _table_schema(
             dtype=int,
             description="Unique views of the path over the last 14 days.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description=(
         "Top 10 most-viewed paths in the PUDL GitHub repository over a "
@@ -589,7 +600,7 @@ core_github_clones = _table_schema(
             dtype=int,
             description="Unique number of clones of the PUDL repository over the last 14 days.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description=(
         "Daily count of clones of the PUDL GitHub repository over a "
@@ -617,7 +628,7 @@ core_github_views = _table_schema(
             dtype=int,
             description="Unique views of the repository over the last 14 days.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description=(
         "Daily count of views of the PUDL GitHub repository over a "
@@ -1002,7 +1013,7 @@ core_zenodo_logs = _table_schema(
             dtype=str,
             description="The description of the version.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
         _column(
             name="software_hash_id",
             dtype=str,
@@ -1042,7 +1053,7 @@ core_eel_hole_log_ins = _table_schema(
             dtype=str,
             description="What was the user doing when they were motivated to log in? This mirrors query when the search prompted a log-in event.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description="Log-in events recorded by PUDL's data viewer (the eel hole).",
     primary_key=["insert_id"],
@@ -1082,7 +1093,7 @@ core_eel_hole_searches = _table_schema(
             dtype=str,
             description="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description="Search query events recorded by PUDL's data viewer (the eel hole).",
     primary_key=["insert_id"],
@@ -1116,7 +1127,7 @@ core_eel_hole_hits = _table_schema(
             dtype=str,
             description="The tags associated with a given table in the search results. Only populated for 'hit' events types.",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description="Search result hit events recorded by PUDL's data viewer (the eel hole).",
     primary_key=["insert_id"],
@@ -1196,7 +1207,7 @@ _eel_hole_preview_columns = [
         dtype=str,
         description="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
     ),
-    _column(name="partition_key", dtype=str),
+    _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
 ]
 """Columns shared by core_eel_hole_previews and core_eel_hole_downloads.
 
@@ -1259,7 +1270,7 @@ core_eel_hole_user_settings_updates = _table_schema(
             dtype=bool,
             description="Has a user agreed to be contacted for further discussion about PUDL?",
         ),
-        _column(name="partition_key", dtype=str),
+        _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
     ],
     description=(
         "User privacy/newsletter/outreach setting updates recorded by PUDL's "
