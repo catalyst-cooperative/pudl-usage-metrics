@@ -1278,7 +1278,7 @@ core_eel_hole_table_views = _table_schema(
             str,
             "A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
         ),
-        _column("partition_key", str),
+        _column("partition_key", str, PARTITION_KEY_DESCRIPTION),
     ],
     description=(
         "Page views of a table's /preview/<package>/<table_name> page, recorded "
@@ -1314,7 +1314,7 @@ core_eel_hole_verify_email_requests = _table_schema(
             Timestamp,
             "The time the event described by the log entry occurred.",
         ),
-        _column("partition_key", str),
+        _column("partition_key", str, PARTITION_KEY_DESCRIPTION),
     ],
     description=(
         "Successful requests to send a logged-in user an email-verification "
@@ -1345,7 +1345,7 @@ _eel_hole_verify_email_failure_columns = [
         "The time the event described by the log entry occurred.",
     ),
     _column("status_code", int, "Auth0's HTTP response status code."),
-    _column("partition_key", str),
+    _column("partition_key", str, PARTITION_KEY_DESCRIPTION),
 ]
 """Fields shared by core_eel_hole_verify_email_failures and
 core_eel_hole_email_verification_refresh_failures."""
