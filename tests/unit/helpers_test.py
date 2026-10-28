@@ -1,7 +1,10 @@
 """Unit tests for the retrying and geocoding helpers."""
 
+import logging
+
 import ipinfo
 import ipinfo.error
+import pandas as pd
 import pytest
 import requests
 
@@ -95,3 +98,14 @@ def test_geocode_op_retry_policy_shape():
     assert policy.delay == 30
     assert policy.backoff == helpers.Backoff.EXPONENTIAL
     assert policy.jitter == helpers.Jitter.PLUS_MINUS
+
+
+def test_geocode_ips_logs_counts_and_timing(monkeypatch, caplog):
+    """The op reports how many unique ips it geocoded and how long that took."""
+    monkeypatch.setattr(helpers, "geocode_ip", lambda ip: {"ip": ip})
+    df = pd.DataFrame({"remote_ip": ["1.1.1.1", "1.1.1.1", "2.2.2.2", None]})
+    with caplog.at_level(logging.INFO):
+        out = helpers.geocode_ips(df)
+    assert len(out) == 4
+    assert "Geocoding 2 unique ips from 4 log rows" in caplog.text
+    assert "Geocoded 2 unique ips in" in caplog.text

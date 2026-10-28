@@ -9,7 +9,7 @@ import ipinfo
 import ipinfo.error
 import pandas as pd
 import requests
-from dagster import Backoff, Jitter, OutputContext, RetryPolicy, op
+from dagster import Backoff, Jitter, OutputContext, RetryPolicy, get_dagster_logger, op
 from joblib import Memory
 
 from usage_metrics.paths import get_ipinfo_cache_dir
@@ -151,7 +151,15 @@ def geocode_ips(df: pd.DataFrame) -> pd.DataFrame:
     """
     # Instead of geocoding every log, geocode the distinct ips
     unique_ips = pd.Series(df.remote_ip.dropna().unique())
+    logger = get_dagster_logger()
+    logger.info(f"Geocoding {len(unique_ips):,} unique ips from {len(df):,} log rows.")
+    start = time.monotonic()
     geocoded_ips = unique_ips.apply(lambda ip: geocode_ip(ip))
+    elapsed = time.monotonic() - start
+    logger.info(
+        f"Geocoded {len(unique_ips):,} unique ips in {elapsed:,.1f} s "
+        f"({elapsed / max(len(unique_ips), 1) * 1000:,.1f} ms per ip, including cache hits)."
+    )
     geocoded_ips = pd.DataFrame.from_dict(geocoded_ips.to_dict(), orient="index")
 
     # Keep only the fields the Lite API actually provides (reindex adds any
