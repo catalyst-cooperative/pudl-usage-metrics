@@ -1,37 +1,20 @@
-"""Test how the pandera schema asset checks are wired into the Dagster jobs."""
+"""Test the pandera schema asset check on its own: its results and failure reports."""
 
 import pandas as pd
+import pandera.pyarrow as pandera
 import pyarrow as pa
-import pytest
 from dagster import (
     AssetCheckResult,
     AssetCheckSeverity,
-    AssetSelection,
-    DailyPartitionsDefinition,
-    Definitions,
-    asset,
     build_asset_check_context,
-    define_asset_job,
 )
 
 from usage_metrics.checks import EXAMPLES_PER_CHECK, _failure_report, _make_schema_check
-from usage_metrics.models import _column, _table_schema, usage_metrics_schemas
-from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
-
-TOY_SCHEMA = _table_schema(
-    "toy",
-    [
-        _column("id", str, "ID."),
-        _column("tls", str, "TLS version.", pattern=r"-|TLSv1\.[0-3]"),
-    ],
-    "A toy table.",
-    primary_key=["id"],
-)
 
 
-def _run_check(table: pa.Table) -> AssetCheckResult:
+def _run_check(schema: pandera.DataFrameSchema, table: pa.Table) -> AssetCheckResult:
     """Run the schema check for a toy table, handing it the table to check."""
-    check = _make_schema_check("toy", TOY_SCHEMA, None)
+    check = _make_schema_check("toy", schema, None)
     result = check(build_asset_check_context(), table=table)
     assert isinstance(result, AssetCheckResult)
     return result
@@ -47,7 +30,7 @@ def _report_rows(result: AssetCheckResult) -> dict[tuple[str, str], tuple[int, s
     return rows
 
 
-def test_failing_check_reports_which_columns_failed_with_examples() -> None:
+def test_failing_check_reports_which_columns_failed_with_examples(toy_schema) -> None:
     """A failed check says which columns broke which checks, how often, and for what.
 
     The report has one row for each column and check that failed, with the number of
@@ -62,7 +45,7 @@ def test_failing_check_reports_which_columns_failed_with_examples() -> None:
         }
     )
 
-    result = _run_check(table)
+    result = _run_check(toy_schema, table)
 
     assert not result.passed
     assert result.severity == AssetCheckSeverity.ERROR
@@ -95,76 +78,3 @@ def test_failure_report_counts_failures_but_shows_only_a_few_examples() -> None:
     assert "100" in report
     assert f"bad-{EXAMPLES_PER_CHECK - 1}" in report
     assert f"bad-{EXAMPLES_PER_CHECK}" not in report
-
-
-def _toy_job_result(tmp_path, monkeypatch, df: pd.DataFrame, partitioned: bool = True):
-    """Materialize a toy asset and run its schema check in one job."""
-    monkeypatch.setitem(usage_metrics_schemas, "toy", TOY_SCHEMA)
-    partitions = DailyPartitionsDefinition(start_date="2026-01-01")
-
-    @asset(
-        name="toy",
-        partitions_def=partitions if partitioned else None,
-        io_manager_key="parquet_manager",
-    )
-    def toy() -> pd.DataFrame:
-        return df
-
-    job = define_asset_job(
-        "toy_job",
-        selection=AssetSelection.assets(toy) | AssetSelection.checks_for_assets(toy),
-    )
-    toy_defs = Definitions(
-        assets=[toy],
-        asset_checks=[
-            _make_schema_check("toy", TOY_SCHEMA, partitions if partitioned else None)
-        ],
-        jobs=[job],
-        resources={
-            "parquet_manager": PartitionedParquetIOManager(base_path=str(tmp_path))
-        },
-    )
-    return toy_defs.resolve_job_def("toy_job").execute_in_process(
-        partition_key="2026-01-02" if partitioned else None, raise_on_error=False
-    )
-
-
-@pytest.mark.parametrize("partitioned", [True, False])
-def test_check_validates_the_table_the_io_manager_wrote(
-    tmp_path, monkeypatch, partitioned
-) -> None:
-    """The check loads its table through the asset's IO manager, for its own partition."""
-    df = pd.DataFrame({"id": ["a", "b"], "tls": ["-", "TLSv1.2"]})
-
-    result = _toy_job_result(tmp_path, monkeypatch, df, partitioned)
-
-    (evaluation,) = result.get_asset_check_evaluations()
-    assert evaluation.passed
-    assert evaluation.metadata["row_count"].value == 2
-
-
-def test_check_reads_only_its_own_partition(tmp_path, monkeypatch) -> None:
-    """Another day's file, which the asset's partitions also map to, isn't validated."""
-    other_day = tmp_path / "toy" / "2026-01-01--2026-01-02.parquet"
-    other_day.parent.mkdir()
-    pd.DataFrame({"id": ["x", "x"], "tls": ["-garbage", "-"]}).to_parquet(other_day)
-    df = pd.DataFrame({"id": ["a", "b"], "tls": ["-", "TLSv1.2"]})
-
-    result = _toy_job_result(tmp_path, monkeypatch, df)
-
-    (evaluation,) = result.get_asset_check_evaluations()
-    assert evaluation.passed
-
-
-def test_check_fails_the_job_when_the_written_table_breaks_its_schema(
-    tmp_path, monkeypatch
-) -> None:
-    """A table that breaks its schema fails its blocking check, and so the job."""
-    df = pd.DataFrame({"id": ["a", "a"], "tls": ["-garbage", "TLSv1.2"]})
-
-    result = _toy_job_result(tmp_path, monkeypatch, df)
-
-    assert not result.success
-    (evaluation,) = result.get_asset_check_evaluations()
-    assert not evaluation.passed
-    assert "-garbage" in str(evaluation.metadata["report"].value)

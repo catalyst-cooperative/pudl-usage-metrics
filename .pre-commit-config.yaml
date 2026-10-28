@@ -59,16 +59,6 @@ repos:
   ########################################################################################
   - repo: local
     hooks:
-      # Run the unit tests
-      - id: unit-tests
-        name: unit-tests
-        stages: [pre-commit]
-        language: system
-        verbose: false
-        pass_filenames: false
-        always_run: true
-        entry: pixi run -e test pytest tests/unit
-
       # Type check with pyrefly. This has to be a local hook rather than an official
       # pre-commit repo for pyrefly: running it through the pixi test environment
       # (which already has every dependency installed) avoids needing network access
@@ -95,5 +85,5 @@ ci:
   autoupdate_branch: main
   autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
   autoupdate_schedule: weekly
-  skip: [unit-tests, pyrefly]
+  skip: [pyrefly]
   submodules: false

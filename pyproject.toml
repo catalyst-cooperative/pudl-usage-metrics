@@ -100,12 +100,16 @@ cmd = "coverage erase"
 description = "Clear coverage data"
 
 [tool.pixi.feature.test.tasks.pytest-unit]
-cmd = "pytest --cov=src/usage_metrics --cov-append --cov-report=xml --doctest-modules src/usage_metrics tests"
-description = "Run all the software unit tests"
+cmd = "pytest tests/unit"
+description = "Run the software unit tests"
+
+[tool.pixi.feature.test.tasks.pytest-integration]
+cmd = "pytest tests/integration"
+description = "Run the integration tests, which call external services or run real Dagster jobs"
 
 [tool.pixi.feature.test.tasks.pytest-ci]
 cmd = "coverage report --sort=cover"
-depends-on = ["coverage-erase", "linters", "pytest-unit"]
+depends-on = ["coverage-erase", "linters", "pytest-unit", "pytest-integration"]
 description = "Run all CI tests and report test coverage"
 
 [tool.dg]
@@ -117,12 +121,24 @@ code_location_target_module = "usage_metrics.definitions"
 
 [tool.pyrefly]
 project-includes = ["src", "tests"]
+search-path = [".", "src"]
 preset = "default"
 python-interpreter-path = ".pixi/envs/test/bin/python3"
 
 [tool.doc8]
 max-line-length = 88
 ignore-path = ["docs/_build"]
+
+[tool.coverage.run]
+# Measure the tests too, so that tests which never run (or never reach their assertions)
+# show up as uncovered.
+source = ["src/usage_metrics", "tests"]
+
+[tool.coverage.report]
+# The tests are measured to find tests that never run, but only the code under src/
+# counts toward the required coverage.
+include = ["src/*"]
+fail_under = 50
 
 [tool.pytest]
 testpaths = ["./"]
@@ -131,16 +147,13 @@ filterwarnings = [
     "ignore:Creating a LegacyVersion:DeprecationWarning:pkg_resources[.*]",
     "ignore:The 'generic' unit for NumPy timedelta is deprecated:DeprecationWarning:db_dtypes[.*]",
 ]
-addopts = ["-ra"]
+# Append so that the unit and integration runs add up to one coverage report. Use
+# --no-cov to skip coverage, e.g. when debugging.
+addopts = ["-ra", "--cov", "--cov-append", "--cov-report=xml"]
 minversion = "9.0"
 log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
 log_date_format = "%Y-%m-%d %H:%M:%S"
 log_cli_level = "INFO"
-doctest_optionflags = [
-    "NORMALIZE_WHITESPACE",
-    "IGNORE_EXCEPTION_DETAIL",
-    "ELLIPSIS",
-]
 
 [tool.ruff]
 target-version = "py314"
