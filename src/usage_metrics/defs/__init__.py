@@ -13,6 +13,7 @@ from dagster import (
 )
 
 import usage_metrics
+from usage_metrics.checks import build_schema_checks
 from usage_metrics.paths import get_gcs_base_path, get_parquet_dir
 from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
 
@@ -71,22 +72,23 @@ default_asset_checks = list(
 )
 
 
-resources_by_env = {
-    "prod": {
-        "parquet_manager": PartitionedParquetIOManager(base_path=get_gcs_base_path()),
-    },
-    "local": {
-        "parquet_manager": PartitionedParquetIOManager(
-            base_path=str(get_parquet_dir())
-        ),
-    },
-}
+# Only the selected environment's location is looked up, so a setting that matters
+# only in production (e.g. PUDL_METRICS_GCS_BASE_PATH) can't break a local run.
+if os.getenv("METRICS_PROD_ENV", "local") == "prod":
+    parquet_base_path = get_gcs_base_path()
+else:
+    parquet_base_path = get_parquet_dir()
 
-resources = resources_by_env[os.getenv("METRICS_PROD_ENV", "local")]
+# The IO manager accepts a Path as well as a str, but its signature says only str.
+resources = {
+    "parquet_manager": PartitionedParquetIOManager(
+        base_path=parquet_base_path  # type: ignore[bad-argument-type]
+    )
+}
 
 defs: Definitions = Definitions(
     assets=default_assets,
-    # asset_checks=default_asset_checks,
+    asset_checks=default_asset_checks + build_schema_checks(default_assets),
     resources=resources,
     jobs=[
         define_asset_job(

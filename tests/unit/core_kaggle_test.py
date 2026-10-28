@@ -44,11 +44,12 @@ def test_transformed_columns_are_all_in_the_schema() -> None:
     """
     transformed = _transform(RAW_KAGGLE_RECORD)
 
-    schema_columns = set(usage_metrics_schemas["core_kaggle_logs"].names)
+    schema_columns = set(usage_metrics_schemas["core_kaggle_logs"].columns)
     assert set(transformed.columns) <= schema_columns
 
 
 def test_expected_update_frequency_is_kept() -> None:
+    """The expectedUpdateFrequency field of the raw record becomes a column."""
     transformed = _transform(RAW_KAGGLE_RECORD)
 
     assert transformed["expected_update_frequency"].tolist() == ["not specified"]
@@ -68,5 +69,5 @@ def test_data_without_expected_update_frequency_still_transforms() -> None:
 
     assert "expected_update_frequency" not in transformed.columns
     assert set(transformed.columns) <= set(
-        usage_metrics_schemas["core_kaggle_logs"].names
+        usage_metrics_schemas["core_kaggle_logs"].columns
     )
