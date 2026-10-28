@@ -2,17 +2,29 @@
 
 import os
 import time
+from collections.abc import Callable
 from functools import wraps
 
 import ipinfo
+import ipinfo.error
 import pandas as pd
 import requests
-from dagster import OutputContext, RetryPolicy, op
+from dagster import Backoff, Jitter, OutputContext, RetryPolicy, op
 from joblib import Memory
 
 from usage_metrics.paths import get_ipinfo_cache_dir
 
 REQUEST_TIMEOUT = 10
+
+GEOCODE_OP_RETRY_POLICY = RetryPolicy(
+    max_retries=5,
+    delay=30,
+    backoff=Backoff.EXPONENTIAL,
+    jitter=Jitter.PLUS_MINUS,
+)
+"""Retry the whole geocoding op, backing off so retries don't all land at once.
+
+Geocoded ips are cached, so a retry only repeats the lookups that hadn't succeeded."""
 
 # Fields pulled from ipinfo's Lite API response (plus its client-side
 # country-name/bogon lookups) and the usage_metrics column each maps to.
@@ -24,6 +36,65 @@ _IPINFO_FIELD_MAP = {
     "asn": "remote_ip_asn",
     "bogon": "remote_ip_bogon",
 }
+
+
+def retry_request(
+    retries: int = 3,
+    delay: int = 2,
+    backoff: int = 2,
+    retry_on: tuple[type[Exception], ...] = (requests.exceptions.RequestException,),
+    should_retry: Callable[[Exception], bool] | None = None,
+):
+    """Define a decorator to retry requests with an exponential backoff.
+
+    The first backoff will be ``delay`` seconds, the second ``delay * backoff`` and
+    so-on. Exceptions that aren't retried are raised immediately.
+
+    Args:
+        retries: how many attempts to make before giving up.
+        delay: original number of seconds to wait before retrying.
+        backoff: the factor by which to increase the backoff each time.
+        retry_on: exception types that may be retried.
+        should_retry: optional test applied to a caught exception of a ``retry_on``
+            type, returning False if it isn't transient and so shouldn't be retried.
+    """
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            wait = delay
+            for attempt in range(1, retries + 1):
+                try:
+                    return func(*args, **kwargs)
+                except retry_on as e:
+                    if should_retry is not None and not should_retry(e):
+                        raise
+                    if attempt == retries:
+                        raise RuntimeError("Max retries reached") from e
+                    time.sleep(wait)
+                    wait *= backoff  # Exponential backoff
+            raise RuntimeError("Max retries reached")  # Only if retries < 1
+
+        return wrapper
+
+    return decorator
+
+
+def _is_transient_ipinfo_error(error: Exception) -> bool:
+    """Whether an ipinfo failure is worth retrying: network trouble or a 5xx."""
+    if isinstance(error, ipinfo.error.APIError):
+        return error.error_code >= 500
+    return True
+
+
+_retry_ipinfo = retry_request(
+    retries=5,
+    delay=1,
+    backoff=2,
+    retry_on=(requests.exceptions.RequestException, ipinfo.error.APIError),
+    should_retry=_is_transient_ipinfo_error,
+)
+"""Retry transient ipinfo failures: timeouts, connection errors and 5xx responses."""
 
 
 def geocode_ip(ip_address: str) -> dict:
@@ -40,7 +111,8 @@ def geocode_ip(ip_address: str) -> dict:
         details: Ip location and org information.
     """
     cache = Memory(get_ipinfo_cache_dir(), verbose=0)
-    return cache.cache(_geocode_ip)(ip_address)
+    # Retry outside the cache so a failed call is retried rather than cached.
+    return _retry_ipinfo(cache.cache(_geocode_ip))(ip_address)
 
 
 def _geocode_ip(ip_address: str) -> dict:
@@ -64,7 +136,7 @@ def _geocode_ip(ip_address: str) -> dict:
     return details.all
 
 
-@op(retry_policy=RetryPolicy(max_retries=5))
+@op(retry_policy=GEOCODE_OP_RETRY_POLICY)
 def geocode_ips(df: pd.DataFrame) -> pd.DataFrame:
     """Geocode the ip addresses using ipinfo API.
 
@@ -101,33 +173,3 @@ def get_table_name_from_context(context: OutputContext) -> str:
     if context.has_asset_key:
         return context.asset_key.to_python_identifier()
     return "-".join(context.get_identifier())
-
-
-def retry_request(retries: int = 3, delay: int = 2, backoff: int = 2):
-    """Define a decorator to retry requests with an exponential backoff.
-
-    The first backoff will be 2 seconds, the second 2*2 seconds and so-on.
-
-    Args:
-        retries: how many retries to attempt.
-        delay: original number of seconds to wait before retrying.
-        backoff: the exponent by which to increase the backoff each time.
-    """
-
-    def decorator(func):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            nonlocal delay  # Make ruff happy
-            attempts = 0
-            while attempts < retries:
-                try:
-                    return func(*args, **kwargs)
-                except requests.exceptions.RequestException:
-                    attempts += 1
-                    time.sleep(delay)
-                    delay *= backoff  # Exponential backoff
-            raise RuntimeError("Max retries reached")
-
-        return wrapper
-
-    return decorator
