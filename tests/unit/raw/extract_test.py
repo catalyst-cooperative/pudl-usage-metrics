@@ -213,18 +213,6 @@ def test_get_blobs_from_gcs_flattens_names(
     assert paths[0].name == "a-b-c"
 
 
-def test_get_blobs_from_gcs_skips_existing(
-    patch_download_many, make_client, download_dir
-):
-    """A blob whose local file already exists is not re-downloaded."""
-    client = make_client({"test-bucket": {"blob": b"new\n"}})
-    ext = LineExtractor(client=client)
-    (download_dir / "blob").write_bytes(b"old\n")
-    blobs = client.bucket("test-bucket").list_blobs()
-    paths = ext.get_blobs_from_gcs(blobs, download_dir)
-    assert paths[0].read_bytes() == b"old\n"
-
-
 def test_get_blobs_from_gcs_passes_string_filenames(
     make_client, download_dir, monkeypatch
 ):
@@ -247,6 +235,7 @@ def test_get_blobs_from_gcs_passes_string_filenames(
     (_blob, target) = captured["pairs"][0]
     assert isinstance(target, str)
     assert captured["kwargs"]["worker_type"] == extract.transfer_manager.THREAD
+    assert captured["kwargs"]["skip_if_exists"] is True
     assert captured["kwargs"]["max_workers"] == ext.download_workers
 
 
