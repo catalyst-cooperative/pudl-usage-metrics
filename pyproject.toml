@@ -138,7 +138,7 @@ source = ["src/usage_metrics", "tests"]
 # The tests are measured to find tests that never run, but only the code under src/
 # counts toward the required coverage.
 include = ["src/*"]
-fail_under = 74
+fail_under = 76
 
 [tool.pytest]
 testpaths = ["./"]
