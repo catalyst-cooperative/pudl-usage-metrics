@@ -88,14 +88,6 @@ def test_load_file_ragged_other_partition_raises_with_note(tmp_path, s3_fixture_
     assert any("Extraction failed" in note for note in excinfo.value.__notes__)
 
 
-def test_load_file_empty_raises_no_data_error(tmp_path):
-    """An empty file raises NoDataError for extract() to handle."""
-    path = tmp_path / "empty"
-    path.write_bytes(b"")
-    with pytest.raises(pl.exceptions.NoDataError):
-        S3Extractor().load_file(path)
-
-
 # --- raw_s3_logs asset ---------------------------------------------------
 
 

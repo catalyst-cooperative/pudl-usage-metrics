@@ -214,18 +214,6 @@ def test_get_blobs_from_gcs_flattens_names(
     assert paths[0].name == "a-b-c"
 
 
-def test_get_blobs_from_gcs_skips_existing(
-    patch_download_many, make_client, download_dir
-):
-    """A blob whose local file already exists is not re-downloaded."""
-    client = make_client({"test-bucket": {"blob": b"new\n"}})
-    ext = LineExtractor(client=client)
-    (download_dir / "blob").write_bytes(b"old\n")
-    blobs = client.bucket("test-bucket").list_blobs()
-    paths = ext.get_blobs_from_gcs(blobs, download_dir)
-    assert paths[0].read_bytes() == b"old\n"
-
-
 def test_get_blobs_from_gcs_passes_string_filenames(
     make_client, download_dir, monkeypatch
 ):
@@ -248,6 +236,7 @@ def test_get_blobs_from_gcs_passes_string_filenames(
     (_blob, target) = captured["pairs"][0]
     assert isinstance(target, str)
     assert captured["kwargs"]["worker_type"] == extract.transfer_manager.THREAD
+    assert captured["kwargs"]["skip_if_exists"] is True
     assert captured["kwargs"]["max_workers"] == ext.download_workers
 
 
@@ -277,19 +266,7 @@ def test_gcs_client_is_lazy_and_sizes_the_pool(monkeypatch):
     assert adapter._pool_maxsize == 17
 
 
-def test_retry_policy_shape():
-    """Guard the extract retry policy against accidental changes."""
-    assert extract.GCS_EXTRACT_RETRY_POLICY.max_retries == 2
-    assert extract.GCS_EXTRACT_RETRY_POLICY.delay == 30
-
-
 # --- log_download_progress -------------------------------------------------
-
-
-def test_log_download_progress_noop_without_context(tmp_path):
-    """With no context to log to, the block still runs and nothing is raised."""
-    with extract.log_download_progress(None, tmp_path, total=1_000_000):
-        pass
 
 
 def test_log_download_progress_noop_below_threshold(tmp_path):

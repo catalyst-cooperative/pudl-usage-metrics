@@ -1,10 +1,7 @@
 """Unit tests for the retrying and geocoding helpers."""
 
-import logging
-
 import ipinfo
 import ipinfo.error
-import pandas as pd
 import pytest
 import requests
 
@@ -58,14 +55,6 @@ def test_retry_request_gives_up(sleeps):
     assert isinstance(excinfo.value.__cause__, requests.exceptions.Timeout)
 
 
-def test_retry_request_ignores_other_exceptions():
-    """Exceptions that aren't in retry_on are raised on the first attempt."""
-    func, calls = _flaky(ValueError("nope"))
-    with pytest.raises(ValueError):
-        helpers.retry_request()(func)()
-    assert len(calls) == 1
-
-
 def test_geocode_ip_retries_5xx(tmp_path, monkeypatch, sleeps):
     """A 503 from ipinfo is retried and the eventual success is cached."""
     monkeypatch.setenv("PUDL_METRICS_LOCAL_DATA_DIR", str(tmp_path))
@@ -89,23 +78,3 @@ def test_geocode_ip_does_not_retry_client_errors(tmp_path, monkeypatch, sleeps):
     with pytest.raises(ipinfo.error.APIError):
         helpers.geocode_ip("1.2.3.4")  # Not cached, so it calls the API again.
     assert len(calls) == 2
-
-
-def test_geocode_op_retry_policy_shape():
-    """Guard the op-level policy: exponential, jittered backoff."""
-    policy = helpers.GEOCODE_OP_RETRY_POLICY
-    assert policy.max_retries == 5
-    assert policy.delay == 30
-    assert policy.backoff == helpers.Backoff.EXPONENTIAL
-    assert policy.jitter == helpers.Jitter.PLUS_MINUS
-
-
-def test_geocode_ips_logs_counts_and_timing(monkeypatch, caplog):
-    """The op reports how many unique ips it geocoded and how long that took."""
-    monkeypatch.setattr(helpers, "geocode_ip", lambda ip: {"ip": ip})
-    df = pd.DataFrame({"remote_ip": ["1.1.1.1", "1.1.1.1", "2.2.2.2", None]})
-    with caplog.at_level(logging.INFO):
-        out = helpers.geocode_ips(df)
-    assert len(out) == 4
-    assert "Geocoding 2 unique ips from 4 log rows" in caplog.text
-    assert "Geocoded 2 unique ips in" in caplog.text

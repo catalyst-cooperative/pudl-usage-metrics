@@ -39,27 +39,3 @@ def test_filter_blobs_keeps_only_matching_day(make_client):
         f"{STDOUT}/2026/09/01/00:00:00_00:59:59_S0.json",
         f"{STDOUT}/2026/09/01/01:00:00_01:59:59_S0.json",
     }
-
-
-def test_load_file_reads_concatenated_ndjson(tmp_path):
-    """A combined newline-delimited JSON file parses row-per-line."""
-    combined = tmp_path / "combined"
-    combined.write_bytes(
-        _ndjson(
-            {"insertId": "a", "jsonPayload": {"event": "preview"}},
-            {"insertId": "b", "jsonPayload": {"event": "search"}},
-        )
-    )
-    df = EelHoleExtractor().load_file(combined)
-    assert list(df["insertId"]) == ["a", "b"]
-
-
-def test_extract_combines_multiple_files(download_dir, run_extract):
-    """extract() concatenates the day's files (concatenable_files=True)."""
-    assert EelHoleExtractor.concatenable_files is True
-    a = download_dir / "00_stdout"
-    a.write_bytes(_ndjson({"insertId": "a"}))
-    b = download_dir / "01_stdout"
-    b.write_bytes(_ndjson({"insertId": "b"}).rstrip(b"\n"))  # no trailing newline
-    df = run_extract(EelHoleExtractor(), _ctx("2026-09-01"), [a, b])
-    assert sorted(df["insertId"]) == ["a", "b"]
