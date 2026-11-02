@@ -1,4 +1,7 @@
-"""Fakes and fixtures for testing GCS extractors without touching GCS."""
+"""Fakes and fixtures for testing GCS extractors without touching GCS.
+
+The fake classes are plain importable names (``from .conftest import FakeBlob``) for
+tests that need to build blobs directly."""
 
 from pathlib import Path
 
@@ -55,7 +58,7 @@ class FakeClient:
         return self._buckets[name]
 
 
-def _fake_download_many(blob_file_pairs, *, raise_exception: bool = False, **_kwargs):
+def fake_download_many(blob_file_pairs, *, raise_exception: bool = False, **_kwargs):
     """In-process stand-in for ``transfer_manager.download_many``.
 
     Which keyword arguments we pass (thread pool, string filenames, skip_if_exists)
@@ -76,19 +79,13 @@ def _fake_download_many(blob_file_pairs, *, raise_exception: bool = False, **_kw
 @pytest.fixture
 def patch_download_many(monkeypatch):
     """Replace the parallel downloader with a synchronous in-process copy."""
-    monkeypatch.setattr(extract.transfer_manager, "download_many", _fake_download_many)
+    monkeypatch.setattr(extract.transfer_manager, "download_many", fake_download_many)
 
 
 @pytest.fixture
 def make_client():
     """Return a factory for a ``FakeClient`` from ``{bucket: {blob: bytes}}``."""
     return FakeClient
-
-
-@pytest.fixture
-def fake_blob():
-    """Return the ``FakeBlob`` class for building blobs directly in a test."""
-    return FakeBlob
 
 
 @pytest.fixture
@@ -127,3 +124,22 @@ def s3_fixture_blobs():
         }
 
     return _load
+
+
+@pytest.fixture
+def filtered_blob_names(make_client, partition_context):
+    """Return a function listing the blob names an extractor keeps for a partition.
+
+    Builds the extractor with a fake bucket holding empty blobs of the given names,
+    so tests only need to give the names and the expected survivors.
+    """
+
+    def _filter(extractor_cls, partition_key, blob_names, **kwargs) -> list[str]:
+        bucket_name = extractor_cls(**kwargs).bucket_name
+        client = make_client({bucket_name: dict.fromkeys(blob_names, b"")})
+        extractor = extractor_cls(client=client, **kwargs)
+        listed = client.bucket(bucket_name).list_blobs()
+        kept = extractor.filter_blobs(partition_context(partition_key), listed)
+        return [blob.name for blob in kept]
+
+    return _filter

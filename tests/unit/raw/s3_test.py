@@ -2,38 +2,21 @@
 
 import polars as pl
 import pytest
-from dagster import build_asset_context, materialize
+from dagster import materialize
 
 from usage_metrics.raw.s3 import S3Extractor, raw_s3_logs
 
-BUCKET = "pudl-s3-logs.catalyst.coop"
+# --- filter_blobs ---------------------------------------------------------
 
 
-def _ctx(partition_key: str):
-    return build_asset_context(partition_key=partition_key)
-
-
-# --- get_blob_prefix / filter_blobs ----------------------------------------
-
-
-def test_get_blob_prefix_is_partition_date():
-    """The listing prefix is the partition's ISO date."""
-    ext = S3Extractor()
-    assert ext.get_blob_prefix(_ctx("2024-06-15")) == "2024-06-15"
-
-
-def test_filter_blobs_keeps_only_matching_date(make_client):
+def test_filter_blobs_keeps_only_matching_date(filtered_blob_names):
     """filter_blobs keeps blobs whose name starts with the partition date."""
-    blobs = {
-        "2024-06-15-00-00-00-a": b"",
-        "2024-06-16-00-00-00-b": b"",
-        "2024-06-15": b"",
-    }
-    client = make_client({BUCKET: blobs})
-    ext = S3Extractor(client=client)
-    listed = client.bucket(BUCKET).list_blobs()
-    kept = {b.name for b in ext.filter_blobs(_ctx("2024-06-15"), listed)}
-    assert kept == {"2024-06-15-00-00-00-a", "2024-06-15"}
+    kept = filtered_blob_names(
+        S3Extractor,
+        "2024-06-15",
+        ["2024-06-15-00-00-00-a", "2024-06-16-00-00-00-b", "2024-06-15"],
+    )
+    assert kept == ["2024-06-15", "2024-06-15-00-00-00-a"]
 
 
 # --- load_file -----------------------------------------------------------
@@ -91,12 +74,23 @@ def test_load_file_ragged_other_partition_raises_with_note(tmp_path, s3_fixture_
 # --- raw_s3_logs asset ---------------------------------------------------
 
 
+@pytest.mark.parametrize(
+    ("subdir", "n_columns"),
+    [("normal_v1", 27), (None, None)],
+    ids=["with_logs", "empty_partition"],
+)
 def test_raw_s3_logs_asset_materializes(
-    s3_fixture_blobs, make_client, patch_download_many, download_dir, monkeypatch
+    s3_fixture_blobs,
+    make_client,
+    patch_download_many,
+    download_dir,
+    monkeypatch,
+    subdir,
+    n_columns,
 ):
-    """End to end: fake bucket -> raw_s3_logs -> one pandas frame."""
-    blobs = s3_fixture_blobs("normal_v1")
-    client = make_client({BUCKET: blobs})
+    """End to end: fake bucket -> raw_s3_logs -> one pandas frame (or an empty one)."""
+    blobs = s3_fixture_blobs(subdir) if subdir else {}
+    client = make_client({S3Extractor().bucket_name: blobs})
     monkeypatch.setattr(
         "usage_metrics.raw.s3.S3Extractor",
         lambda *a, **k: S3Extractor(client=client),
@@ -104,20 +98,8 @@ def test_raw_s3_logs_asset_materializes(
     result = materialize([raw_s3_logs], partition_key="2024-06-15")
     assert result.success
     df = result.output_for_node("raw_s3_logs")
-    expected_rows = sum(v.count(b"\n") for v in blobs.values())
-    assert len(df) == expected_rows
-    assert df.shape[1] == 27
-
-
-def test_raw_s3_logs_asset_empty_partition(
-    make_client, patch_download_many, download_dir, monkeypatch
-):
-    """A partition with no blobs materializes an empty frame."""
-    client = make_client({BUCKET: {}})
-    monkeypatch.setattr(
-        "usage_metrics.raw.s3.S3Extractor",
-        lambda *a, **k: S3Extractor(client=client),
-    )
-    result = materialize([raw_s3_logs], partition_key="2024-06-15")
-    assert result.success
-    assert result.output_for_node("raw_s3_logs").empty
+    if not blobs:
+        assert df.empty
+        return
+    assert len(df) == sum(v.count(b"\n") for v in blobs.values())
+    assert df.shape[1] == n_columns

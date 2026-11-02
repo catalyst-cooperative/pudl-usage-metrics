@@ -1,6 +1,6 @@
 """Tests for the GCSExtractor base class."""
 
-import time
+import threading
 from pathlib import Path
 from typing import Any
 from unittest import mock
@@ -11,7 +11,10 @@ import pytest
 from dagster import build_asset_context
 
 from usage_metrics.raw import extract
+from usage_metrics.raw.eel_hole import EelHoleExtractor
 from usage_metrics.raw.extract import GCSExtractor
+from usage_metrics.raw.github_partitioned import GithubExtractor
+from usage_metrics.raw.s3 import S3Extractor
 
 
 class LineExtractor(GCSExtractor):
@@ -65,81 +68,79 @@ def test_combine_files_skips_empty_files(tmp_path):
 # --- extract() dispatch ----------------------------------------------------
 
 
-def _run_extract(extractor, context, paths, monkeypatch):
-    monkeypatch.setattr(extractor, "download_gcs_blobs", lambda *a, **k: paths)
-    return extractor.extract(context)
+def _write_files(directory: Path, *contents: bytes) -> list[Path]:
+    """Write each of ``contents`` to its own file and return the paths."""
+    paths = []
+    for i, content in enumerate(contents):
+        path = directory / f"file{i}"
+        path.write_bytes(content)
+        paths.append(path)
+    return paths
 
 
-def test_extract_no_files_returns_empty(partition_context, monkeypatch, download_dir):
+@pytest.fixture
+def loaded_paths(monkeypatch):
+    """Spy on ``load_file`` for an extractor; the list fills with the paths parsed."""
+
+    def _spy(extractor) -> list[Path]:
+        seen: list[Path] = []
+        monkeypatch.setattr(
+            extractor, "load_file", lambda p: seen.append(p) or pl.DataFrame()
+        )
+        return seen
+
+    return _spy
+
+
+def test_extract_no_files_returns_empty(partition_context, run_extract, download_dir):
     """A partition with no blobs yields an empty DataFrame."""
-    ext = LineExtractor()
-    df = _run_extract(ext, partition_context("2024-01-01"), [], monkeypatch)
+    df = run_extract(LineExtractor(), partition_context("2024-01-01"), [])
     assert isinstance(df, pd.DataFrame)
     assert df.empty
 
 
-def test_extract_single_file_is_not_combined(
-    partition_context, monkeypatch, download_dir, tmp_path
+@pytest.mark.parametrize("n_files", [1, 2])
+def test_extract_combines_only_multiple_files(
+    partition_context, run_extract, loaded_paths, download_dir, tmp_path, n_files
 ):
-    """One file is parsed directly; no .combined file is written."""
-    only = tmp_path / "only"
-    only.write_bytes(b"x 1\ny 2\n")
+    """One file is parsed directly; several concatenable files are combined first."""
+    files = _write_files(tmp_path, *[b"x 1\n"] * n_files)
     ext = LineExtractor()
-    seen = []
-    monkeypatch.setattr(ext, "load_file", lambda p: seen.append(p) or pl.DataFrame())
-    _run_extract(ext, partition_context("2024-01-01"), [only], monkeypatch)
-    assert seen == [only]
-    assert not (download_dir / "raw" / "test_lines" / "2024-01-01.combined").exists()
-
-
-def test_extract_combines_when_concatenable(
-    partition_context, monkeypatch, download_dir, tmp_path
-):
-    """Multiple concatenable files are combined and parsed once."""
-    f1 = tmp_path / "f1"
-    f1.write_bytes(b"x 1\n")
-    f2 = tmp_path / "f2"
-    f2.write_bytes(b"y 2\n")
-    ext = LineExtractor()
-    seen = []
-    monkeypatch.setattr(ext, "load_file", lambda p: seen.append(p) or pl.DataFrame())
-    _run_extract(ext, partition_context("2024-01-01"), [f1, f2], monkeypatch)
-    assert seen == [download_dir / "raw" / "test_lines" / "2024-01-01.combined"]
+    seen = loaded_paths(ext)
+    run_extract(ext, partition_context("2024-01-01"), files)
+    combined = download_dir / "raw" / "test_lines" / "2024-01-01.combined"
+    assert seen == ([files[0]] if n_files == 1 else [combined])
+    assert combined.exists() == (n_files > 1)
 
 
 def test_extract_parses_each_file_when_not_concatenable(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """Non-concatenable extractors parse per file and concatenate the frames."""
-    f1 = tmp_path / "f1"
-    f1.write_bytes(b"1\n")
-    f2 = tmp_path / "f2"
-    f2.write_bytes(b"2\n")
+    files = _write_files(tmp_path, b"1\n", b"2\n")
     ext = DocExtractor()
     monkeypatch.setattr(
         ext, "load_file", lambda p: pd.DataFrame({"v": [p.read_text().strip()]})
     )
-    df = _run_extract(ext, partition_context("2024-01-01"), [f1, f2], monkeypatch)
+    df = run_extract(ext, partition_context("2024-01-01"), files)
     assert df["v"].tolist() == ["1", "2"]
 
 
 def test_extract_non_partitioned_run(monkeypatch, download_dir, tmp_path):
     """extract() works for a non-partitioned run (e.g. cumulative GitHub metrics)."""
-    only = tmp_path / "only"
-    only.write_bytes(b"x 1\n")
+    files = _write_files(tmp_path, b"x 1\n")
     ext = DocExtractor()
-    monkeypatch.setattr(ext, "download_gcs_blobs", lambda *a, **k: [only])
+    monkeypatch.setattr(ext, "download_gcs_blobs", lambda *a, **k: files)
     df = ext.extract(build_asset_context())  # no partition_key
     assert ext.partition_key is None
     assert not df.empty
 
 
 def test_extract_sets_partition_key_before_load(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """load_file can rely on self.partition_key."""
-    only = tmp_path / "only"
-    only.write_bytes(b"x 1\n")
+    files = _write_files(tmp_path, b"x 1\n")
     ext = LineExtractor()
     captured = {}
     monkeypatch.setattr(
@@ -147,32 +148,30 @@ def test_extract_sets_partition_key_before_load(
         "load_file",
         lambda p: captured.setdefault("key", ext.partition_key) or pl.DataFrame(),
     )
-    _run_extract(ext, partition_context("2026-02-25"), [only], monkeypatch)
+    run_extract(ext, partition_context("2026-02-25"), files)
     assert captured["key"] == "2026-02-25"
 
 
 def test_extract_swallows_empty_data_errors(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """An all-empty partition returns an empty DataFrame, not an error."""
-    only = tmp_path / "only"
-    only.write_bytes(b"")
+    files = _write_files(tmp_path, b"")
     ext = LineExtractor()
 
     def _raise(_path):
         raise pl.exceptions.NoDataError("empty")
 
     monkeypatch.setattr(ext, "load_file", _raise)
-    df = _run_extract(ext, partition_context("2024-01-01"), [only], monkeypatch)
+    df = run_extract(ext, partition_context("2024-01-01"), files)
     assert df.empty
 
 
 def test_extract_propagates_other_errors(
-    partition_context, monkeypatch, download_dir, tmp_path
+    partition_context, run_extract, monkeypatch, download_dir, tmp_path
 ):
     """Non-empty-data parse errors are not swallowed."""
-    only = tmp_path / "only"
-    only.write_bytes(b"x")
+    files = _write_files(tmp_path, b"x")
     ext = LineExtractor()
 
     def _raise(_path):
@@ -180,7 +179,24 @@ def test_extract_propagates_other_errors(
 
     monkeypatch.setattr(ext, "load_file", _raise)
     with pytest.raises(ValueError, match="boom"):
-        _run_extract(ext, partition_context("2024-01-01"), [only], monkeypatch)
+        run_extract(ext, partition_context("2024-01-01"), files)
+
+
+@pytest.mark.parametrize(
+    ("extractor_cls", "kwargs", "partition_key", "expected"),
+    [
+        (EelHoleExtractor, {}, "2026-09-01", "run.googleapis.com/stdout/2026/09/01"),
+        (S3Extractor, {}, "2024-06-15", "2024-06-15"),
+        (GithubExtractor, {"metric": "clones"}, "2024-06-15", "github/clones/"),
+    ],
+    ids=["eel_hole", "s3", "github"],
+)
+def test_get_blob_prefix(
+    partition_context, extractor_cls, kwargs, partition_key, expected
+):
+    """Each extractor narrows the bucket listing server-side to its partition."""
+    ext = extractor_cls(**kwargs)
+    assert ext.get_blob_prefix(partition_context(partition_key)) == expected
 
 
 # --- download plumbing ---------------------------------------------------
@@ -280,13 +296,14 @@ def test_log_download_progress_noop_below_threshold(tmp_path):
 def test_log_download_progress_emits_progress_lines(tmp_path, monkeypatch):
     """A long-running download gets periodic progress lines from the watcher."""
     monkeypatch.setenv("GCS_DOWNLOAD_PROGRESS_INTERVAL", "0.02")
+    logged = threading.Event()
     context = mock.Mock()
+    context.log.info.side_effect = lambda *a, **k: logged.set()
     total = extract.DOWNLOAD_PROGRESS_MIN_BLOBS
 
     with extract.log_download_progress(context, tmp_path, total=total):
         (tmp_path / "blob-1").write_bytes(b"x")
-        time.sleep(0.15)
+        assert logged.wait(timeout=5), "no progress line was logged"
 
-    assert context.log.info.called
     message = context.log.info.call_args[0][0]
     assert f"/{total:,} blobs" in message
