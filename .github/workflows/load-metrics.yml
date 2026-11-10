@@ -59,6 +59,11 @@ jobs:
       - name: Compute the list of partitions to ETL
         id: compute
         shell: bash -l {0}
+        # A multi-day "all" backfill skips non-partitioned jobs on each dated matrix
+        # entry below to avoid them racing to overwrite the same un-dated output file.
+        # Add one extra matrix entry -- using the literal string "nonpartitioned" as a
+        # sentinel, since real partitions are always YYYY-MM-DD and can't collide with
+        # it -- to run them exactly once, so "all" actually refreshes everything.
         run: |
           partitions=$(pixi run usage-metrics partitions \
             --start "${{ github.event.inputs.start_partition }}" \
@@ -66,12 +71,6 @@ jobs:
           count=$(echo "$partitions" | jq 'length')
           multiple=$([ "$count" -gt 1 ] && echo true || echo false)
           job="${{ github.event.inputs.job }}"
-          # A multi-day "all" backfill skips non-partitioned jobs on each
-          # dated matrix entry below to avoid them racing to overwrite the
-          # same un-dated output file. Add one extra matrix entry -- using
-          # the literal string "nonpartitioned" as a sentinel, since real
-          # partitions are always YYYY-MM-DD and can't collide with it -- to
-          # run them exactly once, so "all" actually refreshes everything.
           if [[ "$multiple" == "true" && ( -z "$job" || "$job" == "all" ) ]]; then
             partitions=$(echo "$partitions" | jq -c '. + ["nonpartitioned"]')
           fi
@@ -94,12 +93,9 @@ jobs:
     needs: compute-partitions
     # Larger third-party runner lets us parallelize the S3 log extraction
     runs-on: blacksmith-8vcpu-ubuntu-2404
-    # Fast-fail: a healthy run finishes in well under an hour. This applies per
-    # matrix job (i.e. per partition), not to the matrix as a whole -- each
-    # partition gets its own fresh 60-minute budget, so a month-long backfill
-    # (~30 independent jobs) is no different from this job's perspective than a
-    # single day. If a run regresses to multi-hour, kill it early instead of
-    # burning the full 6-hour default.
+    # A healthy run finishes in well under an hour. This applies per matrix job (i.e.
+    # per partition), not to the matrix as a whole -- each partition gets its own fresh
+    # 60-minute budget and doesn't burn a whole 6-hour timeout.
     timeout-minutes: 60
     permissions:
       contents: read
@@ -107,12 +103,6 @@ jobs:
     strategy:
       # One partition failing shouldn't cancel the rest of a backfill.
       fail-fast: false
-      # Each partitioned asset writes to its own dated file
-      # (out_*/<table>/<start>--<end>.parquet), so partitions never touch the
-      # same object and can safely run concurrently. Capped well under GitHub's
-      # default per-workflow concurrent-job limit so a big backfill doesn't
-      # monopolize the runner queue or hammer ipinfo/GCS all at once; raise if
-      # that's not actually a bottleneck.
       max-parallel: 5
       matrix:
         partition: ${{ fromJson(needs.compute-partitions.outputs.partitions) }}
