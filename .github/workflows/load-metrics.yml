@@ -12,10 +12,16 @@ on:
 
 env:
   METRICS_PROD_ENV: "prod"
+  # Concurrent GCS blob download threads for latency-bound S3 log downloads
+  GCS_DOWNLOAD_WORKERS: "32"
 
 jobs:
   load-metrics:
-    runs-on: ubuntu-latest
+    # Larger third-party runner lets us parallelize the S3 log extraction
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    # Fast-fail: a healthy run finishes in well under an hour. If it regresses to
+    # multi-hour, kill it early instead of burning the full 6-hour default.
+    timeout-minutes: 60
     permissions:
       contents: read
       id-token: write
