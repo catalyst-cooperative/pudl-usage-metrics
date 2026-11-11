@@ -30,7 +30,10 @@ class LineExtractor(GCSExtractor):
     def load_file(self, file_path: Path) -> pl.DataFrame:
         """Parse a whitespace-delimited file."""
         return pl.read_csv(
-            file_path, separator=" ", has_header=False, infer_schema_length=0
+            file_path,
+            separator=" ",
+            has_header=False,
+            infer_schema=False,
         )
 
 

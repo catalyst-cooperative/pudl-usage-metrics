@@ -27,23 +27,13 @@ GCS_EXTRACT_RETRY_POLICY = RetryPolicy(
 )
 """Retry the whole extract step if it fails.
 
-Downloads and reads of many small blobs occasionally fail for transient reasons
-that the client library's per-request retries don't cover. Retrying the step is
-cheap because already-downloaded blobs are skipped, and it keeps a single bad day
-from leaving a permanent gap in the partitioned output."""
+Retrying the step is cheap because already-downloaded blobs are skipped. Adding a
+jitter avoids many workers or partitions retrying at the same time if there's a
+transient outage.
+"""
 
 DEFAULT_DOWNLOAD_WORKERS = 32
-"""Default number of threads used to download blobs from GCS concurrently.
-
-Downloading many small blobs is latency-bound: each worker spends almost all its
-time waiting on the network, so threads (which release the GIL on I/O) fit well
-and avoid the pickling / spawn overhead and fragility of ``transfer_manager``'s
-process pool (which also can't run nested inside Dagster's executor).
-
-Past ~32 threads the GIL contention on TLS/response handling outweighs the added
-concurrency in local testing, so that is the default. Override per extractor via
-the ``download_workers`` argument, or globally via the ``GCS_DOWNLOAD_WORKERS``
-env var."""
+"""Default number of threads used to download blobs from GCS concurrently."""
 
 
 class GCSExtractor(ABC):
@@ -172,11 +162,9 @@ class GCSExtractor(ABC):
     def get_blob_prefix(self, context: AssetExecutionContext) -> str | None:
         """Return a blob name prefix to filter the bucket listing server-side.
 
-        Passing a prefix to ``list_blobs`` avoids enumerating every object in the
-        bucket on every partition, which otherwise dominates extraction time and
-        grows without bound as the bucket accumulates logs. Subclasses whose
-        relevant files share a common name prefix (e.g. a partition date) should
-        override this. ``filter_blobs`` is still applied to the narrowed listing.
+        Passing a prefix to ``list_blobs`` avoids enumerating every object in the bucket
+        on every partition. Subclasses whose files share a common name prefix (e.g. a
+        partition date) should override this.
         """
         return None
 

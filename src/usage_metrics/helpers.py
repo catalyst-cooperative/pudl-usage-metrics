@@ -67,6 +67,9 @@ def retry_request(
                 try:
                     return func(*args, **kwargs)
                 except retry_on as e:
+                    # Not every retry_on exception is transient (e.g. an ipinfo 4xx
+                    # won't succeed on retry), so let the caller veto the retry and
+                    # re-raise the original error straight away.
                     if should_retry is not None and not should_retry(e):
                         raise
                     if attempt == retries:

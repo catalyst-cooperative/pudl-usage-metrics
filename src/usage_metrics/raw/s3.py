@@ -72,7 +72,7 @@ class S3Extractor(GCSExtractor):
                 file_path,
                 separator=" ",
                 has_header=False,
-                infer_schema_length=0,
+                infer_schema=False,
             )
         except pl.exceptions.ComputeError as e:
             # On 2026-02-25 a new column was added mid log file, so column-count
@@ -84,7 +84,7 @@ class S3Extractor(GCSExtractor):
                     file_path,
                     separator=" ",
                     has_header=False,
-                    infer_schema_length=0,
+                    infer_schema=False,
                     schema={f"column_{i + 1}": pl.String for i in range(28)},
                     truncate_ragged_lines=True,
                     missing_columns="insert",
