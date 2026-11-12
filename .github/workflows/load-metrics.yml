@@ -103,7 +103,6 @@ jobs:
     strategy:
       # One partition failing shouldn't cancel the rest of a backfill.
       fail-fast: false
-      max-parallel: 5
       matrix:
         partition: ${{ fromJson(needs.compute-partitions.outputs.partitions) }}
     steps:
