@@ -2,7 +2,7 @@
 
 import polars as pl
 import pytest
-from dagster import materialize
+from dagster import AssetExecutionContext, materialize
 
 from usage_metrics.raw.s3 import (
     S3Extractor,
@@ -110,7 +110,7 @@ def test_load_file_ragged_other_partition_raises_with_note(tmp_path, s3_fixture_
 )
 def test_drop_lines_with_embedded_quotes_single_line(line, expected):
     """A line with a malformed field is dropped whole; a clean line is kept."""
-    assert _drop_lines_with_embedded_quotes(line) == expected
+    assert _drop_lines_with_embedded_quotes(line)[0] == expected
 
 
 def test_drop_lines_with_embedded_quotes_keeps_good_lines_around_a_bad_one():
@@ -118,7 +118,10 @@ def test_drop_lines_with_embedded_quotes_keeps_good_lines_around_a_bad_one():
     good_a = '"GET /a HTTP/1.1" 200 "-" "Mozilla/5.0" - hid\n'
     bad = '"GET /b HTTP/1.1" 200 "-" "pip/1.0 {"a":1}" - hid\n'
     good_b = '"GET /c HTTP/1.1" 200 "-" "curl/8.0" - hid\n'
-    assert _drop_lines_with_embedded_quotes(good_a + bad + good_b) == good_a + good_b
+    assert _drop_lines_with_embedded_quotes(good_a + bad + good_b) == (
+        good_a + good_b,
+        1,
+    )
 
 
 def test_load_file_drops_line_with_embedded_json_user_agent(tmp_path):
@@ -148,7 +151,9 @@ def test_load_file_drops_line_with_embedded_json_user_agent(tmp_path):
     )
     path = tmp_path / "f"
     path.write_text(bad_line + good_line)
-    df = S3Extractor().load_file(path)
+    ext = S3Extractor()
+    df = ext.load_file(path)
+    assert ext.dropped_lines == 1
     assert df.width == 27
     assert df.height == 1
     assert df.row(0)[4] == "198.51.100.2"
@@ -187,3 +192,39 @@ def test_raw_s3_logs_asset_materializes(
         return
     assert len(df) == sum(v.count(b"\n") for v in blobs.values())
     assert df.shape[1] == n_columns
+
+
+def _extract_with_dropped(monkeypatch, dropped, rows):
+    """Run S3Extractor.extract with a stubbed parent that "drops" lines."""
+    from types import SimpleNamespace
+    from typing import cast
+
+    import pandas as pd
+
+    from usage_metrics.raw.extract import GCSExtractor
+
+    def fake_extract(self, context):
+        self.dropped_lines = dropped
+        return pd.DataFrame({"a": range(rows)})
+
+    monkeypatch.setattr(GCSExtractor, "extract", fake_extract)
+    logged = []
+    context = SimpleNamespace(
+        partition_key="2024-06-15",
+        log=SimpleNamespace(warning=logged.append),
+        add_output_metadata=lambda m: logged.append(m),
+    )
+    S3Extractor().extract(cast("AssetExecutionContext", context))
+    return logged
+
+
+def test_extract_warns_when_few_lines_dropped(monkeypatch):
+    """A tiny dropped fraction is logged, not fatal."""
+    logged = _extract_with_dropped(monkeypatch, dropped=1, rows=9999)
+    assert any("Dropped 1 of 10000" in str(m) for m in logged)
+
+
+def test_extract_fails_when_too_many_lines_dropped(monkeypatch):
+    """Exceeding the threshold fails the partition."""
+    with pytest.raises(ValueError, match="investigate"):
+        _extract_with_dropped(monkeypatch, dropped=50, rows=950)

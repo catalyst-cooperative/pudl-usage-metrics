@@ -42,13 +42,27 @@ from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 _QUOTED_FIELD = re.compile(r'"(.*?)"(?=\s)', re.DOTALL)
 
 
-def _drop_lines_with_embedded_quotes(text: str) -> str:
-    """Drop any line containing a field with unescaped embedded quotes."""
-    return "".join(
-        line
-        for line in text.splitlines(keepends=True)
-        if not any('"' in field for field in _QUOTED_FIELD.findall(line))
-    )
+# Fail the partition if more than this fraction of its lines had to be dropped
+# for embedded quotes. A handful of pip-style lines is expected; a large share
+# means the log format changed or a new client is misbehaving, and the data
+# loss should be investigated rather than silently accepted.
+MAX_DROPPED_LINE_FRACTION = 0.001
+
+
+def _drop_lines_with_embedded_quotes(text: str) -> tuple[str, int]:
+    """Drop any line containing a field with unescaped embedded quotes.
+
+    Returns:
+        The text with those lines removed, and the number of lines dropped.
+    """
+    kept = []
+    n_dropped = 0
+    for line in text.splitlines(keepends=True):
+        if any('"' in field for field in _QUOTED_FIELD.findall(line)):
+            n_dropped += 1
+        else:
+            kept.append(line)
+    return "".join(kept), n_dropped
 
 
 class S3Extractor(GCSExtractor):
@@ -56,11 +70,48 @@ class S3Extractor(GCSExtractor):
 
     concatenable_files = True
 
+    dropped_lines: int = 0
+    """Lines dropped for unescaped embedded quotes during the current ``extract``.
+
+    Accumulated by ``load_file`` and reset at the start of each ``extract``."""
+
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
         self.dataset_name = "pudl_s3_logs"
         self.bucket_name = PUDL_METRICS_S3_LOGS_BUCKET
         super().__init__(*args, **kwargs)
+
+    def extract(self, context: AssetExecutionContext) -> pd.DataFrame:
+        """Extract the partition, then report and bound lines lost to bad quoting.
+
+        Raises:
+            ValueError: if the dropped fraction exceeds MAX_DROPPED_LINE_FRACTION.
+        """
+        self.dropped_lines = 0
+        df = super().extract(context)
+        # Read into a local: the type checker can't see that load_file (called
+        # from super().extract) updated the attribute, and narrows it to 0.
+        dropped: int = self.dropped_lines
+        total = len(df) + dropped
+        fraction = dropped / total if total else 0.0
+        context.add_output_metadata(
+            {
+                "dropped_embedded_quote_lines": dropped,
+                "dropped_embedded_quote_fraction": fraction,
+            }
+        )
+        if dropped:
+            msg = (
+                f"Dropped {dropped} of {total} lines ({fraction:.4%}) "
+                f"with embedded quotes from {context.partition_key}."
+            )
+            if fraction > MAX_DROPPED_LINE_FRACTION:
+                raise ValueError(
+                    f"{msg} Exceeds the {MAX_DROPPED_LINE_FRACTION:.4%} limit; "
+                    "investigate before accepting this partition."
+                )
+            context.log.warning(msg)
+        return df
 
     def get_blob_prefix(self, context: AssetExecutionContext) -> str:
         """Filter the bucket listing to this partition's date server-side."""
@@ -124,9 +175,10 @@ class S3Extractor(GCSExtractor):
                     missing_columns="insert",
                 )
             if "not properly escaped" in str(e):
-                cleaned = _drop_lines_with_embedded_quotes(
+                cleaned, n_dropped = _drop_lines_with_embedded_quotes(
                     file_path.read_text(errors="replace")
                 )
+                self.dropped_lines += n_dropped
                 return pl.read_csv(
                     cleaned.encode(),
                     separator=" ",
