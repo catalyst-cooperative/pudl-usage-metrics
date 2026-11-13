@@ -1,5 +1,6 @@
 """Extract data from S3 logs."""
 
+import re
 from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
@@ -10,11 +11,48 @@ from dagster import (
     AssetExecutionContext,
     DailyPartitionsDefinition,
     asset,
+    get_dagster_logger,
 )
 from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_S3_LOGS_BUCKET
 from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
+
+# Some clients embed raw, unescaped double quotes inside a quoted field --
+# e.g. pip (>= 20) sends a User-Agent like
+# `"pip/24.3.1 {"ci":null,"cpu":"x86_64",...}"`. That violates CSV's quoting
+# rules (an embedded quote must be doubled), so polars refuses to parse the
+# line at all ("not properly escaped").
+#
+# There's no reliable way to *repair* this: any embedded quote is inherently
+# ambiguous (that's exactly why CSV requires escaping), and even AWS's own
+# Athena RegexSerDe and other widely-used S3-log parsers don't attempt
+# to -- they use a `[^"]*` quoted-field pattern that simply fails to match
+# these lines, so the row is silently dropped. We do the same: drop the
+# (rare) offending line and keep the rest of the day's data, rather than
+# guess at its content.
+#
+# A closing `"` immediately followed by whitespace can only be the real end of
+# a quoted field: none of these log's quoted fields (the request line, referer,
+# user-agent) legitimately end a piece of content with `"` right before a
+# space, and compact JSON never puts a raw space right after a quote either
+# (only `:`, `,`, or `}` do -- a string value's closing quote is itself
+# followed by more JSON punctuation, not whitespace). So this reliably finds
+# each quoted field's true extent regardless of what's inside it; a line only
+# needs dropping when a field's content itself still contains a `"`.
+_QUOTED_FIELD = re.compile(r'"(.*?)"(?=\s)', re.DOTALL)
+
+
+# Fail the partition if more than this fraction of its lines had to be dropped
+# for embedded quotes. A handful of pip-style lines is expected; a large share
+# means the log format changed or a new client is misbehaving, and the data
+# loss should be investigated rather than silently accepted.
+MAX_DROPPED_LINE_FRACTION = 0.001
+
+
+def _has_embedded_quotes(line: str) -> bool:
+    """Whether any quoted field in this line contains an unescaped quote."""
+    return any('"' in field for field in _QUOTED_FIELD.findall(line))
 
 
 class S3Extractor(GCSExtractor):
@@ -88,6 +126,27 @@ class S3Extractor(GCSExtractor):
                     schema={f"column_{i + 1}": pl.String for i in range(28)},
                     truncate_ragged_lines=True,
                     missing_columns="insert",
+                )
+            if "not properly escaped" in str(e):
+                lines = file_path.read_text(errors="replace").splitlines(keepends=True)
+                kept = [line for line in lines if not _has_embedded_quotes(line)]
+                n_dropped = len(lines) - len(kept)
+                fraction = n_dropped / len(lines)
+                msg = (
+                    f"Dropped {n_dropped} of {len(lines)} lines ({fraction:.4%}) with "
+                    f"embedded quotes from {file_path.name}."
+                )
+                if fraction > MAX_DROPPED_LINE_FRACTION:
+                    raise ValueError(
+                        f"{msg} Exceeds the {MAX_DROPPED_LINE_FRACTION:.4%} limit; "
+                        "investigate before accepting this partition."
+                    ) from e
+                get_dagster_logger().warning(msg)
+                return pl.read_csv(
+                    "".join(kept).encode(),
+                    separator=" ",
+                    has_header=False,
+                    infer_schema_length=0,
                 )
             e.add_note(f"Extraction failed for file: {file_path}")
             raise

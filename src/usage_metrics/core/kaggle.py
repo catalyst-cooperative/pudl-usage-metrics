@@ -30,10 +30,10 @@ def core_kaggle_logs(
     its "has' and "Nullable" report overlapping information, we keep the "Nullable"
     columns and drop the other two.
     """
-    context.log.info(f"Processing data for the week of {context.partition_key}")
+    context.log.info(f"Processing data for {context.partition_key}")
 
     if raw_kaggle_logs.empty:
-        context.log.warning(f"No data found for the week of {context.partition_key}")
+        context.log.warning(f"No data found for {context.partition_key}")
         return raw_kaggle_logs
 
     # Where there is a "nullable" column, drop the corresponding "has" and duplicate column from data
