@@ -6,7 +6,7 @@ from dagster import materialize
 
 from usage_metrics.raw.s3 import (
     S3Extractor,
-    _drop_lines_with_embedded_quotes,
+    _has_embedded_quotes,
     raw_s3_logs,
 )
 
@@ -75,7 +75,7 @@ def test_load_file_ragged_other_partition_raises_with_note(tmp_path, s3_fixture_
     assert any("Extraction failed" in note for note in excinfo.value.__notes__)
 
 
-# --- _drop_lines_with_embedded_quotes ---------------------------------------
+# --- _has_embedded_quotes ---------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -83,45 +83,33 @@ def test_load_file_ragged_other_partition_raises_with_note(tmp_path, s3_fixture_
     [
         pytest.param(
             '"GET /k HTTP/1.1" 200 "-" "Mozilla/5.0 (X11; Linux)" - hid\n',
-            '"GET /k HTTP/1.1" 200 "-" "Mozilla/5.0 (X11; Linux)" - hid\n',
-            id="well_formed_fields_are_kept",
+            False,
+            id="well_formed_fields",
         ),
         pytest.param(
             '"GET /k HTTP/1.1" 200 "-" "pip/24.3.1 {"ci":null,"cpu":"x86_64"}" - hid\n',
-            "",
-            id="pip_style_embedded_json_in_user_agent_is_dropped",
+            True,
+            id="pip_style_embedded_json_in_user_agent",
         ),
         pytest.param(
             '"GET /k HTTP/1.1" 200 "https://x.com/?q="weird"" "Mozilla/5.0" - hid\n',
-            "",
-            id="embedded_quote_in_referer_not_just_user_agent_is_dropped",
+            True,
+            id="embedded_quote_in_referer_not_just_user_agent",
         ),
         pytest.param(
             '"GET /k HTTP/1.1" 200 "-" "" - hid\n',
-            '"GET /k HTTP/1.1" 200 "-" "" - hid\n',
-            id="empty_quoted_field_is_kept",
+            False,
+            id="empty_quoted_field",
         ),
-        pytest.param(
-            "- - - - -\n",
-            "- - - - -\n",
-            id="no_quoted_fields_at_all_is_kept",
-        ),
+        pytest.param("- - - - -\n", False, id="no_quoted_fields_at_all"),
     ],
 )
-def test_drop_lines_with_embedded_quotes_single_line(line, expected):
-    """A line with a malformed field is dropped whole; a clean line is kept."""
-    assert _drop_lines_with_embedded_quotes(line) == expected
+def test_has_embedded_quotes(line, expected):
+    """Only lines with a quote inside a quoted field are flagged."""
+    assert _has_embedded_quotes(line) is expected
 
 
-def test_drop_lines_with_embedded_quotes_keeps_good_lines_around_a_bad_one():
-    """Only the malformed line is dropped; good lines before and after survive."""
-    good_a = '"GET /a HTTP/1.1" 200 "-" "Mozilla/5.0" - hid\n'
-    bad = '"GET /b HTTP/1.1" 200 "-" "pip/1.0 {"a":1}" - hid\n'
-    good_b = '"GET /c HTTP/1.1" 200 "-" "curl/8.0" - hid\n'
-    assert _drop_lines_with_embedded_quotes(good_a + bad + good_b) == good_a + good_b
-
-
-def test_load_file_drops_line_with_embedded_json_user_agent(tmp_path):
+def test_load_file_drops_line_with_embedded_json_user_agent(tmp_path, monkeypatch):
     """End to end: a file with one malformed line still parses, minus that line.
 
     Regression test: pip's User-Agent embeds raw JSON, e.g.
@@ -148,6 +136,8 @@ def test_load_file_drops_line_with_embedded_json_user_agent(tmp_path):
     )
     path = tmp_path / "f"
     path.write_text(bad_line + good_line)
+    # 1 of 2 lines is far over the real limit, which is exercised below.
+    monkeypatch.setattr("usage_metrics.raw.s3.MAX_DROPPED_LINE_FRACTION", 0.9)
     df = S3Extractor().load_file(path)
     assert df.width == 27
     assert df.height == 1
@@ -187,3 +177,35 @@ def test_raw_s3_logs_asset_materializes(
         return
     assert len(df) == sum(v.count(b"\n") for v in blobs.values())
     assert df.shape[1] == n_columns
+
+
+def _bad_and_good_lines():
+    """A full-width S3 log line with a pip-style User-Agent, and a clean one."""
+    template = (
+        "owner bkt [19/Sep/2026:00:00:00 +0000] 198.51.100.1 - RID REST.GET.OBJECT k "
+        '"GET /k HTTP/1.1" 200 - 100 200 5 4 "-" {agent} '
+        "- hid SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
+    )
+    return (
+        template.format(
+            agent='"pip/24.3.1 {"ci":null,"openssl_version":"OpenSSL 3.0.2"}"'
+        ),
+        template.format(agent='"curl/8.0"'),
+    )
+
+
+def test_load_file_fails_when_too_many_lines_dropped(tmp_path):
+    """Dropping more than MAX_DROPPED_LINE_FRACTION of lines fails the partition."""
+    bad, good = _bad_and_good_lines()
+    path = tmp_path / "f"
+    path.write_text(bad * 5 + good * 995)  # 0.5%
+    with pytest.raises(ValueError, match="investigate"):
+        S3Extractor().load_file(path)
+
+
+def test_load_file_tolerates_a_few_dropped_lines(tmp_path):
+    """A dropped fraction under the limit is kept out of the data, not fatal."""
+    bad, good = _bad_and_good_lines()
+    path = tmp_path / "f"
+    path.write_text(bad + good * 9999)  # 0.01%
+    assert S3Extractor().load_file(path).height == 9999

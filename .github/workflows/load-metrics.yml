@@ -34,10 +34,6 @@ env:
   GCS_DOWNLOAD_WORKERS: "32"
 
 jobs:
-  # Turns start_partition/end_partition into a JSON list of dates, so a backfill
-  # can fan out across matrix jobs instead of running them one workflow_dispatch
-  # at a time. A normal single-partition or scheduled run gets a one-item list,
-  # so `load-metrics` below always fans out over a matrix of at least one entry.
   compute-partitions:
     runs-on: ubuntu-latest
     outputs:
@@ -103,7 +99,6 @@ jobs:
     strategy:
       # One partition failing shouldn't cancel the rest of a backfill.
       fail-fast: false
-      max-parallel: 5
       matrix:
         partition: ${{ fromJson(needs.compute-partitions.outputs.partitions) }}
     steps:

@@ -11,6 +11,7 @@ from dagster import (
     AssetExecutionContext,
     DailyPartitionsDefinition,
     asset,
+    get_dagster_logger,
 )
 from google.cloud import storage
 
@@ -42,13 +43,16 @@ from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
 _QUOTED_FIELD = re.compile(r'"(.*?)"(?=\s)', re.DOTALL)
 
 
-def _drop_lines_with_embedded_quotes(text: str) -> str:
-    """Drop any line containing a field with unescaped embedded quotes."""
-    return "".join(
-        line
-        for line in text.splitlines(keepends=True)
-        if not any('"' in field for field in _QUOTED_FIELD.findall(line))
-    )
+# Fail the partition if more than this fraction of its lines had to be dropped
+# for embedded quotes. A handful of pip-style lines is expected; a large share
+# means the log format changed or a new client is misbehaving, and the data
+# loss should be investigated rather than silently accepted.
+MAX_DROPPED_LINE_FRACTION = 0.001
+
+
+def _has_embedded_quotes(line: str) -> bool:
+    """Whether any quoted field in this line contains an unescaped quote."""
+    return any('"' in field for field in _QUOTED_FIELD.findall(line))
 
 
 class S3Extractor(GCSExtractor):
@@ -124,11 +128,22 @@ class S3Extractor(GCSExtractor):
                     missing_columns="insert",
                 )
             if "not properly escaped" in str(e):
-                cleaned = _drop_lines_with_embedded_quotes(
-                    file_path.read_text(errors="replace")
+                lines = file_path.read_text(errors="replace").splitlines(keepends=True)
+                kept = [line for line in lines if not _has_embedded_quotes(line)]
+                n_dropped = len(lines) - len(kept)
+                fraction = n_dropped / len(lines)
+                msg = (
+                    f"Dropped {n_dropped} of {len(lines)} lines ({fraction:.4%}) with "
+                    f"embedded quotes from {file_path.name}."
                 )
+                if fraction > MAX_DROPPED_LINE_FRACTION:
+                    raise ValueError(
+                        f"{msg} Exceeds the {MAX_DROPPED_LINE_FRACTION:.4%} limit; "
+                        "investigate before accepting this partition."
+                    ) from e
+                get_dagster_logger().warning(msg)
                 return pl.read_csv(
-                    cleaned.encode(),
+                    "".join(kept).encode(),
                     separator=" ",
                     has_header=False,
                     infer_schema_length=0,
