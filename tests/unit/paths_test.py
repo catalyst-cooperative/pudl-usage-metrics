@@ -95,3 +95,16 @@ def test_gcs_base_path(monkeypatch):
     monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", "test.catalyst.coop")
     with pytest.raises(ValueError, match="gs://"):
         paths.get_gcs_base_path()
+
+
+def test_gcs_raw_path_and_split(monkeypatch):
+    """Raw artifacts live under the output location, which can be overridden."""
+    monkeypatch.delenv("PUDL_METRICS_GCS_BASE_PATH", raising=False)
+    assert paths.get_gcs_raw_path() == "gs://metrics.catalyst.coop/raw"
+    monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", "gs://other-bucket/prefix/")
+    assert paths.get_gcs_raw_path() == "gs://other-bucket/prefix/raw"
+    assert paths.split_gcs_uri("gs://other-bucket/prefix/raw/x.zst") == (
+        "other-bucket",
+        "prefix/raw/x.zst",
+    )
+    assert paths.split_gcs_uri("gs://bucket") == ("bucket", "")
