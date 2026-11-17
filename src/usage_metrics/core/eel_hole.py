@@ -8,7 +8,6 @@ import re
 from collections import Counter
 from collections.abc import Iterator
 from typing import Annotated, Any, Literal, NamedTuple, cast
-from urllib.parse import urlsplit
 
 import pandas as pd
 from dagster import (
@@ -29,26 +28,36 @@ from pydantic import (
 )
 from pydantic.alias_generators import to_camel
 
-ROUTED_EVENT_TYPES: frozenset[str] = frozenset(
-    {
-        "search",
-        "duckdb_preview",
-        "duckdb_csv",
-        "duckdb_other",
-        "privacy-policy",
-        "preview",
-        "verify-email-requested",
-        "verify-email-failed",
-        "refresh-email-verification-failed",
-    }
-)
+EVENT_FIELDS: dict[str, frozenset[str]] = {
+    "search": frozenset({"url", "query"}),
+    "log_in": frozenset({"next_url", "is_new_user"}),
+    "preview": frozenset({"package", "table_name", "partition"}),
+    "duckdb_preview": frozenset({"url", "params"}),
+    "duckdb_csv": frozenset({"url", "params"}),
+    "duckdb_other": frozenset({"url", "params"}),
+    "privacy-policy": frozenset({"accepted", "outreach", "newsletter"}),
+    "verify-email-requested": frozenset(),
+    "verify-email-failed": frozenset({"status_code"}),
+    "refresh-email-verification-failed": frozenset({"status_code"}),
+}
+"""Each routed ``jsonPayload.event`` and the fields eel-hole always logs with it.
+
+A field may be null but must be present: a missing one means the logger changed, and
+fails the coverage check. Mirrors ``EVENTS`` in eel-hole's ``eel_hole/logs.py``, which
+its ``tests/test_logging_contract.py`` pins. Add an entry only alongside a new
+downstream table."""
+
+ALWAYS_LOGGED_FIELDS = frozenset({"user_id", "user_domain"})
+"""Fields eel-hole adds to every event (``user_info_adder`` in ``eel_hole/logs.py``)."""
+
+ROUTED_EVENT_TYPES: frozenset[str] = frozenset(EVENT_FIELDS)
 """``jsonPayload.event`` values that have a persisted ``core_eel_hole_*`` table.
 
-Any slug event parses, but one missing from this set is not written anywhere and is
-reported by the ``eel_hole_event_coverage`` check. Add an entry only alongside a new
-downstream table. (``log_in`` is synthesized from the ``/callback`` request log.)"""
+Any slug event parses, but one not in this set is not written anywhere and is
+reported by the ``eel_hole_event_coverage`` check."""
 
 EEL_HOLE_EVENT_COVERAGE_CHECK = "eel_hole_event_coverage"
+# One name shared by the AssetCheckSpec and every AssetCheckResult, so they can't drift.
 
 KNOWN_PARAM_KEYS: frozenset[str] = frozenset({"filters", "name", "page", "perPage"})
 """The query-string keys the viewer's AG Grid sends to ``/api/duckdb``.
@@ -57,7 +66,6 @@ eel-hole logs ``dict(request.args)``. Since ``/api/duckdb`` requires login (eel-
 c95f1e4, 2026-11-10), only logged-in requests are logged, and any other key fails
 the coverage check."""
 
-# One name shared by the AssetCheckSpec and every AssetCheckResult, so they can't drift.
 PARAM_COLUMNS: tuple[str, ...] = (
     "params_name",
     "params_page",
@@ -69,11 +77,6 @@ PARAM_COLUMNS: tuple[str, ...] = (
 IGNORED_EVENT_TYPES: frozenset[str] = frozenset({"loading"})
 """Slug events that are known viewer noise (e.g. ``loading``). Dropped without
 counting as a coverage gap. Prose operational log lines are filtered by shape."""
-
-SCHEMA_DRIFT_TOLERANCE = 0.01
-"""Fraction of slug events allowed to fail parsing before ``_event_coverage_check``
-raises an ERROR, with a minimum tolerance of 5 failed events."""
-
 
 DUCKDB_EVENT_PREFIX = "duckdb_"
 """Prefix of the ``/api/duckdb`` request events (``duckdb_preview``, ``duckdb_csv``,
@@ -202,6 +205,9 @@ class JsonPayload(BaseModel):
     outreach: bool | None = None
     # 'verify-email-failed'
     status_code: int | None = None
+    # 'log_in'
+    next_url: str | None = None
+    is_new_user: bool | None = None
 
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
@@ -263,7 +269,6 @@ class EelHoleLogs(BaseModel):
     insert_id: str
     json_payload: JsonPayload | None = None
     timestamp: datetime.datetime
-    text_payload: str | None = None
 
     @field_validator("*", mode="before")
     def replace_na_with_none(cls, value):  # noqa: N805
@@ -287,14 +292,24 @@ class EelHoleLogs(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+def _missing_fields(payload: dict) -> frozenset[str]:
+    """The fields eel-hole always logs with this event that ``payload`` lacks."""
+    expected = EVENT_FIELDS.get(str(payload.get("event")))
+    if expected is None:
+        return frozenset()
+    return (expected | ALWAYS_LOGGED_FIELDS) - payload.keys()
+
+
 def _payload_error(payload: Any) -> str:
-    """One-line summary of the first reason ``payload`` fails ``JsonPayload``."""
+    """One-line summary of the first reason ``payload`` is malformed."""
     try:
         JsonPayload.model_validate(payload)
     except ValidationError as exc:
         first = exc.errors()[0]
         loc = ".".join(str(part) for part in first["loc"]) or "(root)"
         return f"{loc}: {first['msg']}"
+    if isinstance(payload, dict) and (missing := _missing_fields(payload)):
+        return f"missing fields: {', '.join(sorted(missing))}"
     return "(now valid)"
 
 
@@ -329,12 +344,8 @@ def _coverage_report(
 ) -> str:
     """Summarize the coverage gap, with each count as ``n (pct)`` of ``total`` events.
 
-    Every count is shown as ``n (pct)`` of the partition's ``total`` slug events,
-    because eel-hole traffic swings widely day to day -- the percentage is what
-    tells you how urgent an unrouted category is. One block per event value that
-    parsed but has no ``core_eel_hole_*`` table (or, for ``malformed``, a slug
-    event that failed to parse at all): the count, the union of top-level and
-    ``params`` keys seen across its payloads, and one sample.
+    One block per unrouted or malformed event name: its count, the keys seen across
+    its payloads, and one sample.
     """
     lines = [f"EEL-HOLE EVENT COVERAGE -- {partition_key} ({total} slug events)"]
 
@@ -368,7 +379,7 @@ def _coverage_report(
         lines += [
             "",
             (
-                "  Slug events that FAILED to parse -- "
+                "  Slug events that FAILED to parse or lack fields -- "
                 f"{_n_pct(len(malformed), total)} of events"
             ),
             "  (the eel-hole log format may have changed -- this fails the check):",
@@ -474,7 +485,7 @@ def _classify_events(rows: list[dict], models: list[dict]) -> _EventClasses:
                     case_variants[event] += 1
         elif is_anonymous_duckdb_event(payload):
             anonymous_duckdb += 1
-        elif model["json_payload"] is None:
+        elif model["json_payload"] is None or _missing_fields(payload):
             malformed.append(payload)
         elif event in ROUTED_EVENT_TYPES:
             routed[event] += 1
@@ -488,29 +499,17 @@ def _classify_events(rows: list[dict], models: list[dict]) -> _EventClasses:
 def _event_coverage_check(
     context: AssetExecutionContext, rows: list[dict], models: list[dict]
 ) -> AssetCheckResult:
-    """Surface eel-hole events that parse but aren't routed to a persisted table.
+    """Report events we can't persist, and log the full ``_coverage_report``.
 
-    With the permissive models an unknown event type (or a changed payload
-    shape) is no longer dropped or fatal -- it lands in ``_core_eel_hole_logs``
-    and then goes nowhere, because each ``core_eel_hole_*`` table filters one
-    exact ``event`` string. This makes the gap loud:
+    * Parsed events not in ``ROUTED_EVENT_TYPES``, and event names that differ from a
+      slug only by case (``Preview``): WARN outside ``prod``, ERROR in ``prod``.
+    * An event that fails to parse, lacks a field in ``EVENT_FIELDS``, or is a
+      logged-in ``duckdb_*`` request outside AG Grid's vocabulary or the known params:
+      ERROR, even a single one. We control both the logger and this parser, so any
+      such event means one of them changed.
 
-    * events parsed but not in ``ROUTED_EVENT_TYPES`` -> WARN outside ``prod``,
-      ERROR (blocking) in ``prod`` -- see ``_strict_coverage``.
-    * a non-slug event name that differs from a slug only by case (``Preview``): the
-      event is dropped, so it is reported like an unrouted event (WARN outside
-      ``prod``, ERROR in ``prod``).
-    * a logged-in ``duckdb_*`` event that fails strict validation (an AG Grid
-      filter type or operation, or a request param, we don't list) -> always
-      **ERROR**, even a single one, so vocabulary drift is noticed immediately.
-    * other slug events that failed to parse (bad/missing ``timestamp``, ...),
-      above ``SCHEMA_DRIFT_TOLERANCE`` -> always **ERROR** (blocking).
-
-    Anonymous ``duckdb_*`` requests (bots) are ignored and only counted, and are
-    excluded from every total here.
-
-    The full ``_coverage_report`` is logged (WARNING / ERROR) so a maintainer
-    reviewing the GHA run has the event names, field surface, and samples.
+    Anonymous ``duckdb_*`` requests (bots) are ignored, counted and left out of the
+    totals.
     """
     partition_key = context.partition_key
     classes = _classify_events(rows, models)
@@ -519,12 +518,6 @@ def _event_coverage_check(
 
     total = (
         sum(routed.values()) + sum(len(v) for v in unrouted.values()) + len(malformed)
-    )
-    malformed_duckdb = [
-        p for p in malformed if str(p["event"]).startswith(DUCKDB_EVENT_PREFIX)
-    ]
-    malformed_over_tol = bool(malformed_duckdb) or len(malformed) > max(
-        5, SCHEMA_DRIFT_TOLERANCE * total
     )
     if anonymous_duckdb:
         context.log.info(
@@ -547,7 +540,7 @@ def _event_coverage_check(
         **_missing_params_metadata(context, rows, models),
     }
 
-    if malformed_over_tol:
+    if malformed:
         report = _coverage_report(
             partition_key, total, routed, unrouted, malformed, case_variants
         )
@@ -557,11 +550,10 @@ def _event_coverage_check(
             passed=False,
             severity=AssetCheckSeverity.ERROR,
             description=(
-                f"{partition_key}: {_n_pct(len(malformed), total)} slug eel-hole "
-                f"events failed to parse ({len(malformed_duckdb)} logged-in "
-                "/api/duckdb requests) -- the log format, AG Grid's vocabulary or "
-                "the viewer's request params may have changed. If AG Grid added a "
-                "value, add it to ALLOWABLE_FIELD_TYPES / ALLOWABLE_OPERATIONS. See "
+                f"{partition_key}: {_n_pct(len(malformed), total)} eel-hole events "
+                "failed to parse or lack fields -- the log format, AG Grid's "
+                "vocabulary or the viewer's request params changed. If AG Grid added "
+                "a value, add it to ALLOWABLE_FIELD_TYPES / ALLOWABLE_OPERATIONS. See "
                 "the 'report' metadata below for the full breakdown."
             ),
             metadata={**metadata, "report": report},
@@ -673,24 +665,6 @@ def _core_eel_hole_logs(
     # Handle mixed none types in the URL column
     converted_df["url"] = converted_df["url"].replace({None: pd.NA})
 
-    # Reformat some information about the log ins
-    # A log in is made when someone hits https://data.catalyst.coop/callback
-    converted_df.loc[
-        (converted_df.event.isnull())
-        & (converted_df.text_payload.str.contains("callback", na=False)),
-        "event",
-    ] = "log_in"
-
-    # Whatever is after the search= gives you information about what they were searching for
-    # before they logged in. We care about this!
-    converted_df.loc[converted_df.event == "log_in", "log_in_query"] = (
-        converted_df.loc[converted_df.event == "log_in"]
-        .text_payload.map(urlsplit)
-        .apply(lambda x: x.query)
-        .replace(r"next=\/search(\?q%3D)?", "", regex=True)
-        .str.replace("+", " ")
-    )
-
     # Drop any remaining rows where there is no event
     # These are some logs that are just about the app itself running.
     converted_df = converted_df.loc[converted_df.event.notnull(), :]
@@ -741,7 +715,10 @@ def core_eel_hole_log_ins(
     context: AssetExecutionContext,
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Create table of log-in events from eel-hole logs."""
+    """Create table of log-in events from eel-hole logs.
+
+    eel-hole logs a ``log_in`` event when a user returns from Auth0 to ``/callback``.
+    """
     context.log.info(f"Processing data for {context.partition_key}")
 
     if _core_eel_hole_logs.empty:
@@ -750,7 +727,16 @@ def core_eel_hole_log_ins(
 
     login_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "log_in"]
     login_df = login_df.loc[
-        :, ["insert_id", "timestamp", "text_payload", "log_in_query"]
+        :,
+        [
+            "insert_id",
+            "user_id",
+            "user_domain",
+            "timestamp",
+            "next_url",
+            "is_new_user",
+            "session_id",
+        ],
     ]
 
     return login_df.reset_index(drop=True)
@@ -856,12 +842,8 @@ def core_eel_hole_duckdb_other(
 ) -> pd.DataFrame:
     """Create table of DuckDB query events that are neither previews nor downloads.
 
-    /api/duckdb classifies a request as duckdb_preview or duckdb_csv only when
-    perPage matches one of those two fixed page sizes; anything else -- some
-    other client, a hand-built request, a future page size we haven't
-    accounted for -- lands here instead. Kept separate rather than merged into
-    core_eel_hole_previews/downloads so this catch-all bucket doesn't obscure
-    what those two tables actually mean.
+    /api/duckdb logs duckdb_preview or duckdb_csv only for the grid's two fixed
+    ``perPage`` sizes; any other size lands here, kept apart from those two tables.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
@@ -891,13 +873,9 @@ def core_eel_hole_table_views(
 ) -> pd.DataFrame:
     """Create table of requests to table preview pages from eel-hole logs.
 
-    Logged on every GET to /preview/<package>/<table_name>[/<partition>],
-    regardless of whether the visitor is logged in. The actual DuckDB-backed
-    data grid (core_eel_hole_previews) only loads for authenticated users --
-    an anonymous visitor gets a login prompt instead, but still shows up here.
-    Comparing this table's counts to core_eel_hole_previews' is the intended
-    way to see how many people land on a table's page without ever being able
-    to see the data (and therefore might convert to a login if asked).
+    Logged for every GET to /preview/<package>/<table_name>[/<partition>] before the
+    table is looked up, so it includes anonymous visitors, bots, and names that
+    aren't tables. ``user_id`` is null for anonymous requests.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 

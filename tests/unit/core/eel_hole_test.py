@@ -11,8 +11,11 @@ from dagster import AssetCheckResult, Output, build_asset_context
 
 from usage_metrics.core.eel_hole import (
     _EVENT_SLUG,
+    ALWAYS_LOGGED_FIELDS,
     EEL_HOLE_EVENT_COVERAGE_CHECK,
+    EVENT_FIELDS,
     PARAM_COLUMNS,
+    ROUTED_EVENT_TYPES,
     EelHoleLogs,
     _core_eel_hole_logs,
     _coverage_report,
@@ -20,6 +23,7 @@ from usage_metrics.core.eel_hole import (
     core_eel_hole_downloads,
     core_eel_hole_duckdb_other,
     core_eel_hole_email_verification_refresh_failures,
+    core_eel_hole_log_ins,
     core_eel_hole_previews,
     core_eel_hole_table_views,
     core_eel_hole_verify_email_failures,
@@ -80,6 +84,7 @@ def _record(
     text_payload: str | None = None,
     payload=_UNSET,
     timestamp: str = TS,
+    fill_fields: bool = True,
 ) -> dict:
     """Build a raw eel-hole log record shaped like the extractor output.
 
@@ -94,6 +99,14 @@ def _record(
             payload["url"] = "/search?q=coal"
         if params is not None:
             payload["params"] = params
+    if (
+        fill_fields
+        and isinstance(payload, dict)
+        and payload.get("event") in EVENT_FIELDS
+    ):
+        # Real logs carry every field of an event, null when it has no value.
+        for field in EVENT_FIELDS[payload["event"]] | ALWAYS_LOGGED_FIELDS:
+            payload.setdefault(field, None)
     return {
         "insertId": insert_id,
         "jsonPayload": payload,
@@ -421,22 +434,35 @@ def test_partition_with_no_events_returns_empty():
     assert _run(raw).empty
 
 
-def test_synthesizes_log_in_from_callback_text_payload():
-    """A callback hit (text payload only, no JSON payload) becomes a log_in row."""
+def test_log_in_events_become_log_in_rows():
+    """eel-hole's ``log_in`` event carries who logged in and where they were going."""
     raw = pd.DataFrame(
         [
             _record(
                 "login",
-                payload=None,
-                text_payload="https://viewer.catalyst.coop/callback?next=/search?q%3Dcoal",
+                payload={
+                    "event": "log_in",
+                    "timestamp": TS,
+                    "user_id": "u1",
+                    "user_domain": "example.org",
+                    "next_url": "/preview/pudl/core_eia__entity_plants",
+                    "is_new_user": True,
+                },
             ),
+            _record("other", event="search", user_id="u1"),
         ]
     )
 
-    out = _run(raw)
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_log_ins(_ctx(), core_logs))
 
-    assert list(out["event"]) == ["log_in"]
-    assert out.loc[0, "log_in_query"] == "coal"
+    assert list(out["insert_id"]) == ["login"]
+    row = out.iloc[0]
+    assert (row["user_id"], row["user_domain"]) == ("u1", "example.org")
+    assert row["next_url"] == "/preview/pudl/core_eia__entity_plants"
+    assert bool(row["is_new_user"]) is True
+    assert row["session_id"] == f"{PARTITION}-s1"
+    assert _check(raw).passed is True
 
 
 # --- _event_coverage_check -----------------------------------------------
@@ -584,6 +610,47 @@ def test_coverage_check_errors_when_slug_events_fail_to_parse():
     assert "EEL-HOLE EVENT COVERAGE" in cast(str, result.metadata["report"].value)
 
 
+def test_a_single_unparseable_event_is_an_error_however_much_else_is_healthy():
+    """We control the logger, so there is no tolerance for events we can't parse."""
+    rows = [_record(f"ok{i}", event="search", user_id="u") for i in range(500)]
+    rows.append(_record("bad", payload={"event": "search", "timestamp": "not-a-date"}))
+    result = _coverage(rows)
+
+    assert result.passed is False
+    assert result.severity.value == "ERROR"
+    assert result.metadata["malformed_slug_events"].value == 1
+
+
+def test_an_event_missing_a_field_eel_hole_always_logs_is_an_error():
+    """A key may be null but must be present: absence means the logger changed."""
+    complete = _record("ok", event="preview", user_id="u")
+    incomplete = _record(
+        "bad",
+        payload={"event": "preview", "timestamp": TS, "package": "pudl"},
+        fill_fields=False,
+    )
+    result = _coverage([complete, incomplete])
+
+    assert result.passed is False
+    assert result.severity.value == "ERROR"
+    assert result.metadata["malformed_slug_events"].value == 1
+    report = cast(str, result.metadata["report"].value)
+    assert "missing fields: partition, table_name, user_domain, user_id" in report
+
+
+def test_null_event_fields_are_fine():
+    """``query`` and ``partition`` are legitimately null; only absence is an error."""
+    rows = [
+        _record("s", event="search", user_id="u"),
+        _record("p", event="preview", user_id="u"),
+    ]
+    assert _coverage(rows).passed is True
+
+
+def test_every_routed_event_has_a_field_list():
+    assert set(EVENT_FIELDS) == ROUTED_EVENT_TYPES
+
+
 def test_coverage_report_is_actionable():
     """Each event shows count AND % of the day's traffic, plus keys and a sample."""
     unrouted = {
@@ -625,7 +692,7 @@ def test_coverage_report_shows_malformed_events():
         unrouted={},
         malformed=[{"event": "search", "timestamp": "not-a-date"}],
     )
-    assert "FAILED to parse -- 1 (10%) of events" in report
+    assert "FAILED to parse or lack fields -- 1 (10%) of events" in report
     assert "search -- 1 (10%) -- timestamp:" in report
 
 
@@ -812,7 +879,7 @@ def test_anonymous_duckdb_events_are_ignored_and_counted():
     assert list(core_logs["insert_id"]) == ["s"]
     assert result.passed is True
     assert result.metadata["anonymous_duckdb_events_ignored"].value == 4
-    # Bots are left out of the totals, so they can't dilute or trigger tolerances.
+    # Bots are left out of the totals, so they can't change any percentage.
     assert result.metadata["total_slug_events"].value == 1
 
 
