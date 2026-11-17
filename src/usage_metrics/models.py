@@ -1226,8 +1226,10 @@ core_eel_hole_duckdb_other = _table_schema(
     name="core_eel_hole_duckdb_other",
     columns=_eel_hole_preview_columns,
     description=(
-        "DuckDB query events recorded by PUDL's data viewer (the eel hole) with "
-        "a page size that doesn't match the fixed preview or full-download size."
+        "DuckDB query events recorded by PUDL's data viewer (the eel hole) that "
+        "don't match the expected format of either a table preview or a CSV "
+        "download (the viewer's grid requests a fixed page size for each). These "
+        "are likely hand-built or automated requests rather than ordinary use."
     ),
     primary_key=["insert_id"],
 )
@@ -1266,12 +1268,12 @@ core_eel_hole_table_views = _table_schema(
             "The name of the table whose preview page was viewed.",
         ),
         _column(
-            "partition",
+            "data_partition",
             str,
-            "The data partition being previewed (e.g. a FERC EQR quarter), for "
-            "the one PUDL dataset that's partitioned this way. Not to be "
-            "confused with partition_key, which is this ETL's own daily "
-            "partition.",
+            "The data partition being previewed (e.g. a FERC EQR quarter). "
+            "Currently, only FERC EQR is partitioned this way. Not to be "
+            "confused with partition_key, which is the time-based partition "
+            "describing the date range the metrics were observed in.",
         ),
         _column(
             "session_id",

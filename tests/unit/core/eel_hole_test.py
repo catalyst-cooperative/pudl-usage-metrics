@@ -556,7 +556,7 @@ def test_core_eel_hole_table_views_selects_preview_fields():
     }
     row = out.loc[out.insert_id == "p2"].iloc[0]
     assert row["package"] == "ferceqr"
-    assert row["partition"] == "2024q1"
+    assert row["data_partition"] == "2024q1"
 
 
 def test_core_eel_hole_duckdb_other_selects_matching_rows():

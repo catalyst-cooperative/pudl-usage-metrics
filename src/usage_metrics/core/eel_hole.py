@@ -44,20 +44,18 @@ ROUTED_EVENT_TYPES: frozenset[str] = frozenset(
 )
 """``jsonPayload.event`` values that have a persisted ``core_eel_hole_*`` table.
 
-The models below are deliberately permissive: any slug event parses and flows
-into ``_core_eel_hole_logs``. An event *not* in this set parses fine but isn't
-written anywhere -- a coverage gap the ``eel_hole_event_coverage`` check
-surfaces (non-fatally). Add an entry here only alongside a new downstream table.
-(``log_in`` is synthesized from the ``/callback`` request log, not a payload.)"""
+Any slug event parses, but one missing from this set is not written anywhere and is
+reported by the ``eel_hole_event_coverage`` check. Add an entry only alongside a new
+downstream table. (``log_in`` is synthesized from the ``/callback`` request log.)"""
 
 EEL_HOLE_EVENT_COVERAGE_CHECK = "eel_hole_event_coverage"
 
 KNOWN_PARAM_KEYS: frozenset[str] = frozenset({"filters", "name", "page", "perPage"})
-"""The ``params`` keys the viewer's data grid sends with a ``/api/duckdb`` request.
+"""The query-string keys the viewer's AG Grid sends to ``/api/duckdb``.
 
-eel-hole logs ``dict(request.args)``, so ``params`` also holds whatever else a caller
-put in the query string (``sql``, ``limit``, ...). Those aren't ours to model: they are
-dropped from the outputs and counted by ``eel_hole_event_coverage`` instead."""
+eel-hole logs ``dict(request.args)``, so ``params`` can also hold arbitrary caller
+keys (``sql``, ``limit``, ...). Those are dropped from the outputs and counted by
+``eel_hole_event_coverage``."""
 
 PARAM_COLUMNS: tuple[str, ...] = (
     "params_name",
@@ -65,20 +63,15 @@ PARAM_COLUMNS: tuple[str, ...] = (
     "params_per_page",
     "params_filters",
 )
-"""The ``params`` columns of the ``core_eel_hole_{previews,downloads,duckdb_other}``
-tables: ``KNOWN_PARAM_KEYS`` as they appear in ``_core_eel_hole_logs``."""
+"""``KNOWN_PARAM_KEYS`` as columns of ``core_eel_hole_{previews,downloads,duckdb_other}``."""
 
 IGNORED_EVENT_TYPES: frozenset[str] = frozenset({"loading"})
-"""Slug ``jsonPayload.event`` values that are known viewer noise, not user
-events (``loading`` is a client-side "still loading" marker). These are dropped
-without counting as a coverage gap. eel-hole's non-slug operational log lines
-(``event`` is a prose message) are filtered separately, by shape."""
+"""Slug events that are known viewer noise (e.g. ``loading``). Dropped without
+counting as a coverage gap. Prose operational log lines are filtered by shape."""
 
 SCHEMA_DRIFT_TOLERANCE = 0.01
-"""Fraction of events that may be slug-but-unparseable (bad/missing timestamp,
-non-string event) before ``_event_coverage_check`` fails the partition as ERROR
-(floor of 5). That means the eel-hole log *format* changed, not just its event
-vocabulary."""
+"""Fraction of slug events allowed to fail parsing before ``_event_coverage_check``
+raises an ERROR, with a minimum tolerance of 5 failed events."""
 
 
 _EVENT_SLUG = re.compile(r"[a-z][a-z0-9_-]{0,40}\Z")
@@ -121,13 +114,14 @@ ALLOWABLE_OPERATIONS = Literal[
     "true",
 ]
 
-# The frontend's grid library is case-consistent about these values, but the
-# search UI sometimes isn't (e.g. "inrange" instead of "inRange"), so match
+# These values (camelCase operations like "inRange") are eel-hole's / AG Grid's
+# vocabulary, so we keep that casing in the output. The viewer's own grid always
+# sends them in this casing, but eel-hole lowercases the operation server-side, so
+# hand-built requests to /api/duckdb can send any casing (e.g. "inrange"). Match
 # case-insensitively against the canonical casing instead of rejecting the row.
 _FIELD_TYPE_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_FIELD_TYPES)}
 _OPERATION_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_OPERATIONS)}
-# "string" shows up as a field_type synonym for "text", apparently from some
-# code path that reports a JS `typeof` instead of the grid's column type.
+# Hand-built requests also send "string" as a field_type synonym for "text".
 _FIELD_TYPE_ALIASES = {"string": "text"}
 
 
@@ -148,14 +142,11 @@ def normalize_operation(value: Any):
 
 
 class DuckDBFilters(BaseModel):
-    """DuckDB filter format class.
+    """A filter in AG Grid's filter format, as the viewer sends it.
 
-    This is AG Grid's own filter shape, not eel-hole's -- it's validated
-    strictly like the rest of the eel-hole-authored payload, but a mismatch
-    here (a new grid operation, a casing change) means the *grid* changed,
-    not that eel-hole's own logging broke. Surfaced the same way: a malformed
-    filter fails the whole payload, which shows up as a coverage-check
-    ``malformed`` event above ``SCHEMA_DRIFT_TOLERANCE``.
+    Validated strictly: a malformed filter fails the whole payload and counts as a
+    ``malformed`` event in the coverage check. A failure here usually means AG Grid
+    changed (a new operation, a casing change), not eel-hole's logging.
     """
 
     field_name: str
@@ -175,16 +166,11 @@ def filters_to_json(filters: Any) -> str | None:
 
 
 class DuckDBParams(BaseModel):
-    """DuckDB search query parameters.
+    """Query-string parameters of a ``/api/duckdb`` request.
 
-    eel-hole logs these as ``dict(request.args)``, so a caller can add any key to
-    them. Only ``KNOWN_PARAM_KEYS`` are modeled; other keys are ignored here (they
-    neither drop the event nor become columns) and counted by the coverage check.
-    ``name``/``page``/``per_page`` are optional too: real backfills have hit events
-    with an empty or partial ``params`` dict (e.g. ``duckdb_other`` or a request
-    that never reached the search step), and those should still parse and
-    show up as an ordinary (if unrouted) event rather than being dropped as
-    malformed.
+    Only ``KNOWN_PARAM_KEYS`` are modeled. Other keys are ignored (the event is kept)
+    and counted by the coverage check. All fields are optional because real logs
+    include events with empty or partial ``params``.
     """
 
     filters: Annotated[
@@ -202,12 +188,9 @@ class DuckDBParams(BaseModel):
 class JsonPayload(BaseModel):
     """A structlog JSON log line from the viewer.
 
-    Deliberately permissive: ``event`` is any string (eel-hole uses the log
-    message as the event name), unknown ``params`` shapes are accepted as-is,
-    and only ``event`` + ``timestamp`` are required. A new event type or a
-    changed payload shape therefore flows through to ``_core_eel_hole_logs``
-    and shows up as a coverage gap rather than being dropped or crashing the
-    partition.
+    Deliberately permissive: only ``event`` and ``timestamp`` are required, so a new
+    event type or payload shape flows through to ``_core_eel_hole_logs`` and is
+    reported by the coverage check instead of crashing the partition.
     """
 
     event: str
@@ -220,7 +203,7 @@ class JsonPayload(BaseModel):
     # 'preview' -- the /preview/<package>/<table_name> page view
     package: str | None = None
     table_name: str | None = None
-    partition: str | None = None
+    partition: str | None = None  # renamed data_partition in the output table
     # 'duckdb_preview' / 'duckdb_csv' / 'duckdb_other' -- raw request args
     params: DuckDBParams | None = None
     # 'privacy-policy'
@@ -871,6 +854,7 @@ def core_eel_hole_table_views(
         return pd.DataFrame()
 
     views_df = _core_eel_hole_logs[_core_eel_hole_logs.event == "preview"]
+    views_df = views_df.rename(columns={"partition": "data_partition"})
     views_df = views_df.loc[
         :,
         [
@@ -880,7 +864,7 @@ def core_eel_hole_table_views(
             "timestamp",
             "package",
             "table_name",
-            "partition",
+            "data_partition",
             "session_id",
         ],
     ]
