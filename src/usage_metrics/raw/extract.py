@@ -11,6 +11,7 @@ import requests
 from dagster import (
     AssetExecutionContext,
     Backoff,
+    Failure,
     Jitter,
     RetryPolicy,
 )
@@ -53,6 +54,12 @@ class GCSExtractor(ABC):
     where combining the day's files and parsing once avoids >100k per-file parser
     invocations. False for whole-document JSON, where files must be parsed
     individually."""
+
+    require_files: bool = False
+    """Whether a partition with no source files is an error, not an empty result.
+
+    Set it for sources whose raw files expire. An empty result would be written over
+    the partition's existing output, so a backfill of expired dates would erase it."""
 
     def __init__(
         self,
@@ -217,6 +224,15 @@ class GCSExtractor(ABC):
         file_paths = self.download_gcs_blobs(context, download_dir)
 
         if not file_paths:
+            if self.require_files:
+                raise Failure(
+                    description=(
+                        f"No files found for {label} in {self.bucket_name}. Not "
+                        "writing an empty partition, which would replace any existing "
+                        "output: the raw files may have expired."
+                    ),
+                    allow_retries=False,
+                )
             context.log.warning(f"No files found for {label}.")
             return pd.DataFrame()
 

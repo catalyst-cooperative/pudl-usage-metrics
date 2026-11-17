@@ -7,7 +7,7 @@ from unittest import mock
 import pandas as pd
 import polars as pl
 import pytest
-from dagster import build_asset_context
+from dagster import Failure, build_asset_context
 
 from usage_metrics.raw import extract
 from usage_metrics.raw.eel_hole import EelHoleExtractor
@@ -99,6 +99,25 @@ def test_extract_no_files_returns_empty(partition_context, run_extract, download
     df = run_extract(LineExtractor(), partition_context("2024-01-01"), [])
     assert isinstance(df, pd.DataFrame)
     assert df.empty
+
+
+def test_extract_no_files_fails_when_files_are_required(
+    partition_context, run_extract, download_dir
+):
+    """No retries, and no empty frame to write over the partition's existing output."""
+
+    class RequiredExtractor(LineExtractor):
+        require_files = True
+
+    with pytest.raises(Failure, match="No files found for 2024-01-01") as caught:
+        run_extract(RequiredExtractor(), partition_context("2024-01-01"), [])
+    assert caught.value.allow_retries is False
+
+
+def test_only_sources_with_expiring_files_require_them():
+    assert EelHoleExtractor.require_files is True
+    assert GCSExtractor.require_files is False
+    assert S3Extractor.require_files is False
 
 
 @pytest.mark.parametrize("n_files", [1, 2])

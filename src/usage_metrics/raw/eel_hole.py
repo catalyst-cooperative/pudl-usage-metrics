@@ -20,6 +20,9 @@ class EelHoleExtractor(GCSExtractor):
     """Extractor for eel hole logs stored in GCS."""
 
     concatenable_files = True
+    # The bucket expires logs after about six months. Without this, a backfill of an
+    # expired day would write an empty partition over its existing output.
+    require_files = True
 
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
