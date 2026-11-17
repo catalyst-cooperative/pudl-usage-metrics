@@ -7,7 +7,7 @@ import os
 import re
 from collections import Counter
 from collections.abc import Iterator
-from typing import Annotated, Any, Literal, cast, get_args
+from typing import Annotated, Any, Literal, NamedTuple, cast
 from urllib.parse import urlsplit
 
 import pandas as pd
@@ -49,15 +49,15 @@ reported by the ``eel_hole_event_coverage`` check. Add an entry only alongside a
 downstream table. (``log_in`` is synthesized from the ``/callback`` request log.)"""
 
 EEL_HOLE_EVENT_COVERAGE_CHECK = "eel_hole_event_coverage"
-# One name shared by the AssetCheckSpec and every AssetCheckResult, so they can't drift.
 
 KNOWN_PARAM_KEYS: frozenset[str] = frozenset({"filters", "name", "page", "perPage"})
 """The query-string keys the viewer's AG Grid sends to ``/api/duckdb``.
 
-eel-hole logs ``dict(request.args)``, so ``params`` can also hold arbitrary caller
-keys (``sql``, ``limit``, ...). Those are dropped from the outputs and counted by
-``eel_hole_event_coverage``."""
+eel-hole logs ``dict(request.args)``. Since ``/api/duckdb`` requires login (eel-hole
+c95f1e4, 2026-11-10), only logged-in requests are logged, and any other key fails
+the coverage check."""
 
+# One name shared by the AssetCheckSpec and every AssetCheckResult, so they can't drift.
 PARAM_COLUMNS: tuple[str, ...] = (
     "params_name",
     "params_page",
@@ -73,6 +73,11 @@ counting as a coverage gap. Prose operational log lines are filtered by shape.""
 SCHEMA_DRIFT_TOLERANCE = 0.01
 """Fraction of slug events allowed to fail parsing before ``_event_coverage_check``
 raises an ERROR, with a minimum tolerance of 5 failed events."""
+
+
+DUCKDB_EVENT_PREFIX = "duckdb_"
+"""Prefix of the ``/api/duckdb`` request events (``duckdb_preview``, ``duckdb_csv``,
+``duckdb_other``)."""
 
 
 _EVENT_SLUG = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
@@ -103,7 +108,10 @@ def json_string_to_list(value: Any):
     return value
 
 
-ALLOWABLE_FIELD_TYPES = Literal["text", "number", "date"]
+# AG Grid's ``filterType`` values our columns can produce. ``bigint`` appeared with the
+# AG Grid v36 upgrade (2026-10-14): integer columns used to report ``number``. A new
+# value from AG Grid fails the coverage check on purpose -- add it here.
+ALLOWABLE_FIELD_TYPES = Literal["text", "number", "bigint", "date"]
 ALLOWABLE_OPERATIONS = Literal[
     "equals",
     "contains",
@@ -122,44 +130,18 @@ ALLOWABLE_OPERATIONS = Literal[
     "true",
 ]
 
-# These values (camelCase operations like "inRange") are eel-hole's / AG Grid's
-# vocabulary, so we keep that casing in the output. The viewer's own grid always
-# sends them in this casing, but eel-hole lowercases the operation server-side, so
-# hand-built requests to /api/duckdb can send any casing (e.g. "inrange"). Match
-# case-insensitively against the canonical casing instead of rejecting the row.
-_FIELD_TYPE_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_FIELD_TYPES)}
-_OPERATION_BY_LOWER = {v.lower(): v for v in get_args(ALLOWABLE_OPERATIONS)}
-# Hand-built requests also send "string" as a field_type synonym for "text".
-_FIELD_TYPE_ALIASES = {"string": "text"}
-
-
-def normalize_field_type(value: Any):
-    """Canonicalize field_type casing and known synonyms."""
-    if isinstance(value, str):
-        lower = value.lower()
-        lower = _FIELD_TYPE_ALIASES.get(lower, lower)
-        return _FIELD_TYPE_BY_LOWER.get(lower, value)
-    return value
-
-
-def normalize_operation(value: Any):
-    """Canonicalize operation casing."""
-    if isinstance(value, str):
-        return _OPERATION_BY_LOWER.get(value.lower(), value)
-    return value
-
 
 class DuckDBFilters(BaseModel):
     """A filter in AG Grid's filter format, as the viewer sends it.
 
-    Validated strictly: a malformed filter fails the whole payload and counts as a
-    ``malformed`` event in the coverage check. A failure here usually means AG Grid
-    changed (a new operation, a casing change), not eel-hole's logging.
+    Validated strictly (only logged-in events get this far). A value outside
+    ``ALLOWABLE_FIELD_TYPES`` / ``ALLOWABLE_OPERATIONS`` fails the coverage check, and
+    usually means AG Grid added one: update the lists.
     """
 
     field_name: str
-    field_type: Annotated[ALLOWABLE_FIELD_TYPES, BeforeValidator(normalize_field_type)]
-    operation: Annotated[ALLOWABLE_OPERATIONS, BeforeValidator(normalize_operation)]
+    field_type: ALLOWABLE_FIELD_TYPES
+    operation: ALLOWABLE_OPERATIONS
     value: str | int | float | bool | None = None
     value_to: str | int | float | bool | None = None
 
@@ -176,9 +158,9 @@ def filters_to_json(filters: Any) -> str | None:
 class DuckDBParams(BaseModel):
     """Query-string parameters of a ``/api/duckdb`` request.
 
-    Only ``KNOWN_PARAM_KEYS`` are modeled. Other keys are ignored (the event is kept)
-    and counted by the coverage check. All fields are optional because real logs
-    include events with empty or partial ``params``.
+    Only ``KNOWN_PARAM_KEYS`` are allowed: another key on a logged-in request means
+    the viewer's requests changed, and fails the coverage check. Fields are optional
+    because a request with missing keys only earns a warning.
     """
 
     filters: Annotated[
@@ -189,7 +171,7 @@ class DuckDBParams(BaseModel):
     per_page: int | None = None
 
     model_config = ConfigDict(
-        alias_generator=to_camel, populate_by_name=True, extra="ignore"
+        alias_generator=to_camel, populate_by_name=True, extra="forbid"
     )
 
 
@@ -231,22 +213,37 @@ class JsonPayload(BaseModel):
         return value
 
 
+def is_anonymous_duckdb_event(payload: dict) -> bool:
+    """Whether ``payload`` is a ``/api/duckdb`` request with no logged-in user.
+
+    Anonymous visitors can't use the data grid, and ``/api/duckdb`` has required
+    login since 2026-11-10, so these are bot and scraper requests (hand-built
+    ``sql=`` / ``table=`` probes). They are ignored and only counted -- see
+    https://github.com/catalyst-cooperative/pudl-usage-metrics/issues/526.
+    """
+    event = payload.get("event")
+    return (
+        isinstance(event, str)
+        and event.startswith(DUCKDB_EVENT_PREFIX)
+        and not payload.get("user_id")
+    )
+
+
 def payload_is_event(value: Any) -> bool:
     """Whether a raw ``jsonPayload`` is a usable structured event.
 
     True for a dict whose ``event`` is a slug (see ``_EVENT_SLUG``) not in
-    ``IGNORED_EVENT_TYPES``, that parses as a ``JsonPayload``. This filters out
-    eel-hole's operational log lines (prose ``event``) and structurally broken
-    records. It deliberately does *not* filter on whether we recognize the event
-    type or its payload shape -- unknown events flow through and are surfaced as
-    coverage gaps by ``_event_coverage_check``.
+    ``IGNORED_EVENT_TYPES``, that isn't an anonymous ``duckdb_*`` request, and that
+    parses as a ``JsonPayload``. This filters out operational log lines (prose
+    ``event``), bot requests and structurally broken records. Unknown event types
+    still flow through and are reported as coverage gaps by ``_event_coverage_check``.
     """
     if not isinstance(value, dict):
         return False
     event = value.get("event")
     if not isinstance(event, str) or not _EVENT_SLUG.match(event):
         return False
-    if event in IGNORED_EVENT_TYPES:
+    if event in IGNORED_EVENT_TYPES or is_anonymous_duckdb_event(value):
         return False
     try:
         JsonPayload.model_validate(value)
@@ -332,8 +329,12 @@ def _coverage_report(
 ) -> str:
     """Summarize the coverage gap, with each count as ``n (pct)`` of ``total`` events.
 
-    One block per unrouted or malformed event name: its count, the keys seen across
-    its payloads, and one sample.
+    Every count is shown as ``n (pct)`` of the partition's ``total`` slug events,
+    because eel-hole traffic swings widely day to day -- the percentage is what
+    tells you how urgent an unrouted category is. One block per event value that
+    parsed but has no ``core_eel_hole_*`` table (or, for ``malformed``, a slug
+    event that failed to parse at all): the count, the union of top-level and
+    ``params`` keys seen across its payloads, and one sample.
     """
     lines = [f"EEL-HOLE EVENT COVERAGE -- {partition_key} ({total} slug events)"]
 
@@ -411,48 +412,53 @@ def _strict_coverage() -> bool:
     return os.getenv("METRICS_PROD_ENV", "local") == "prod"
 
 
-def _unmodeled_params_metadata(
-    context: AssetExecutionContext, rows: list[dict], models: list[dict], total: int
+def _missing_params_metadata(
+    context: AssetExecutionContext, rows: list[dict], models: list[dict]
 ) -> dict[str, Any]:
-    """Count kept events with ``params`` keys outside ``KNOWN_PARAM_KEYS``.
+    """Warn about kept ``duckdb_*`` requests that lack some of ``KNOWN_PARAM_KEYS``.
 
-    Those keys are dropped from the outputs, which is not worth failing a run for, so
-    they are only logged and reported in the check's metadata. Callers choose the
-    keys, so their length is capped to keep the report readable.
+    Unlike an unexpected key (an error), a request with missing keys, such as a bare
+    ``/api/duckdb?``, says nothing about AG Grid's vocabulary, so it is only logged.
     """
-    events = 0
-    keys: Counter = Counter()
+    missing = 0
     for row, model in zip(rows, models, strict=True):
         payload = row.get("jsonPayload")
         if model["json_payload"] is None or not isinstance(payload, dict):
             continue
-        if isinstance(params := payload.get("params"), dict):
-            extra = params.keys() - KNOWN_PARAM_KEYS
-            events += bool(extra)
-            keys.update(str(key)[:40] for key in extra)
-    summary = ", ".join(f"{key}×{n}" for key, n in keys.most_common(20)) or "none"
-    if events:
+        if str(payload["event"]).startswith(DUCKDB_EVENT_PREFIX):
+            params = payload.get("params")
+            missing += not isinstance(params, dict) or bool(
+                KNOWN_PARAM_KEYS - params.keys()
+            )
+    if missing:
         context.log.warning(
-            f"{context.partition_key}: {_n_pct(events, total)} eel-hole events carry "
-            f"request params that aren't in the schema and were dropped: {summary}"
+            f"{context.partition_key}: {missing} logged-in /api/duckdb requests lack "
+            f"some of {sorted(KNOWN_PARAM_KEYS)}."
         )
-    return {"events_with_unmodeled_params": events, "unmodeled_param_keys": summary}
+    return {"duckdb_events_missing_params": missing}
 
 
-def _classify_events(
-    rows: list[dict], models: list[dict]
-) -> tuple[Counter, dict[str, list[dict]], list[dict], int, Counter]:
-    """Sort slug events into routed, unrouted and malformed.
+class _EventClasses(NamedTuple):
+    """Slug events sorted by ``_classify_events``, plus counts of the ignored ones."""
 
-    Returns ``(routed, unrouted, malformed, non_slug_nulled, case_variants)``; the last
-    two count non-slug events whose payload was nulled, and those that differ from a
-    slug only by case.
-    """
-    routed: Counter = Counter()
-    unrouted: dict[str, list[dict]] = {}
-    malformed: list[dict] = []
-    non_slug_nulled = 0
-    case_variants: Counter = Counter()
+    routed: Counter
+    unrouted: dict[str, list[dict]]
+    malformed: list[dict]
+    non_slug_nulled: int
+    anonymous_duckdb: int
+    case_variants: Counter  # non-slug events that differ from a slug only by case
+
+
+def _classify_events(rows: list[dict], models: list[dict]) -> _EventClasses:
+    """Sort events into routed, unrouted and malformed; count the ignored ones."""
+    classes = _EventClasses(Counter(), {}, [], 0, 0, Counter())
+    routed, unrouted, malformed, case_variants = (
+        classes.routed,
+        classes.unrouted,
+        classes.malformed,
+        classes.case_variants,
+    )
+    non_slug_nulled = anonymous_duckdb = 0
 
     for row, model in zip(rows, models, strict=True):
         payload = row.get("jsonPayload")
@@ -466,14 +472,17 @@ def _classify_events(
                 non_slug_nulled += 1
                 if _EVENT_SLUG_ANY_CASE.match(event):
                     case_variants[event] += 1
-            continue
-        if model["json_payload"] is None:
+        elif is_anonymous_duckdb_event(payload):
+            anonymous_duckdb += 1
+        elif model["json_payload"] is None:
             malformed.append(payload)
         elif event in ROUTED_EVENT_TYPES:
             routed[event] += 1
         else:
             unrouted.setdefault(event, []).append(payload)
-    return routed, unrouted, malformed, non_slug_nulled, case_variants
+    return classes._replace(
+        non_slug_nulled=non_slug_nulled, anonymous_duckdb=anonymous_duckdb
+    )
 
 
 def _event_coverage_check(
@@ -491,22 +500,37 @@ def _event_coverage_check(
     * a non-slug event name that differs from a slug only by case (``Preview``): the
       event is dropped, so it is reported like an unrouted event (WARN outside
       ``prod``, ERROR in ``prod``).
-    * slug events that failed to parse at all (bad/missing ``timestamp``, non-str
-      ``event``, ...), above ``SCHEMA_DRIFT_TOLERANCE`` -> always **ERROR**
-      (blocking): the log *format* broke, which is never fine to ride out.
+    * a logged-in ``duckdb_*`` event that fails strict validation (an AG Grid
+      filter type or operation, or a request param, we don't list) -> always
+      **ERROR**, even a single one, so vocabulary drift is noticed immediately.
+    * other slug events that failed to parse (bad/missing ``timestamp``, ...),
+      above ``SCHEMA_DRIFT_TOLERANCE`` -> always **ERROR** (blocking).
+
+    Anonymous ``duckdb_*`` requests (bots) are ignored and only counted, and are
+    excluded from every total here.
 
     The full ``_coverage_report`` is logged (WARNING / ERROR) so a maintainer
     reviewing the GHA run has the event names, field surface, and samples.
     """
     partition_key = context.partition_key
-    routed, unrouted, malformed, non_slug_nulled, case_variants = _classify_events(
-        rows, models
-    )
+    classes = _classify_events(rows, models)
+    routed, unrouted, malformed = classes.routed, classes.unrouted, classes.malformed
+    anonymous_duckdb, case_variants = classes.anonymous_duckdb, classes.case_variants
 
     total = (
         sum(routed.values()) + sum(len(v) for v in unrouted.values()) + len(malformed)
     )
-    malformed_over_tol = len(malformed) > max(5, SCHEMA_DRIFT_TOLERANCE * total)
+    malformed_duckdb = [
+        p for p in malformed if str(p["event"]).startswith(DUCKDB_EVENT_PREFIX)
+    ]
+    malformed_over_tol = bool(malformed_duckdb) or len(malformed) > max(
+        5, SCHEMA_DRIFT_TOLERANCE * total
+    )
+    if anonymous_duckdb:
+        context.log.info(
+            f"{partition_key}: ignored {anonymous_duckdb} anonymous /api/duckdb "
+            "events (bot or scraper traffic)."
+        )
     unrouted_counts = Counter({e: len(v) for e, v in unrouted.items()})
     unrouted_n = sum(unrouted_counts.values())
 
@@ -517,9 +541,10 @@ def _event_coverage_check(
         "unrouted_events": _event_summary(unrouted_counts, total),
         "unrouted_pct": (round(100 * unrouted_n / total, 1) if total else 0.0),
         "malformed_slug_events": len(malformed),
-        "non_slug_payloads_nulled": non_slug_nulled,
+        "non_slug_payloads_nulled": classes.non_slug_nulled,
         "case_variant_events_dropped": sum(case_variants.values()),
-        **_unmodeled_params_metadata(context, rows, models, total),
+        "anonymous_duckdb_events_ignored": anonymous_duckdb,
+        **_missing_params_metadata(context, rows, models),
     }
 
     if malformed_over_tol:
@@ -533,7 +558,10 @@ def _event_coverage_check(
             severity=AssetCheckSeverity.ERROR,
             description=(
                 f"{partition_key}: {_n_pct(len(malformed), total)} slug eel-hole "
-                "events failed to parse -- the log format may have changed. See "
+                f"events failed to parse ({len(malformed_duckdb)} logged-in "
+                "/api/duckdb requests) -- the log format, AG Grid's vocabulary or "
+                "the viewer's request params may have changed. If AG Grid added a "
+                "value, add it to ALLOWABLE_FIELD_TYPES / ALLOWABLE_OPERATIONS. See "
                 "the 'report' metadata below for the full breakdown."
             ),
             metadata={**metadata, "report": report},
@@ -828,8 +856,12 @@ def core_eel_hole_duckdb_other(
 ) -> pd.DataFrame:
     """Create table of DuckDB query events that are neither previews nor downloads.
 
-    /api/duckdb logs duckdb_preview or duckdb_csv only for the grid's two fixed
-    ``perPage`` sizes; any other size lands here, kept apart from those two tables.
+    /api/duckdb classifies a request as duckdb_preview or duckdb_csv only when
+    perPage matches one of those two fixed page sizes; anything else -- some
+    other client, a hand-built request, a future page size we haven't
+    accounted for -- lands here instead. Kept separate rather than merged into
+    core_eel_hole_previews/downloads so this catch-all bucket doesn't obscure
+    what those two tables actually mean.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
@@ -859,9 +891,13 @@ def core_eel_hole_table_views(
 ) -> pd.DataFrame:
     """Create table of requests to table preview pages from eel-hole logs.
 
-    Logged for every GET to /preview/<package>/<table_name>[/<partition>] before the
-    table is looked up, so it includes anonymous visitors, bots, and names that
-    aren't tables. ``user_id`` is null for anonymous requests.
+    Logged on every GET to /preview/<package>/<table_name>[/<partition>],
+    regardless of whether the visitor is logged in. The actual DuckDB-backed
+    data grid (core_eel_hole_previews) only loads for authenticated users --
+    an anonymous visitor gets a login prompt instead, but still shows up here.
+    Comparing this table's counts to core_eel_hole_previews' is the intended
+    way to see how many people land on a table's page without ever being able
+    to see the data (and therefore might convert to a login if asked).
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
