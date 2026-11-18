@@ -39,21 +39,10 @@ LOGGED_IN_USER_ID_DESCRIPTION = (
     "The unique ID of the logged-in user. Always set, because only logged-in users "
     "can do this."
 )
-LOGGED_IN_API_USER_ID_DESCRIPTION = (
-    "The unique ID of the logged-in user. Always set now that /api/duckdb requires "
-    "login; older rows from anonymous requests (bots and scrapers) have it null."
-)
-
-REQUIRED_SINCE_NOTE = (
-    "Always set in recent data; older partitions can't be rebuilt and may have it null."
-)
 LOGGED_IN_USER_DOMAIN_DESCRIPTION = (
     "User's email domain - the part of a user's email address that follows the '@' "
-    "symbol. " + REQUIRED_SINCE_NOTE
-)
-LOGGED_IN_SESSION_ID_DESCRIPTION = (
-    "A session ID for a logged in user. A new session is created after a user has "
-    "been inactive for 30 minutes. " + REQUIRED_SINCE_NOTE
+    "symbol. Always set in recent data; older partitions can't be rebuilt and may "
+    "have it null."
 )
 
 
@@ -1170,7 +1159,11 @@ _eel_hole_preview_columns = [
     _column(
         name="user_id",
         dtype=str,
-        description=LOGGED_IN_API_USER_ID_DESCRIPTION,
+        description=(
+            "The unique ID of the logged-in user. Always set now that /api/duckdb "
+            "requires login; older rows from anonymous requests (bots and scrapers) "
+            "have it null."
+        ),
         nullable=False,
     ),
     _column(
@@ -1211,7 +1204,11 @@ _eel_hole_preview_columns = [
     _column(
         name="session_id",
         dtype=str,
-        description=LOGGED_IN_SESSION_ID_DESCRIPTION,
+        description=(
+            "A session ID for a logged in user. A new session is created after a user "
+            "has been inactive for 30 minutes. Always set in recent data; older "
+            "partitions can't be rebuilt and may have it null."
+        ),
         nullable=False,
     ),
     _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
