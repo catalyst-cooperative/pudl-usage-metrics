@@ -1283,12 +1283,10 @@ core_eel_hole_table_views = _table_schema(
         _column("partition_key", str, PARTITION_KEY_DESCRIPTION),
     ],
     description=(
-        "Page views of a table's /preview/<package>/<table_name> page, recorded "
-        "by PUDL's data viewer (the eel hole), regardless of whether the "
-        "visitor is logged in. The DuckDB-backed data grid on that page "
-        "(core_eel_hole_previews) only loads for logged-in users, so comparing "
-        "the two tables' counts shows how many visitors land on a table's page "
-        "without being able to see the actual data."
+        "Requests to a table's /preview/<package>/<table_name> page, recorded by "
+        "PUDL's data viewer (the eel hole) before the table is looked up. This "
+        "includes anonymous visitors, bots, and names that aren't tables; "
+        "user_id is null for anonymous requests."
     ),
     primary_key=["insert_id"],
 )

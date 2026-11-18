@@ -49,6 +49,7 @@ reported by the ``eel_hole_event_coverage`` check. Add an entry only alongside a
 downstream table. (``log_in`` is synthesized from the ``/callback`` request log.)"""
 
 EEL_HOLE_EVENT_COVERAGE_CHECK = "eel_hole_event_coverage"
+# One name shared by the AssetCheckSpec and every AssetCheckResult, so they can't drift.
 
 KNOWN_PARAM_KEYS: frozenset[str] = frozenset({"filters", "name", "page", "perPage"})
 """The query-string keys the viewer's AG Grid sends to ``/api/duckdb``.
@@ -329,14 +330,10 @@ def _coverage_report(
     malformed: list[dict],
     case_variants: Counter | None = None,
 ) -> str:
-    """A copy-paste-actionable summary of the coverage gap.
+    """Summarize the coverage gap, with each count as ``n (pct)`` of ``total`` events.
 
-    Every count is shown as ``n (pct)`` of the partition's ``total`` slug events,
-    because eel-hole traffic swings widely day to day -- the percentage is what
-    tells you how urgent an unrouted category is. One block per event value that
-    parsed but has no ``core_eel_hole_*`` table (or, for ``malformed``, a slug
-    event that failed to parse at all): the count, the union of top-level and
-    ``params`` keys seen across its payloads, and one sample.
+    One block per unrouted or malformed event name: its count, the keys seen across
+    its payloads, and one sample.
     """
     lines = [f"EEL-HOLE EVENT COVERAGE -- {partition_key} ({total} slug events)"]
 
@@ -410,16 +407,7 @@ def _coverage_report(
 
 
 def _strict_coverage() -> bool:
-    """Whether an eel-hole coverage gap should block the run.
-
-    Reuses the same ``METRICS_PROD_ENV`` signal every other asset in this
-    module already logs against. Outside of ``prod`` -- local iteration, ad
-    hoc backfills -- an unrouted-but-parseable event (e.g. exploring a new
-    event type) is a non-blocking WARN so it doesn't halt a run. In ``prod``,
-    the same gap is a blocking ERROR: a scheduled production run silently
-    losing a category of data is exactly the kind of breakage we want to stop
-    and get paged for, not ride out until someone happens to read the logs.
-    """
+    """Whether a coverage gap blocks the run: an ERROR in ``prod``, a WARN elsewhere."""
     return os.getenv("METRICS_PROD_ENV", "local") == "prod"
 
 
@@ -838,14 +826,10 @@ def core_eel_hole_duckdb_other(
     context: AssetExecutionContext,
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Create table of DuckDB query events with a non-standard page size.
+    """Create table of DuckDB query events that are neither previews nor downloads.
 
-    /api/duckdb classifies a request as duckdb_preview or duckdb_csv only when
-    perPage matches one of those two fixed page sizes; anything else -- some
-    other client, a hand-built request, a future page size we haven't
-    accounted for -- lands here instead. Kept separate rather than merged into
-    core_eel_hole_previews/downloads so this catch-all bucket doesn't obscure
-    what those two tables actually mean.
+    /api/duckdb logs duckdb_preview or duckdb_csv only for the grid's two fixed
+    ``perPage`` sizes; any other size lands here, kept apart from those two tables.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
@@ -873,15 +857,11 @@ def core_eel_hole_table_views(
     context: AssetExecutionContext,
     _core_eel_hole_logs: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Create table of table-preview page views from eel-hole logs.
+    """Create table of requests to table preview pages from eel-hole logs.
 
-    Logged on every GET to /preview/<package>/<table_name>[/<partition>],
-    regardless of whether the visitor is logged in. The actual DuckDB-backed
-    data grid (core_eel_hole_previews) only loads for authenticated users --
-    an anonymous visitor gets a login prompt instead, but still shows up here.
-    Comparing this table's counts to core_eel_hole_previews' is the intended
-    way to see how many people land on a table's page without ever being able
-    to see the data (and therefore might convert to a login if asked).
+    Logged for every GET to /preview/<package>/<table_name>[/<partition>] before the
+    table is looked up, so it includes anonymous visitors, bots, and names that
+    aren't tables. ``user_id`` is null for anonymous requests.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
