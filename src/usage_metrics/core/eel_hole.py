@@ -40,15 +40,14 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
     "verify-email-failed": frozenset({"status_code"}),
     "refresh-email-verification-failed": frozenset({"status_code"}),
 }
-"""Each routed ``jsonPayload.event`` and the fields eel-hole always logs with it.
+"""Each routed ``jsonPayload.event`` and the fields the viewer always logs with it.
 
-A field may be null but must be present: a missing one means the logger changed, and
-fails the coverage check. Mirrors ``EVENTS`` in eel-hole's ``eel_hole/logs.py``, which
-its ``tests/test_logging_contract.py`` pins. Add an entry only alongside a new
-downstream table."""
+A field may be null but must be present: a missing one means the viewer's logging
+changed, and fails the coverage check. Add an entry only alongside a new downstream
+table."""
 
 ALWAYS_LOGGED_FIELDS = frozenset({"user_id", "user_domain"})
-"""Fields eel-hole adds to every event (``user_info_adder`` in ``eel_hole/logs.py``)."""
+"""Fields the viewer logs with every event, null for anonymous visitors."""
 
 ROUTED_EVENT_TYPES: frozenset[str] = frozenset(EVENT_FIELDS)
 """``jsonPayload.event`` values that have a persisted ``core_eel_hole_*`` table.
@@ -57,13 +56,14 @@ Any slug event parses, but one not in this set is not written anywhere and is
 reported by the ``eel_hole_event_coverage`` check."""
 
 EEL_HOLE_EVENT_COVERAGE_CHECK = "eel_hole_event_coverage"
-# One name shared by the AssetCheckSpec and every AssetCheckResult, so they can't drift.
+"""The name of the coverage check, shared by its spec and every result it returns so
+they can't drift apart."""
 
 KNOWN_PARAM_KEYS: frozenset[str] = frozenset({"filters", "name", "page", "perPage"})
 """The query-string keys the viewer's AG Grid sends to ``/api/duckdb``.
 
-eel-hole logs ``dict(request.args)``. Since ``/api/duckdb`` requires login (eel-hole
-c95f1e4, 2026-11-10), only logged-in requests are logged, and any other key fails
+The viewer logs each request's query string. ``/api/duckdb`` requires login, so a
+logged-in request with any other key means the viewer's requests changed, and fails
 the coverage check."""
 
 PARAM_COLUMNS: tuple[str, ...] = (
@@ -84,9 +84,8 @@ DUCKDB_EVENT_PREFIX = "duckdb_"
 
 
 _EVENT_SLUG = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
-"""What a real ``jsonPayload.event`` looks like (a lower-case identifier of at most
-64 characters; the limit is a loose sanity bound, not derived from anything -- the
-longest real event is 33).
+"""What a real ``jsonPayload.event`` looks like: a lower-case identifier of at most 64
+characters (a loose sanity bound).
 
 eel-hole uses structlog, where ``event`` is the log message: analytics events
 are slugs (``search``, ``preview``, ``duckdb_csv``), operational log lines are
@@ -111,10 +110,12 @@ def json_string_to_list(value: Any):
     return value
 
 
-# AG Grid's ``filterType`` values our columns can produce. ``bigint`` appeared with the
-# AG Grid v36 upgrade (2026-10-14): integer columns used to report ``number``. A new
-# value from AG Grid fails the coverage check on purpose -- add it here.
 ALLOWABLE_FIELD_TYPES = Literal["text", "number", "bigint", "date"]
+"""The AG Grid ``filterType`` values our columns can produce.
+
+A value outside this list fails the coverage check on purpose: add it once it is
+understood."""
+
 ALLOWABLE_OPERATIONS = Literal[
     "equals",
     "contains",
@@ -132,14 +133,17 @@ ALLOWABLE_OPERATIONS = Literal[
     "false",
     "true",
 ]
+"""The AG Grid filter operations, in AG Grid's own camelCase spelling, which the output
+keeps as is. As with ``ALLOWABLE_FIELD_TYPES``, a value outside this list fails the
+coverage check."""
 
 
 class DuckDBFilters(BaseModel):
     """A filter in AG Grid's filter format, as the viewer sends it.
 
-    Validated strictly (only logged-in events get this far). A value outside
-    ``ALLOWABLE_FIELD_TYPES`` / ``ALLOWABLE_OPERATIONS`` fails the coverage check, and
-    usually means AG Grid added one: update the lists.
+    Validated strictly: a value outside ``ALLOWABLE_FIELD_TYPES`` or
+    ``ALLOWABLE_OPERATIONS`` fails the coverage check, and usually means AG Grid added
+    one.
     """
 
     field_name: str
@@ -161,9 +165,9 @@ def filters_to_json(filters: Any) -> str | None:
 class DuckDBParams(BaseModel):
     """Query-string parameters of a ``/api/duckdb`` request.
 
-    Only ``KNOWN_PARAM_KEYS`` are allowed: another key on a logged-in request means
-    the viewer's requests changed, and fails the coverage check. Fields are optional
-    because a request with missing keys only earns a warning.
+    Only ``KNOWN_PARAM_KEYS`` are allowed: another key means the viewer's requests
+    changed, and fails the coverage check. Fields are optional because a request
+    missing some of them is only logged.
     """
 
     filters: Annotated[
@@ -222,10 +226,8 @@ class JsonPayload(BaseModel):
 def is_anonymous_duckdb_event(payload: dict) -> bool:
     """Whether ``payload`` is a ``/api/duckdb`` request with no logged-in user.
 
-    Anonymous visitors can't use the data grid, and ``/api/duckdb`` has required
-    login since 2026-11-10, so these are bot and scraper requests (hand-built
-    ``sql=`` / ``table=`` probes). They are ignored and only counted -- see
-    https://github.com/catalyst-cooperative/pudl-usage-metrics/issues/526.
+    Anonymous visitors can't use the data grid, so these are bot and scraper requests
+    (hand-built probes). They are ignored and only counted.
     """
     event = payload.get("event")
     return (
@@ -293,7 +295,7 @@ class EelHoleLogs(BaseModel):
 
 
 def _missing_fields(payload: dict) -> frozenset[str]:
-    """The fields eel-hole always logs with this event that ``payload`` lacks."""
+    """The fields the viewer always logs with this event that ``payload`` lacks."""
     expected = EVENT_FIELDS.get(str(payload.get("event")))
     if expected is None:
         return frozenset()
@@ -717,7 +719,7 @@ def core_eel_hole_log_ins(
 ) -> pd.DataFrame:
     """Create table of log-in events from eel-hole logs.
 
-    eel-hole logs a ``log_in`` event when a user returns from Auth0 to ``/callback``.
+    Logged when a user returns from Auth0 to the viewer after logging in.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 

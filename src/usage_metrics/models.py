@@ -40,14 +40,12 @@ LOGGED_IN_USER_ID_DESCRIPTION = (
     "can do this."
 )
 LOGGED_IN_API_USER_ID_DESCRIPTION = (
-    "The unique ID of the logged-in user. Always set from 2026-11-11, when "
-    "/api/duckdb began requiring login. Older rows from anonymous requests (bots and "
-    "scrapers) have it null."
+    "The unique ID of the logged-in user. Always set now that /api/duckdb requires "
+    "login; older rows from anonymous requests (bots and scrapers) have it null."
 )
 
 REQUIRED_SINCE_NOTE = (
-    "Set on every row built from the raw logs we still have (2026-05-16 on); older "
-    "partitions can't be rebuilt and may have it null."
+    "Always set in recent data; older partitions can't be rebuilt and may have it null."
 )
 LOGGED_IN_USER_DOMAIN_DESCRIPTION = (
     "User's email domain - the part of a user's email address that follows the '@' "

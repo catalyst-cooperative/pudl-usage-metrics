@@ -905,7 +905,7 @@ def test_logged_in_duckdb_events_keep_only_the_grid_params(asset):
 
 
 def test_logged_in_bigint_filter_is_kept():
-    """AG Grid v36 reports integer columns as ``bigint``; that is a valid filter."""
+    """AG Grid reports integer columns as ``bigint``; that is a valid filter."""
     params = {
         **_GRID_PARAMS,
         "filters": [{**_FILTER, "fieldType": "bigint"}],
