@@ -31,20 +31,52 @@ PARTITION_KEY_DESCRIPTION = (
 )
 VERSION_DESCRIPTION = "The version of the PUDL database (e.g., stable, nightly, 2026.1) accessed by a user."
 
+ANONYMOUS_USER_ID_DESCRIPTION = (
+    "The unique ID of the logged-in user. Null for anonymous visitors. Implemented "
+    "09-2025."
+)
+LOGGED_IN_USER_ID_DESCRIPTION = (
+    "The unique ID of the logged-in user. Always set, because only logged-in users "
+    "can do this."
+)
+LOGGED_IN_API_USER_ID_DESCRIPTION = (
+    "The unique ID of the logged-in user. Always set from 2026-11-11, when "
+    "/api/duckdb began requiring login. Older rows from anonymous requests (bots and "
+    "scrapers) have it null."
+)
+
+REQUIRED_SINCE_NOTE = (
+    "Set on every row built from the raw logs we still have (2026-05-16 on); older "
+    "partitions can't be rebuilt and may have it null."
+)
+LOGGED_IN_USER_DOMAIN_DESCRIPTION = (
+    "User's email domain - the part of a user's email address that follows the '@' "
+    "symbol. " + REQUIRED_SINCE_NOTE
+)
+LOGGED_IN_SESSION_ID_DESCRIPTION = (
+    "A session ID for a logged in user. A new session is created after a user has "
+    "been inactive for 30 minutes. " + REQUIRED_SINCE_NOTE
+)
+
 
 def _column(
-    name: str, dtype: type, description: str, pattern: str | None = None
+    name: str,
+    dtype: type,
+    description: str,
+    pattern: str | None = None,
+    nullable: bool = True,
 ) -> pandera.Column:
-    """Build a nullable pandera Column with a description and optional pattern.
+    """Build a pandera Column with a description and optional pattern.
 
-    Columns are nullable unless they are part of a primary key; see
-    :func:`_table_schema`.
+    Columns are nullable unless ``nullable=False`` or they are part of a primary key;
+    see :func:`_table_schema`.
 
     Args:
         name: The column name.
         dtype: The column type.
         description: The column description.
         pattern: A regular expression that every non-null value must match in full.
+        nullable: Whether the column may contain nulls.
     """
     checks = None
     if pattern is not None:
@@ -52,7 +84,7 @@ def _column(
         # pattern's top-level alternatives, so anchor and group them here.
         checks = pandera.Check.str_matches(f"^(?:{pattern})$")
     return pandera.Column(
-        dtype, name=name, nullable=True, description=description, checks=checks
+        dtype, name=name, nullable=nullable, description=description, checks=checks
     )
 
 
@@ -1070,7 +1102,7 @@ core_eel_hole_searches = _table_schema(
         _column(
             name="user_id",
             dtype=str,
-            description="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+            description=ANONYMOUS_USER_ID_DESCRIPTION,
         ),
         _column(
             name="user_domain",
@@ -1109,12 +1141,14 @@ _eel_hole_preview_columns = [
     _column(
         name="user_id",
         dtype=str,
-        description="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+        description=LOGGED_IN_API_USER_ID_DESCRIPTION,
+        nullable=False,
     ),
     _column(
         name="user_domain",
         dtype=str,
-        description="User's email domain - the part of a user's email address that follows the '@' symbol.",
+        description=LOGGED_IN_USER_DOMAIN_DESCRIPTION,
+        nullable=False,
     ),
     _column(
         name="timestamp",
@@ -1139,8 +1173,8 @@ _eel_hole_preview_columns = [
         description=(
             "The filters a user applied to the query, as a JSON array with one object "
             "per filter, in the order they were applied. Each object has the keys "
-            "field_name (the variable being filtered), field_type (text, number or "
-            "date), operation (e.g. equals, contains, greaterThan, inRange), value "
+            "field_name (the variable being filtered), field_type (text, number, "
+            "bigint or date), operation (e.g. equals, contains, greaterThan, inRange), value "
             "(e.g. 2017, 'natural gas') and value_to (the upper bound of an inRange "
             "filter). Null when the query had no filters."
         ),
@@ -1148,15 +1182,12 @@ _eel_hole_preview_columns = [
     _column(
         name="session_id",
         dtype=str,
-        description="A session ID for a logged in user. A new session is created after a user has been inactive for 30 minutes.",
+        description=LOGGED_IN_SESSION_ID_DESCRIPTION,
+        nullable=False,
     ),
     _column(name="partition_key", dtype=str, description=PARTITION_KEY_DESCRIPTION),
 ]
-"""Columns shared by core_eel_hole_previews and core_eel_hole_downloads.
-
-Rather than specifying these columns twice, we define them once and use the list for
-both tables. This avoids duplication and keeps the two tables consistent.
-"""
+"""Columns shared by core_eel_hole_{previews,downloads,duckdb_other}."""
 
 core_eel_hole_previews = _table_schema(
     name="core_eel_hole_previews",
@@ -1186,12 +1217,14 @@ core_eel_hole_user_settings_updates = _table_schema(
         _column(
             name="user_id",
             dtype=str,
-            description="The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+            description=LOGGED_IN_USER_ID_DESCRIPTION,
+            nullable=False,
         ),
         _column(
             name="user_domain",
             dtype=str,
-            description="User's email domain - the part of a user's email address that follows the '@' symbol.",
+            description=LOGGED_IN_USER_DOMAIN_DESCRIPTION,
+            nullable=False,
         ),
         _column(
             name="timestamp",
@@ -1245,7 +1278,8 @@ core_eel_hole_table_views = _table_schema(
         _column(
             "user_id",
             str,
-            "The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+            LOGGED_IN_USER_ID_DESCRIPTION,
+            nullable=False,
         ),
         _column(
             "user_domain",
@@ -1302,12 +1336,13 @@ core_eel_hole_verify_email_requests = _table_schema(
         _column(
             "user_id",
             str,
-            "The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+            ANONYMOUS_USER_ID_DESCRIPTION,
         ),
         _column(
             "user_domain",
             str,
-            "User's email domain - the part of a user's email address that follows the '@' symbol.",
+            LOGGED_IN_USER_DOMAIN_DESCRIPTION,
+            nullable=False,
         ),
         _column(
             "timestamp",
@@ -1332,12 +1367,14 @@ _eel_hole_verify_email_failure_columns = [
     _column(
         "user_id",
         str,
-        "The unique ID identifying a logged-in user's activity. Implemented 09-2025.",
+        LOGGED_IN_USER_ID_DESCRIPTION,
+        nullable=False,
     ),
     _column(
         "user_domain",
         str,
-        "User's email domain - the part of a user's email address that follows the '@' symbol.",
+        LOGGED_IN_USER_DOMAIN_DESCRIPTION,
+        nullable=False,
     ),
     _column(
         "timestamp",

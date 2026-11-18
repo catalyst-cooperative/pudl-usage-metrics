@@ -76,11 +76,15 @@ def test_table_is_stored_and_read_back_with_the_types_of_its_schema(
     with its nulls where they were and its values unchanged.
     """
     schema = usage_metrics_schemas[table_name]
-    # Two rows: one of distinct values, and one with every non-key column null.
+    # Two rows. Key columns get distinct values, columns that can't be null get the
+    # same non-null value twice, and every other column is null in the second row.
     key = set(schema.unique or [])
+    required = {name for name, column in schema.columns.items() if not column.nullable}
     df = pd.DataFrame(
         {
-            name: column if name in key else [column[0], None]
+            name: column
+            if name in key
+            else [column[0], column[0] if name in required else None]
             for name, column in distinct_values(schema).items()
         }
     )
