@@ -74,12 +74,19 @@ SCHEMA_DRIFT_TOLERANCE = 0.01
 raises an ERROR, with a minimum tolerance of 5 failed events."""
 
 
-_EVENT_SLUG = re.compile(r"[a-z][a-z0-9_-]{0,40}\Z")
-"""What a real ``jsonPayload.event`` looks like (a lower-case identifier).
+_EVENT_SLUG = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
+"""What a real ``jsonPayload.event`` looks like (a lower-case identifier of at most
+64 characters; the limit is a loose sanity bound, not derived from anything -- the
+longest real event is 33).
 
 eel-hole uses structlog, where ``event`` is the log message: analytics events
 are slugs (``search``, ``preview``, ``duckdb_csv``), operational log lines are
 prose (``"Loading prebuilt search index from ..."``). We only keep slugs."""
+
+_EVENT_SLUG_ANY_CASE = re.compile(_EVENT_SLUG.pattern, re.IGNORECASE)
+"""A slug ignoring case. A non-slug ``event`` that matches this differs from a real
+slug only by case (``Preview``, ``DuckDB_Preview``), so it is almost certainly a
+renamed analytics event rather than prose. Those are reported, not silently dropped."""
 
 
 def json_string_to_list(value: Any):
@@ -248,14 +255,15 @@ def payload_is_event(value: Any) -> bool:
 
 
 class EelHoleLogs(BaseModel):
-    """Expected format of eel hole logs."""
+    """The fields of a GCP Cloud Run log entry that we use.
+
+    Everything else GCP sends (``labels``, ``resource``, ``logName``,
+    ``receiveTimestamp``) is ignored, so a change to that metadata can't break a run.
+    A change to the fields below fails validation.
+    """
 
     insert_id: str
     json_payload: JsonPayload | None = None
-    labels: dict[str, str]
-    log_name: str
-    receive_timestamp: datetime.datetime
-    resource: dict[str, str | dict[str, str]]
     timestamp: datetime.datetime
     text_payload: str | None = None
 
@@ -319,6 +327,7 @@ def _coverage_report(
     routed: Counter,
     unrouted: dict[str, list[dict]],
     malformed: list[dict],
+    case_variants: Counter | None = None,
 ) -> str:
     """A copy-paste-actionable summary of the coverage gap.
 
@@ -379,6 +388,16 @@ def _coverage_report(
                 f"    sample: {sample}",
             ]
 
+    if case_variants:
+        lines += [
+            "",
+            "  Events DROPPED because their name isn't a lower-case slug, though it",
+            "  differs from one only by case (a renamed analytics event?):",
+            f"  {_event_summary(case_variants, total)}",
+            "  eel-hole event names must match [a-z][a-z0-9_-]{0,63}: fix the name",
+            "  in eel-hole, or handle the new naming here.",
+        ]
+
     lines += [
         "",
         f"  Routed OK: {_event_summary(routed, total)}",
@@ -432,6 +451,43 @@ def _unmodeled_params_metadata(
     return {"events_with_unmodeled_params": events, "unmodeled_param_keys": summary}
 
 
+def _classify_events(
+    rows: list[dict], models: list[dict]
+) -> tuple[Counter, dict[str, list[dict]], list[dict], int, Counter]:
+    """Sort slug events into routed, unrouted and malformed.
+
+    Returns ``(routed, unrouted, malformed, non_slug_nulled, case_variants)``; the last
+    two count non-slug events whose payload was nulled, and those that differ from a
+    slug only by case.
+    """
+    routed: Counter = Counter()
+    unrouted: dict[str, list[dict]] = {}
+    malformed: list[dict] = []
+    non_slug_nulled = 0
+    case_variants: Counter = Counter()
+
+    for row, model in zip(rows, models, strict=True):
+        payload = row.get("jsonPayload")
+        if not isinstance(payload, dict) or not isinstance(payload.get("event"), str):
+            continue
+        event = payload["event"]
+        if event in IGNORED_EVENT_TYPES:
+            continue
+        if not _EVENT_SLUG.match(event):
+            if model["json_payload"] is None:
+                non_slug_nulled += 1
+                if _EVENT_SLUG_ANY_CASE.match(event):
+                    case_variants[event] += 1
+            continue
+        if model["json_payload"] is None:
+            malformed.append(payload)
+        elif event in ROUTED_EVENT_TYPES:
+            routed[event] += 1
+        else:
+            unrouted.setdefault(event, []).append(payload)
+    return routed, unrouted, malformed, non_slug_nulled, case_variants
+
+
 def _event_coverage_check(
     context: AssetExecutionContext, rows: list[dict], models: list[dict]
 ) -> AssetCheckResult:
@@ -444,6 +500,9 @@ def _event_coverage_check(
 
     * events parsed but not in ``ROUTED_EVENT_TYPES`` -> WARN outside ``prod``,
       ERROR (blocking) in ``prod`` -- see ``_strict_coverage``.
+    * a non-slug event name that differs from a slug only by case (``Preview``): the
+      event is dropped, so it is reported like an unrouted event (WARN outside
+      ``prod``, ERROR in ``prod``).
     * slug events that failed to parse at all (bad/missing ``timestamp``, non-str
       ``event``, ...), above ``SCHEMA_DRIFT_TOLERANCE`` -> always **ERROR**
       (blocking): the log *format* broke, which is never fine to ride out.
@@ -452,28 +511,9 @@ def _event_coverage_check(
     reviewing the GHA run has the event names, field surface, and samples.
     """
     partition_key = context.partition_key
-    routed: Counter = Counter()
-    unrouted: dict[str, list[dict]] = {}
-    malformed: list[dict] = []
-    non_slug_nulled = 0
-
-    for row, model in zip(rows, models, strict=True):
-        payload = row.get("jsonPayload")
-        if not isinstance(payload, dict) or not isinstance(payload.get("event"), str):
-            continue
-        event = payload["event"]
-        if event in IGNORED_EVENT_TYPES:
-            continue
-        if not _EVENT_SLUG.match(event):
-            if model["json_payload"] is None:
-                non_slug_nulled += 1
-            continue
-        if model["json_payload"] is None:
-            malformed.append(payload)
-        elif event in ROUTED_EVENT_TYPES:
-            routed[event] += 1
-        else:
-            unrouted.setdefault(event, []).append(payload)
+    routed, unrouted, malformed, non_slug_nulled, case_variants = _classify_events(
+        rows, models
+    )
 
     total = (
         sum(routed.values()) + sum(len(v) for v in unrouted.values()) + len(malformed)
@@ -490,11 +530,14 @@ def _event_coverage_check(
         "unrouted_pct": (round(100 * unrouted_n / total, 1) if total else 0.0),
         "malformed_slug_events": len(malformed),
         "non_slug_payloads_nulled": non_slug_nulled,
+        "case_variant_events_dropped": sum(case_variants.values()),
         **_unmodeled_params_metadata(context, rows, models, total),
     }
 
     if malformed_over_tol:
-        report = _coverage_report(partition_key, total, routed, unrouted, malformed)
+        report = _coverage_report(
+            partition_key, total, routed, unrouted, malformed, case_variants
+        )
         context.log.error(report)
         return AssetCheckResult(
             check_name=EEL_HOLE_EVENT_COVERAGE_CHECK,
@@ -508,18 +551,30 @@ def _event_coverage_check(
             metadata={**metadata, "report": report},
         )
 
-    if unrouted:
+    if unrouted or case_variants:
         strict = _strict_coverage()
-        report = _coverage_report(partition_key, total, routed, unrouted, malformed)
+        report = _coverage_report(
+            partition_key, total, routed, unrouted, malformed, case_variants
+        )
         (context.log.error if strict else context.log.warning)(report)
+        gaps = []
+        if unrouted:
+            gaps.append(
+                f"NOT persisting {_n_pct(unrouted_n, total)} of eel-hole events "
+                f"({metadata['unrouted_events']}) -- add a core_eel_hole_* table"
+            )
+        if case_variants:
+            gaps.append(
+                f"dropped {sum(case_variants.values())} events whose names differ "
+                f"from a lower-case slug only by case ({', '.join(case_variants)})"
+            )
         return AssetCheckResult(
             check_name=EEL_HOLE_EVENT_COVERAGE_CHECK,
             passed=False,
             severity=AssetCheckSeverity.ERROR if strict else AssetCheckSeverity.WARN,
             description=(
-                f"{partition_key}: NOT persisting {_n_pct(unrouted_n, total)} of "
-                f"eel-hole events ({metadata['unrouted_events']}) -- coverage gap, "
-                "add a core_eel_hole_* table"
+                f"{partition_key}: "
+                + "; ".join(gaps)
                 + ("." if strict else " (non-fatal).")
                 + " See the 'report' metadata below for the full breakdown."
             ),
@@ -563,11 +618,17 @@ def _core_eel_hole_logs(
     # to_dict()'s declared return type keys columns as Hashable (the general case
     # for a DataFrame index/columns), but our columns are always strings.
     rows = cast("list[dict[str, Any]]", raw_eel_hole_logs.to_dict(orient="records"))
-    models = [EelHoleLogs(**row).model_dump() for row in rows]
+    # The payload's own timestamp is the least complete, so we keep the log entry's
+    # ``timestamp`` (https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry).
+    models = [
+        EelHoleLogs(**row).model_dump(exclude={"json_payload": {"timestamp"}})
+        for row in rows
+    ]
 
     converted_df = pd.json_normalize(models, sep="_")
-    # Drop the columns for nested structures that json_normalize exploded (or, for
-    # a partition with no parseable payloads at all, never expanded).
+    # Drop the columns for nested structures that json_normalize exploded. Whether
+    # they exist depends on the day's data (a partition with no parseable payloads
+    # never expands them), not on GCP's schema.
     converted_df = converted_df.drop(
         columns=["json_payload", "json_payload_params"], errors="ignore"
     )
@@ -580,31 +641,6 @@ def _core_eel_hole_logs(
         for field in JsonPayload.model_fields:
             if field not in ("timestamp", "params"):
                 converted_df[f"json_payload_{field}"] = pd.NA
-
-    # Also drop some columns that just provide constant metadata about the GCS
-    # logging instance. errors="ignore": the resource/labels shape depends on the
-    # deployment and GCP's logging schema, neither of which we control.
-    converted_df = converted_df.drop(
-        columns=[
-            "log_name",
-            "labels_instanceId",
-            "resource_type",
-            "resource_labels_configuration_name",
-            "resource_labels_location",
-            "resource_labels_project_id",
-            "resource_labels_revision_name",
-            "resource_labels_service_name",
-        ],
-        errors="ignore",
-    )
-
-    # JSON payload timestamp is least complete, and receive timestamp just
-    # tells us when the cloud run server received the sent logs (not that interesting).
-    # These vary by sub-seconds, so we'll just pick the standard 'timestamp'.
-    # See https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry#FIELDS.timestamp
-    converted_df = converted_df.drop(
-        columns=["json_payload_timestamp", "receive_timestamp"], errors="ignore"
-    )
 
     # The filters are a list of dictionaries of unbounded length, so rather than
     # spreading them over numbered columns we keep each query's list as one JSON

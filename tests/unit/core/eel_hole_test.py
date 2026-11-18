@@ -10,6 +10,7 @@ import pytest
 from dagster import AssetCheckResult, Output, build_asset_context
 
 from usage_metrics.core.eel_hole import (
+    _EVENT_SLUG,
     EEL_HOLE_EVENT_COVERAGE_CHECK,
     PARAM_COLUMNS,
     EelHoleLogs,
@@ -443,6 +444,73 @@ def test_coverage_check_unrouted_event_blocks_in_prod(monkeypatch):
     result = _coverage(rows)
     assert result.passed is False
     assert result.severity.value == "ERROR"  # blocking, unlike the non-prod default
+
+
+@pytest.mark.parametrize("name", ["Preview", "DuckDB_Preview", "Search_Results"])
+def test_coverage_check_flags_events_that_differ_from_a_slug_only_by_case(name):
+    """A capitalized event name is dropped, but never silently."""
+    rows = [
+        _record("s1", event="search", user_id="u"),
+        _record("c1", payload={"event": name, "timestamp": TS}),
+        _record("c2", payload={"event": name, "timestamp": TS}),
+    ]
+    result = _coverage(rows)
+
+    assert result.passed is False
+    assert result.severity.value == "WARN"  # non-fatal outside prod, like unrouted
+    assert result.metadata["case_variant_events_dropped"].value == 2
+    assert name in cast(str, result.description)
+    assert "differs from one only by case" in cast(str, result.metadata["report"].value)
+
+
+def test_coverage_check_case_variant_event_blocks_in_prod(monkeypatch):
+    monkeypatch.setenv("METRICS_PROD_ENV", "prod")
+    rows = [_record("c1", payload={"event": "Preview", "timestamp": TS})]
+    assert _coverage(rows).severity.value == "ERROR"
+
+
+def test_event_slug_length_limit_is_64_characters():
+    assert _EVENT_SLUG.match("a" * 64)
+    assert not _EVENT_SLUG.match("a" * 65)
+
+
+@pytest.mark.parametrize(
+    "event",
+    [
+        "Loading prebuilt search index from .search-index",
+        "user.login",
+        "x" * 80,
+    ],
+)
+def test_coverage_check_does_not_flag_prose_as_case_variants(event):
+    """Names with spaces, other punctuation or a long length aren't event-like."""
+    rows = [_record("p1", payload={"event": event, "timestamp": TS})]
+    result = _coverage(rows)
+
+    assert result.passed is True
+    assert result.metadata["case_variant_events_dropped"].value == 0
+    assert result.metadata["non_slug_payloads_nulled"].value == 1
+
+
+def test_gcp_metadata_we_do_not_use_cannot_break_a_run():
+    """Only insertId, timestamp, jsonPayload and textPayload are modeled."""
+    record = _record("a", event="search", user_id="u")
+    record["labels"] = {"commit-sha": "abc", "count": 3, "nested": {"a": 1}}
+    record["resource"] = "unexpected shape"
+    del record["logName"], record["receiveTimestamp"]
+    record["somethingGcpAdded"] = {"x": 1}
+
+    out = _run(pd.DataFrame([record]))
+
+    assert list(out["insert_id"]) == ["a"]
+    assert not any(str(c).startswith(("labels", "resource", "log_name")) for c in out)
+
+
+def test_log_entry_fields_we_use_are_still_required():
+    record = _record("a", event="search", user_id="u")
+    del record["insertId"]
+    with pytest.raises(ValueError, match="insert_id|insertId"):
+        EelHoleLogs(**record)
 
 
 def test_coverage_check_errors_when_slug_events_fail_to_parse():
