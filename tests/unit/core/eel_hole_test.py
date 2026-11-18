@@ -720,7 +720,7 @@ def test_core_eel_hole_table_views_selects_preview_fields():
                     "event": "preview",
                     "timestamp": TS,
                     "package": "pudl",
-                    "tableName": "core_eia860__cooling_equipment",
+                    "table_name": "core_eia860__cooling_equipment",
                     "partition": None,
                 },
             ),
@@ -730,7 +730,7 @@ def test_core_eel_hole_table_views_selects_preview_fields():
                     "event": "preview",
                     "timestamp": TS,
                     "package": "ferceqr",
-                    "tableName": "out_ferceqr__yearly_projections",
+                    "table_name": "out_ferceqr__yearly_projections",
                     "partition": "2024q1",
                 },
             ),
@@ -780,7 +780,7 @@ def test_core_eel_hole_verify_email_requests_selects_matching_rows():
                 payload={
                     "event": "verify-email-requested",
                     "timestamp": TS,
-                    "userId": "u1",
+                    "user_id": "u1",
                 },
             ),
         ]
@@ -800,7 +800,7 @@ def test_core_eel_hole_verify_email_failures_selects_matching_rows():
                 payload={
                     "event": "verify-email-failed",
                     "timestamp": TS,
-                    "statusCode": 502,
+                    "status_code": 502,
                 },
             ),
         ]
@@ -820,8 +820,8 @@ def test_core_eel_hole_email_verification_refresh_failures_selects_matching_rows
                 payload={
                     "event": "refresh-email-verification-failed",
                     "timestamp": TS,
-                    "statusCode": 502,
-                    "userId": "u1",
+                    "status_code": 502,
+                    "user_id": "u1",
                 },
             ),
         ]

@@ -40,11 +40,12 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
     "verify-email-failed": frozenset({"status_code"}),
     "refresh-email-verification-failed": frozenset({"status_code"}),
 }
-"""Each routed ``jsonPayload.event`` and the fields the viewer always logs with it.
+"""The events that have a ``core_eel_hole_*`` table, and the fields the viewer always
+logs with each.
 
 A field may be null but must be present: a missing one means the viewer's logging
-changed, and fails the coverage check. Add an entry only alongside a new downstream
-table."""
+changed, and fails the coverage check. An event not listed here is reported by the
+coverage check as unrouted, so add it here together with the table that persists it."""
 
 ALWAYS_LOGGED_FIELDS = frozenset({"user_id", "user_domain"})
 """Fields the viewer logs with every event, null for anonymous visitors."""
@@ -152,7 +153,8 @@ class DuckDBFilters(BaseModel):
     value: str | int | float | bool | None = None
     value_to: str | int | float | bool | None = None
 
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    # AG Grid sends camelCase keys; the attributes are snake_case, so alias them.
+    model_config = ConfigDict(alias_generator=to_camel)
 
 
 def filters_to_json(filters: Any) -> str | None:
@@ -177,9 +179,8 @@ class DuckDBParams(BaseModel):
     page: int | None = None
     per_page: int | None = None
 
-    model_config = ConfigDict(
-        alias_generator=to_camel, populate_by_name=True, extra="forbid"
-    )
+    # AG Grid sends camelCase keys; the attributes are snake_case, so alias them.
+    model_config = ConfigDict(alias_generator=to_camel, extra="forbid")
 
 
 class JsonPayload(BaseModel):
@@ -213,7 +214,8 @@ class JsonPayload(BaseModel):
     next_url: str | None = None
     is_new_user: bool | None = None
 
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    # The viewer logs its own fields in snake_case, so no aliases here, unlike the
+    # models for what GCP and AG Grid send. Only the spelling it logs is accepted.
 
     @field_validator("*", mode="before")
     def replace_na_with_none(cls, value):  # noqa: N805
@@ -291,7 +293,8 @@ class EelHoleLogs(BaseModel):
             return value
         return None
 
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    # GCP names its log-entry keys in camelCase; alias them to the snake_case fields.
+    model_config = ConfigDict(alias_generator=to_camel)
 
 
 def _missing_fields(payload: dict) -> frozenset[str]:
