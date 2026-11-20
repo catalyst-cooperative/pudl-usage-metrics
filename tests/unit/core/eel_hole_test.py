@@ -9,10 +9,14 @@ import pandas as pd
 import pytest
 from dagster import AssetCheckResult, Output, build_asset_context
 
+from usage_metrics.core import eel_hole as eel_hole_module
 from usage_metrics.core.eel_hole import (
     _EVENT_SLUG,
+    ALWAYS_LOGGED_FIELDS,
     EEL_HOLE_EVENT_COVERAGE_CHECK,
+    EVENT_FIELDS,
     PARAM_COLUMNS,
+    ROUTED_EVENT_TYPES,
     EelHoleLogs,
     _core_eel_hole_logs,
     _coverage_report,
@@ -20,12 +24,14 @@ from usage_metrics.core.eel_hole import (
     core_eel_hole_downloads,
     core_eel_hole_duckdb_other,
     core_eel_hole_email_verification_refresh_failures,
+    core_eel_hole_log_ins,
     core_eel_hole_previews,
     core_eel_hole_table_views,
     core_eel_hole_verify_email_failures,
     core_eel_hole_verify_email_requests,
     payload_is_event,
 )
+from usage_metrics.models import usage_metrics_schemas
 
 PARTITION = "2026-09-06"
 TS = "2026-09-06T00:00:00Z"
@@ -80,6 +86,7 @@ def _record(
     text_payload: str | None = None,
     payload=_UNSET,
     timestamp: str = TS,
+    fill_fields: bool = True,
 ) -> dict:
     """Build a raw eel-hole log record shaped like the extractor output.
 
@@ -89,11 +96,19 @@ def _record(
     if payload is _UNSET:
         payload: dict[str, Any] = {"event": event, "timestamp": timestamp}
         if user_id is not None:
-            payload["userId"] = user_id
+            payload["user_id"] = user_id
         if event == "search":
             payload["url"] = "/search?q=coal"
         if params is not None:
             payload["params"] = params
+    if (
+        fill_fields
+        and isinstance(payload, dict)
+        and payload.get("event") in EVENT_FIELDS
+    ):
+        # Real logs carry every field of an event, null when it has no value.
+        for field in EVENT_FIELDS[payload["event"]] | ALWAYS_LOGGED_FIELDS:
+            payload.setdefault(field, None)
     return {
         "insertId": insert_id,
         "jsonPayload": payload,
@@ -145,9 +160,10 @@ _IS_EVENT = [
         {
             "event": "duckdb_other",
             "timestamp": TS,
+            "user_id": "u",
             "params": {"filters": "[]", "name": "x", "page": "1", "perPage": "10"},
         },
-        id="new-duckdb_other-event",
+        id="logged-in-duckdb_other-event",
     ),
     pytest.param(
         {"event": "verify-email-failed", "timestamp": TS, "status_code": 500},
@@ -159,8 +175,27 @@ _IS_EVENT = [
         id="partial-params",
     ),
     pytest.param(
-        {"event": "duckdb_preview", "timestamp": TS, "params": {"table": "x"}},
-        id="reshaped-params",
+        {
+            "event": "duckdb_preview",
+            "timestamp": TS,
+            "user_id": "u",
+            "params": {"name": "x.parquet"},
+        },
+        id="logged-in-partial-duckdb-params",
+    ),
+    pytest.param(
+        {
+            "event": "duckdb_csv",
+            "timestamp": TS,
+            "user_id": "u",
+            "params": {
+                "name": "x.parquet",
+                "filters": json.dumps([{**_FILTER, "fieldType": "bigint"}]),
+                "page": "1",
+                "perPage": "1000000",
+            },
+        },
+        id="bigint-filter",
     ),
     pytest.param(
         {"event": "search", "timestamp": TS, "params": _PARAMS_WITH_FILTERS},
@@ -187,6 +222,41 @@ _NOT_EVENT = [
         id="prose-event",
     ),
     pytest.param({"event": "PageView", "timestamp": TS}, id="capitalized-event"),
+    pytest.param(
+        {"event": "duckdb_preview", "timestamp": TS, "params": {"table": "x"}},
+        id="anonymous-duckdb-event",
+    ),
+    pytest.param(
+        {
+            "event": "duckdb_preview",
+            "timestamp": TS,
+            "user_id": "u",
+            "params": {"name": "x.parquet", "sql": "SELECT 1"},
+        },
+        id="logged-in-duckdb-unexpected-param-key",
+    ),
+    pytest.param(
+        {
+            "event": "duckdb_preview",
+            "timestamp": TS,
+            "user_id": "u",
+            "params": {
+                "filters": json.dumps([{**_FILTER, "fieldType": "string"}]),
+            },
+        },
+        id="logged-in-duckdb-unknown-field-type",
+    ),
+    pytest.param(
+        {
+            "event": "duckdb_preview",
+            "timestamp": TS,
+            "user_id": "u",
+            "params": {
+                "filters": json.dumps([{**_FILTER, "operation": "inrange"}]),
+            },
+        },
+        id="logged-in-duckdb-wrong-case-operation",
+    ),
     pytest.param({"event": "search", "timestamp": "not-a-date"}, id="bad-timestamp"),
     pytest.param(
         {"event": "search", "timestamp": TS, "params": {"filters": "nonsense"}},
@@ -236,7 +306,7 @@ def test_handles_partition_with_no_search_filters():
 
     ``pd.json_normalize`` only emits the ``json_payload_params_filters`` column
     when at least one record has search filters, so the transform must not
-    assume that column exists.
+    assume that column exists, and adds it as null instead.
     """
     raw = pd.DataFrame(
         [
@@ -248,7 +318,29 @@ def test_handles_partition_with_no_search_filters():
     out = _run(raw)
 
     assert sorted(out["insert_id"]) == ["a", "b"]
-    assert not any("filters" in col for col in out.columns)
+    assert out["params_filters"].isna().all()
+
+
+@pytest.mark.parametrize(
+    "table_name", [t for t in usage_metrics_schemas if t.startswith("core_eel_hole_")]
+)
+def test_every_table_has_exactly_the_columns_of_its_schema(table_name):
+    """An asset must produce each schema column, even for a day without its events.
+
+    The IO manager fills in a column the asset doesn't produce, with nulls, so a
+    column missing from the asset would otherwise pass silently. The raw data has no
+    duckdb request at all, so none of the optional ``params_*`` columns exist.
+    """
+    asset_fn = getattr(eel_hole_module, table_name, None)
+    if asset_fn is None:  # the schema of a table whose asset was removed
+        pytest.skip(f"no asset for {table_name}")
+    core = _run(pd.DataFrame([_record("a", event="search", user_id="user-1")]))
+
+    out = asset_fn(_ctx(), core)
+
+    assert set(out.columns) | {"partition_key"} == set(
+        usage_metrics_schemas[table_name].columns
+    )
 
 
 def test_keeps_any_number_of_filters_as_one_json_column():
@@ -366,22 +458,35 @@ def test_partition_with_no_events_returns_empty():
     assert _run(raw).empty
 
 
-def test_synthesizes_log_in_from_callback_text_payload():
-    """A callback hit (text payload only, no JSON payload) becomes a log_in row."""
+def test_log_in_events_become_log_in_rows():
+    """eel-hole's ``log_in`` event carries who logged in and where they were going."""
     raw = pd.DataFrame(
         [
             _record(
                 "login",
-                payload=None,
-                text_payload="https://viewer.catalyst.coop/callback?next=/search?q%3Dcoal",
+                payload={
+                    "event": "log_in",
+                    "timestamp": TS,
+                    "user_id": "u1",
+                    "user_domain": "example.org",
+                    "next_url": "/preview/pudl/core_eia__entity_plants",
+                    "is_new_user": True,
+                },
             ),
+            _record("other", event="search", user_id="u1"),
         ]
     )
 
-    out = _run(raw)
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_log_ins(_ctx(), core_logs))
 
-    assert list(out["event"]) == ["log_in"]
-    assert out.loc[0, "log_in_query"] == "coal"
+    assert list(out["insert_id"]) == ["login"]
+    row = out.iloc[0]
+    assert (row["user_id"], row["user_domain"]) == ("u1", "example.org")
+    assert row["next_url"] == "/preview/pudl/core_eia__entity_plants"
+    assert bool(row["is_new_user"]) is True
+    assert row["session_id"] == f"{PARTITION}-s1"
+    assert _check(raw).passed is True
 
 
 # --- _event_coverage_check -----------------------------------------------
@@ -529,6 +634,63 @@ def test_coverage_check_errors_when_slug_events_fail_to_parse():
     assert "EEL-HOLE EVENT COVERAGE" in cast(str, result.metadata["report"].value)
 
 
+def test_a_single_unparseable_event_is_an_error_however_much_else_is_healthy():
+    """We control the logger, so there is no tolerance for events we can't parse."""
+    rows = [_record(f"ok{i}", event="search", user_id="u") for i in range(500)]
+    rows.append(_record("bad", payload={"event": "search", "timestamp": "not-a-date"}))
+    result = _coverage(rows)
+
+    assert result.passed is False
+    assert result.severity.value == "ERROR"
+    assert result.metadata["malformed_slug_events"].value == 1
+
+
+def test_an_event_missing_a_field_eel_hole_always_logs_is_an_error():
+    """A key may be null but must be present: absence means the logger changed."""
+    complete = _record("ok", event="preview", user_id="u")
+    incomplete = _record(
+        "bad",
+        payload={"event": "preview", "timestamp": TS, "package": "pudl"},
+        fill_fields=False,
+    )
+    result = _coverage([complete, incomplete])
+
+    assert result.passed is False
+    assert result.severity.value == "ERROR"
+    assert result.metadata["malformed_slug_events"].value == 1
+    report = cast(str, result.metadata["report"].value)
+    assert "missing fields: partition, table_name, user_domain, user_id" in report
+
+
+def test_an_event_with_a_field_eel_hole_doesnt_log_is_an_error():
+    """A new key on a routed event means the logger changed, so say so loudly."""
+    complete = _record("ok", event="search", user_id="u")
+    extra = _record(
+        "bad",
+        payload={"event": "search", "timestamp": TS, "referrer": "https://x.org"},
+    )
+    result = _coverage([complete, extra])
+
+    assert result.passed is False
+    assert result.severity.value == "ERROR"
+    assert result.metadata["malformed_slug_events"].value == 1
+    report = cast(str, result.metadata["report"].value)
+    assert "unexpected fields: referrer" in report
+
+
+def test_null_event_fields_are_fine():
+    """``query`` and ``partition`` are legitimately null; only absence is an error."""
+    rows = [
+        _record("s", event="search", user_id="u"),
+        _record("p", event="preview", user_id="u"),
+    ]
+    assert _coverage(rows).passed is True
+
+
+def test_every_routed_event_has_a_field_list():
+    assert set(EVENT_FIELDS) == ROUTED_EVENT_TYPES
+
+
 def test_coverage_report_is_actionable():
     """Each event shows count AND % of the day's traffic, plus keys and a sample."""
     unrouted = {
@@ -570,7 +732,10 @@ def test_coverage_report_shows_malformed_events():
         unrouted={},
         malformed=[{"event": "search", "timestamp": "not-a-date"}],
     )
-    assert "FAILED to parse -- 1 (10%) of events" in report
+    assert (
+        "FAILED to parse or have missing or unexpected fields -- 1 (10%) of events"
+        in report
+    )
     assert "search -- 1 (10%) -- timestamp:" in report
 
 
@@ -598,7 +763,7 @@ def test_core_eel_hole_table_views_selects_preview_fields():
                     "event": "preview",
                     "timestamp": TS,
                     "package": "pudl",
-                    "tableName": "core_eia860__cooling_equipment",
+                    "table_name": "core_eia860__cooling_equipment",
                     "partition": None,
                 },
             ),
@@ -608,7 +773,7 @@ def test_core_eel_hole_table_views_selects_preview_fields():
                     "event": "preview",
                     "timestamp": TS,
                     "package": "ferceqr",
-                    "tableName": "out_ferceqr__yearly_projections",
+                    "table_name": "out_ferceqr__yearly_projections",
                     "partition": "2024q1",
                 },
             ),
@@ -636,6 +801,7 @@ def test_core_eel_hole_duckdb_other_selects_matching_rows():
                 payload={
                     "event": "duckdb_other",
                     "timestamp": TS,
+                    "user_id": "u",
                     "url": "/api/duckdb?perPage=42",
                     "params": {"name": "x", "page": 1, "perPage": 42},
                 },
@@ -657,7 +823,7 @@ def test_core_eel_hole_verify_email_requests_selects_matching_rows():
                 payload={
                     "event": "verify-email-requested",
                     "timestamp": TS,
-                    "userId": "u1",
+                    "user_id": "u1",
                 },
             ),
         ]
@@ -677,7 +843,7 @@ def test_core_eel_hole_verify_email_failures_selects_matching_rows():
                 payload={
                     "event": "verify-email-failed",
                     "timestamp": TS,
-                    "statusCode": 502,
+                    "status_code": 502,
                 },
             ),
         ]
@@ -697,8 +863,8 @@ def test_core_eel_hole_email_verification_refresh_failures_selects_matching_rows
                 payload={
                     "event": "refresh-email-verification-failed",
                     "timestamp": TS,
-                    "statusCode": 502,
-                    "userId": "u1",
+                    "status_code": 502,
+                    "user_id": "u1",
                 },
             ),
         ]
@@ -713,59 +879,129 @@ def test_core_eel_hole_email_verification_refresh_failures_selects_matching_rows
     assert out.iloc[0]["user_id"] == "u1"
 
 
-# --- request params the viewer doesn't send ----------------------------------
+# --- /api/duckdb requests: anonymous = bots, logged in = strict ----------------
 
-_JUNK_PARAMS = {
-    "name": "core_eia860__scd_plants",
+_GRID_PARAMS = {
+    "name": "core_eia860__scd_plants.parquet",
     "page": 1,
     "perPage": 10_000,
     "filters": "[]",
+}
+_JUNK_PARAMS = {
+    **_GRID_PARAMS,
     "sql": "SELECT 1",
     "filters[report_year]": "2024",
     "_method": "POST",
 }
 
 
-def _junk_param_logs() -> pd.DataFrame:
-    """Preview, download and other-sized requests, all with junk params."""
+def _bot_logs() -> pd.DataFrame:
+    """Anonymous duckdb requests of every kind, with junk params."""
     return pd.DataFrame(
         [
             _record("p", event="duckdb_preview", params=_JUNK_PARAMS),
             _record("d", event="duckdb_csv", params=_JUNK_PARAMS),
             _record("o", event="duckdb_other", params=_JUNK_PARAMS),
-            _record("p2", event="duckdb_preview", params=_JUNK_PARAMS),
+            _record("p2", event="duckdb_preview", params={"table": "x"}),
         ]
     )
+
+
+def _logged_in_check(params: dict, event: str = "duckdb_preview") -> AssetCheckResult:
+    return _check(pd.DataFrame([_record("a", event=event, user_id="u", params=params)]))
+
+
+def test_anonymous_duckdb_events_are_ignored_and_counted():
+    """Bot requests reach no output and never fail the check, whatever they send."""
+    raw = pd.concat(
+        [_bot_logs(), pd.DataFrame([_record("s", event="search", user_id="u")])]
+    )
+    core_logs = _run(raw)
+    result = _check(raw)
+
+    assert list(core_logs["insert_id"]) == ["s"]
+    assert result.passed is True
+    assert result.metadata["anonymous_duckdb_events_ignored"].value == 4
+    # Bots are left out of the totals, so they can't change any percentage.
+    assert result.metadata["total_slug_events"].value == 1
 
 
 @pytest.mark.parametrize(
     "asset",
     [core_eel_hole_previews, core_eel_hole_downloads, core_eel_hole_duckdb_other],
 )
-def test_request_params_outside_the_schema_never_become_columns(asset):
-    """Callers can put any key in the query string; only the grid's keys are kept."""
-    core_logs = _run(_junk_param_logs())
-    assert not any(
-        col.startswith("params_") and col not in PARAM_COLUMNS
-        for col in core_logs.columns
+def test_logged_in_duckdb_events_keep_only_the_grid_params(asset):
+    raw = pd.DataFrame(
+        [
+            _record("p", event="duckdb_preview", user_id="u", params=_GRID_PARAMS),
+            _record("d", event="duckdb_csv", user_id="u", params=_GRID_PARAMS),
+            _record("o", event="duckdb_other", user_id="u", params=_GRID_PARAMS),
+        ]
     )
-
+    core_logs = _run(raw)
     out = cast(pd.DataFrame, asset(_ctx(), core_logs))
 
-    assert not out.empty
+    assert len(out) == 1
     assert {c for c in out.columns if c.startswith("params_")} <= set(PARAM_COLUMNS)
-    assert (out["params_name"] == "core_eia860__scd_plants").all()
+    assert (out["params_name"] == _GRID_PARAMS["name"]).all()
+    assert (out["user_id"] == "u").all()
 
 
-def test_unmodeled_request_params_are_counted_not_fatal():
-    """The coverage check reports dropped param keys, without failing the run."""
-    raw = _junk_param_logs()
+def test_logged_in_bigint_filter_is_kept():
+    """AG Grid reports integer columns as ``bigint``; that is a valid filter."""
+    params = {
+        **_GRID_PARAMS,
+        "filters": [{**_FILTER, "fieldType": "bigint"}],
+    }
+    raw = pd.DataFrame(
+        [_record("a", event="duckdb_preview", user_id="u", params=params)]
+    )
+
+    core_logs = _run(raw)
+    out = cast(pd.DataFrame, core_eel_hole_previews(_ctx(), core_logs))
+
+    assert list(out["insert_id"]) == ["a"]
+    assert json.loads(str(out.iloc[0]["params_filters"]))[0]["field_type"] == "bigint"
+    assert _logged_in_check(params).passed is True
+
+
+@pytest.mark.parametrize(
+    ("filter_overrides", "params_overrides"),
+    [
+        pytest.param({"fieldType": "set"}, {}, id="new-grid-filter-type"),
+        pytest.param({"operation": "inrange"}, {}, id="wrong-case-operation"),
+        pytest.param({"operation": "between"}, {}, id="unknown-operation"),
+        pytest.param({}, {"sql": "SELECT 1"}, id="unexpected-param-key"),
+    ],
+)
+def test_single_logged_in_vocabulary_drift_fails_the_check(
+    filter_overrides, params_overrides
+):
+    """One logged-in request outside the AG Grid vocabulary blocks the run."""
+    params = {
+        **_GRID_PARAMS,
+        "filters": [{**_FILTER, **filter_overrides}],
+        **params_overrides,
+    }
+    good = [
+        _record(f"ok{i}", event="duckdb_csv", user_id="u", params=_GRID_PARAMS)
+        for i in range(500)
+    ]  # plenty of healthy traffic: a percentage tolerance would hide the failure
+    raw = pd.DataFrame(
+        [*good, _record("bad", event="duckdb_preview", user_id="u", params=params)]
+    )
 
     result = _check(raw)
 
+    assert result.passed is False
+    assert result.severity.value == "ERROR"
+    assert result.metadata["malformed_slug_events"].value == 1
+    assert "ALLOWABLE_FIELD_TYPES" in cast(str, result.description)
+
+
+def test_missing_params_only_warn():
+    """A bare request (no params) says nothing about AG Grid, so it doesn't fail."""
+    result = _logged_in_check({})
+
     assert result.passed is True
-    metadata = result.metadata
-    assert metadata["events_with_unmodeled_params"].value == 4
-    keys = str(metadata["unmodeled_param_keys"].value)
-    assert "sql×4" in keys
-    assert "filters[report_year]×4" in keys
+    assert result.metadata["duckdb_events_missing_params"].value == 1
