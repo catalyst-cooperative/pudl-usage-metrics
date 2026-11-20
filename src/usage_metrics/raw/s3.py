@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Iterable
+from compression import zstd
 from datetime import date
 from pathlib import Path
 
@@ -17,6 +18,10 @@ from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_S3_LOGS_BUCKET
 from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
+
+ZSTD_LEVEL = 9
+"""zstd level for the compacted artifact: smaller and faster to read than gzip, with
+level 19 offering little further gain for far more compression time."""
 
 # Some clients embed raw, unescaped double quotes inside a quoted field --
 # e.g. pip (>= 20) sends a User-Agent like
@@ -53,6 +58,56 @@ MAX_DROPPED_LINE_FRACTION = 0.001
 def _has_embedded_quotes(line: str) -> bool:
     """Whether any quoted field in this line contains an unescaped quote."""
     return any('"' in field for field in _QUOTED_FIELD.findall(line))
+
+
+class FusedRecordsError(ValueError):
+    """Two log records share one line (a source object lacked a trailing newline)."""
+
+
+def _read_text(path: Path) -> str:
+    """Read a (possibly zstd-compressed) text file, replacing undecodable bytes."""
+    if path.suffix == ".zst":
+        with zstd.open(path, "rt", errors="replace") as f:
+            return f.read()
+    return path.read_text(errors="replace")
+
+
+def _record_signature(first_line: bytes) -> bytes:
+    """The ``<bucket owner> <bucket> `` prefix that starts every log record."""
+    parts = first_line.split(b" ", 2)
+    if len(parts) < 3:
+        raise FusedRecordsError(f"Not a log record: {first_line[:200]!r}")
+    return b" ".join(parts[:2]) + b" "
+
+
+def zstd_with_guard(src: Path, dest: Path) -> int:
+    """Compress ``src`` to ``dest``, checking that each line is exactly one record.
+
+    ``compose()`` concatenates objects with no separator, so an object lacking a
+    trailing newline fuses its last record with the next object's first. A fused
+    line contains the record prefix twice.
+
+    Returns:
+        The number of lines written.
+
+    Raises:
+        FusedRecordsError: If a line doesn't start with the record prefix or
+            contains it more than once. ``dest`` is left partially written.
+    """
+    signature = b""
+    lines = 0
+    with src.open("rb") as raw, zstd.open(dest, "wb", level=ZSTD_LEVEL) as out:
+        for line in raw:
+            signature = signature or _record_signature(line)
+            lines += 1
+            if not line.startswith(signature) or line.count(signature) != 1:
+                raise FusedRecordsError(
+                    f"Line {lines} of {src} is not exactly one log record: "
+                    f"{line[:200]!r}"
+                )
+            out.write(line)
+        out.write(b"")  # An empty file still gets a valid (empty) frame.
+    return lines
 
 
 class S3Extractor(GCSExtractor):
@@ -128,7 +183,7 @@ class S3Extractor(GCSExtractor):
                     missing_columns="insert",
                 )
             if "not properly escaped" in str(e):
-                lines = file_path.read_text(errors="replace").splitlines(keepends=True)
+                lines = _read_text(file_path).splitlines(keepends=True)
                 kept = [line for line in lines if not _has_embedded_quotes(line)]
                 n_dropped = len(lines) - len(kept)
                 fraction = n_dropped / len(lines)
