@@ -1,23 +1,41 @@
 """Extract data from S3 logs."""
 
 import re
+import shutil
 from collections.abc import Iterable
 from compression import zstd
-from datetime import date
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 import pandas as pd
 import polars as pl
 from dagster import (
     AssetExecutionContext,
+    Config,
     DailyPartitionsDefinition,
+    MaterializeResult,
     asset,
     get_dagster_logger,
 )
 from google.cloud import storage
 
-from usage_metrics.paths import PUDL_METRICS_S3_LOGS_BUCKET
+from usage_metrics.paths import (
+    PUDL_METRICS_S3_LOGS_BUCKET,
+    get_gcs_raw_path,
+    split_gcs_uri,
+)
+from usage_metrics.raw.compose import compose_day
 from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
+
+DATASET_NAME = "pudl_s3_logs"
+"""Names the local ``raw/`` subdirectory and the compacted artifacts in GCS."""
+
+TRANSFER_DELAY = timedelta(days=1, hours=2)
+"""How long after the start of a partition's day its logs are fully in GCS.
+
+A Storage Transfer job copies each day's objects into GCS shortly after 00:00 UTC the
+next day. Building an artifact earlier could bake in a partial day.
+"""
 
 ZSTD_LEVEL = 9
 """zstd level for the compacted artifact: smaller and faster to read than gzip, with
@@ -64,12 +82,28 @@ class FusedRecordsError(ValueError):
     """Two log records share one line (a source object lacked a trailing newline)."""
 
 
+def compacted_location(partition_key: str) -> tuple[str, str]:
+    """Get the bucket and object name of a partition's compacted artifact."""
+    return split_gcs_uri(f"{get_gcs_raw_path()}/{DATASET_NAME}/{partition_key}.log.zst")
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
+
 def _read_text(path: Path) -> str:
     """Read a (possibly zstd-compressed) text file, replacing undecodable bytes."""
     if path.suffix == ".zst":
         with zstd.open(path, "rt", errors="replace") as f:
             return f.read()
     return path.read_text(errors="replace")
+
+
+def zstd_compress(src: Path, dest: Path) -> None:
+    """Compress ``src`` to ``dest`` with zstd."""
+    with src.open("rb") as raw, zstd.open(dest, "wb", level=ZSTD_LEVEL) as out:
+        shutil.copyfileobj(raw, out)
+        out.write(b"")  # An empty file still gets a valid (empty) frame.
 
 
 def _record_signature(first_line: bytes) -> bytes:
@@ -117,7 +151,7 @@ class S3Extractor(GCSExtractor):
 
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
-        self.dataset_name = "pudl_s3_logs"
+        self.dataset_name = DATASET_NAME
         self.bucket_name = PUDL_METRICS_S3_LOGS_BUCKET
         super().__init__(*args, **kwargs)
 
@@ -207,11 +241,152 @@ class S3Extractor(GCSExtractor):
             raise
 
 
+S3_PARTITIONS = DailyPartitionsDefinition(start_date="2023-08-16")
+
+
+class CompactedS3LogsConfig(Config):
+    """Run configuration for ``compacted_s3_logs``."""
+
+    rebuild: bool = False
+    """Replace an existing artifact instead of reusing it."""
+
+
+def _combine_day(
+    context: AssetExecutionContext, ext: S3Extractor, *, compose: bool
+) -> tuple[Path, int] | None:
+    """Download a day's logs into one local file.
+
+    Args:
+        compose: Reduce the objects server-side first, so only a few hundred
+            composites are downloaded, rather than every object.
+
+    Returns:
+        The combined file and the number of source objects, or ``None`` if the
+        day has no objects.
+    """
+    key = context.partition_key
+    bucket = ext.gcs_client.bucket(ext.bucket_name)
+    prefix = ext.get_blob_prefix(context)
+    if compose:
+        blobs, count = compose_day(bucket, prefix, key, ext.compose_workers)
+    else:
+        blobs = ext.filter_blobs(context, bucket.list_blobs(prefix=prefix))
+        count = len(blobs)
+    if not blobs:
+        return None
+    context.log.info(
+        f"Downloading {len(blobs):,} blobs for {count:,} objects of {key}."
+    )
+    download_dir = ext.get_download_dir()
+    paths = ext.get_blobs_from_gcs(blobs, download_dir)
+    return ext.combine_files(paths, download_dir / f"{key}.combined"), count
+
+
+def _build_artifact(
+    context: AssetExecutionContext, ext: S3Extractor
+) -> tuple[Path, int] | None:
+    """Build the day's ``.log.zst`` locally.
+
+    Returns:
+        The artifact and the number of source objects, or ``None`` for an empty day.
+    """
+    built = _combine_day(context, ext, compose=True)
+    if built is None:
+        return None
+    combined, count = built
+    dest = combined.parent / f"{context.partition_key}.log.zst"
+    try:
+        zstd_with_guard(combined, dest)
+    except FusedRecordsError as e:
+        context.log.warning(
+            f"Composed logs contain fused records ({e}); downloading every object."
+        )
+        rebuilt = _combine_day(context, ext, compose=False)
+        if rebuilt is None:
+            raise RuntimeError("Fallback found no files that compose found.") from e
+        combined, count = rebuilt
+        zstd_compress(combined, dest)
+    return dest, count
+
+
 @asset(
-    partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
+    partitions_def=S3_PARTITIONS,
+    tags={"source": "s3"},
+    retry_policy=GCS_EXTRACT_RETRY_POLICY,
+    kinds={"gcs"},
+)
+def compacted_s3_logs(
+    context: AssetExecutionContext, config: CompactedS3LogsConfig
+) -> MaterializeResult:
+    """Concatenate a day's S3 log objects into one zstd file in GCS.
+
+    An existing artifact is reused without touching the source bucket. Otherwise
+    the day's objects are composed server-side, downloaded, compressed and
+    uploaded. An empty day is stored as an empty artifact, so ``raw_s3_logs`` can
+    tell "no logs" from "not compacted yet".
+    """
+    key = context.partition_key
+    ext = S3Extractor()
+    ext.partition_key = key
+    bucket_name, path = compacted_location(key)
+    artifacts = ext.gcs_client.bucket(bucket_name)
+
+    if artifacts.get_blob(path) is not None and not config.rebuild:
+        return MaterializeResult(metadata={"action": "reused"})
+
+    ready = datetime.combine(date.fromisoformat(key), time(0), UTC) + TRANSFER_DELAY
+    if _utcnow() < ready:
+        raise RuntimeError(
+            f"Logs for {key} may not be fully transferred to GCS until "
+            f"{ready.isoformat()}; refusing to build a partial artifact."
+        )
+
+    built = _build_artifact(context, ext)
+    if built is None:
+        context.log.warning(f"No S3 logs found for {key}; recording an empty day.")
+        local = ext.get_download_dir() / f"{key}.log.zst"
+        local.write_bytes(zstd.compress(b""))
+        built = (local, 0)
+    local, count = built
+
+    blob = artifacts.blob(path)
+    blob.metadata = {
+        "source_object_count": str(count),
+        "built_at": _utcnow().isoformat(),
+    }
+    blob.upload_from_filename(str(local), content_type="application/zstd")
+    return MaterializeResult(
+        metadata={
+            "action": "built" if count else "no-data",
+            "source_object_count": count,
+            "compacted_mb": round((blob.size or 0) / 1e6, 2),
+        }
+    )
+
+
+@asset(
+    partitions_def=S3_PARTITIONS,
+    deps=[compacted_s3_logs],
     tags={"source": "s3"},
     retry_policy=GCS_EXTRACT_RETRY_POLICY,
 )
 def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
-    """Extract S3 logs from sub-daily files and return one daily DataFrame."""
-    return S3Extractor().extract(context)
+    """Read a day's compacted S3 logs (see ``compacted_s3_logs``) into one DataFrame."""
+    key = context.partition_key
+    ext = S3Extractor()
+    ext.partition_key = key
+    bucket_name, path = compacted_location(key)
+    blob = ext.gcs_client.bucket(bucket_name).get_blob(path)
+    if blob is None:
+        raise FileNotFoundError(
+            f"gs://{bucket_name}/{path} does not exist; "
+            "materialize compacted_s3_logs for this partition first."
+        )
+    local = ext.get_download_dir() / f"{key}.log.zst"
+    blob.download_to_filename(str(local))
+    try:
+        frame = ext.load_file(local)
+    except pl.exceptions.NoDataError:
+        context.log.warning(f"No S3 logs for {key}.")
+        return pd.DataFrame()
+    return frame.to_pandas()
