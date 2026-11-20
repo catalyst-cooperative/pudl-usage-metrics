@@ -40,16 +40,16 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
     "verify-email-failed": frozenset({"status_code"}),
     "refresh-email-verification-failed": frozenset({"status_code"}),
 }
-"""The events that have a ``core_eel_hole_*`` table, and the fields the viewer always
+"""The events that have a ``core_eel_hole_*`` table, and the fields the Eel Hole always
 logs with each.
 
 A field may be null but must be present, and no other field may appear: either means
-the viewer's logging changed, and fails the coverage check. An event not listed here is
+the Eel Hole's logging changed, and fails the coverage check. An event not listed here is
 reported by the coverage check as unrouted, so add it here together with the table that
 persists it."""
 
 ALWAYS_LOGGED_FIELDS = frozenset({"user_id", "user_domain"})
-"""Fields the viewer logs with every event, null for anonymous visitors."""
+"""Fields the Eel Hole logs with every event, null for anonymous visitors."""
 
 ROUTED_EVENT_TYPES: frozenset[str] = frozenset(EVENT_FIELDS)
 """``jsonPayload.event`` values that have a persisted ``core_eel_hole_*`` table.
@@ -62,11 +62,12 @@ EEL_HOLE_EVENT_COVERAGE_CHECK = "eel_hole_event_coverage"
 they can't drift apart."""
 
 KNOWN_PARAM_KEYS: frozenset[str] = frozenset({"filters", "name", "page", "perPage"})
-"""The query-string keys the viewer's AG Grid sends to ``/api/duckdb``.
+"""The query-string keys the Eel Hole's AG Grid sends to ``/api/duckdb``.
 
-The viewer logs each request's query string. ``/api/duckdb`` requires login, so a
-logged-in request with any other key means the viewer's requests changed, and fails
-the coverage check."""
+The Eel Hole logs each request's query string. The ``/api/duckdb`` endpoint requires
+login, so a logged-in request with any other key means the Eel Hole's request structure
+changed, and fails the coverage check, so we are forced to update our expectations here.
+"""
 
 PARAM_COLUMNS: tuple[str, ...] = (
     "params_name",
@@ -77,7 +78,7 @@ PARAM_COLUMNS: tuple[str, ...] = (
 """``KNOWN_PARAM_KEYS`` as columns of ``core_eel_hole_{previews,downloads,duckdb_other}``."""
 
 IGNORED_EVENT_TYPES: frozenset[str] = frozenset({"loading"})
-"""Slug events that are known viewer noise (e.g. ``loading``). Dropped without
+"""Slug events that are known Eel Hole noise (e.g. ``loading``). Dropped without
 counting as a coverage gap. Prose operational log lines are filtered by shape."""
 
 DUCKDB_EVENT_PREFIX = "duckdb_"
@@ -89,7 +90,7 @@ _EVENT_SLUG = re.compile(r"[a-z][a-z0-9_-]{0,63}\Z")
 """What a real ``jsonPayload.event`` looks like: a lower-case identifier of at most 64
 characters (a loose sanity bound).
 
-eel-hole uses structlog, where ``event`` is the log message: analytics events
+The Eel Hole uses structlog, where ``event`` is the log message: analytics events
 are slugs (``search``, ``preview``, ``duckdb_csv``), operational log lines are
 prose (``"Loading prebuilt search index from ..."``). We only keep slugs."""
 
@@ -141,10 +142,10 @@ coverage check."""
 
 
 class DuckDBFilters(BaseModel):
-    """A filter in AG Grid's filter format, as the viewer sends it.
+    """A filter in AG Grid's filter format, as the Eel Hole logs it.
 
     Validated strictly: a value outside ``ALLOWABLE_FIELD_TYPES`` or
-    ``ALLOWABLE_OPERATIONS`` fails the coverage check, and usually means AG Grid added
+    ``ALLOWABLE_OPERATIONS`` fails the coverage check, and likely means AG Grid added
     one.
     """
 
@@ -168,7 +169,7 @@ def filters_to_json(filters: Any) -> str | None:
 class DuckDBParams(BaseModel):
     """Query-string parameters of a ``/api/duckdb`` request.
 
-    Only ``KNOWN_PARAM_KEYS`` are allowed: another key means the viewer's requests
+    Only ``KNOWN_PARAM_KEYS`` are allowed: another key means the Eel Hole's requests
     changed, and fails the coverage check. Fields are optional because a request
     missing some of them is only logged.
     """
@@ -185,7 +186,7 @@ class DuckDBParams(BaseModel):
 
 
 class JsonPayload(BaseModel):
-    """A structlog JSON log line from the viewer.
+    """A structlog JSON log line from the Eel Hole.
 
     Deliberately permissive: only ``event`` and ``timestamp`` are required, so a new
     event type or payload shape flows through to ``_core_eel_hole_logs`` and is
@@ -215,7 +216,7 @@ class JsonPayload(BaseModel):
     next_url: str | None = None
     is_new_user: bool | None = None
 
-    # The viewer logs its own fields in snake_case, so no aliases here, unlike the
+    # The Eel Hole logs its own fields in snake_case, so no aliases here, unlike the
     # models for what GCP and AG Grid send. Only the spelling it logs is accepted.
 
     @field_validator("*", mode="before")
@@ -299,7 +300,7 @@ class EelHoleLogs(BaseModel):
 
 
 def _missing_fields(payload: dict) -> frozenset[str]:
-    """The fields the viewer always logs with this event that ``payload`` lacks."""
+    """The fields the Eel Hole always logs with this event that ``payload`` lacks."""
     expected = EVENT_FIELDS.get(str(payload.get("event")))
     if expected is None:
         return frozenset()
@@ -307,7 +308,7 @@ def _missing_fields(payload: dict) -> frozenset[str]:
 
 
 def _unexpected_fields(payload: dict) -> frozenset[str]:
-    """The fields in ``payload`` that the viewer isn't expected to log with its event."""
+    """The fields in ``payload`` that the Eel Hole isn't expected to log with its event."""
     expected = EVENT_FIELDS.get(str(payload.get("event")))
     if expected is None:
         return frozenset()
@@ -449,8 +450,9 @@ def _missing_params_metadata(
 ) -> dict[str, Any]:
     """Warn about kept ``duckdb_*`` requests that lack some of ``KNOWN_PARAM_KEYS``.
 
-    Unlike an unexpected key (an error), a request with missing keys, such as a bare
-    ``/api/duckdb?``, says nothing about AG Grid's vocabulary, so it is only logged.
+    An unexpected key results in an error, but we allow and warn on a request with missing keys
+    since we have occasionally manually constructed ``/api/duckdb?`` URLs to test whether the
+    API endpoint is visible to anonymous users, and such requests shouldn't fail the partition.
     """
     missing = 0
     for row, model in zip(rows, models, strict=True):
@@ -483,13 +485,10 @@ class _EventClasses(NamedTuple):
 
 def _classify_events(rows: list[dict], models: list[dict]) -> _EventClasses:
     """Sort events into routed, unrouted and malformed; count the ignored ones."""
-    classes = _EventClasses(Counter(), {}, [], 0, 0, Counter())
-    routed, unrouted, malformed, case_variants = (
-        classes.routed,
-        classes.unrouted,
-        classes.malformed,
-        classes.case_variants,
-    )
+    routed: Counter = Counter()
+    unrouted: dict[str, list[dict]] = {}
+    malformed: list[dict] = []
+    case_variants: Counter = Counter()
     non_slug_nulled = anonymous_duckdb = 0
 
     for row, model in zip(rows, models, strict=True):
@@ -516,8 +515,8 @@ def _classify_events(rows: list[dict], models: list[dict]) -> _EventClasses:
             routed[event] += 1
         else:
             unrouted.setdefault(event, []).append(payload)
-    return classes._replace(
-        non_slug_nulled=non_slug_nulled, anonymous_duckdb=anonymous_duckdb
+    return _EventClasses(
+        routed, unrouted, malformed, non_slug_nulled, anonymous_duckdb, case_variants
     )
 
 
@@ -577,7 +576,7 @@ def _event_coverage_check(
             description=(
                 f"{partition_key}: {_n_pct(len(malformed), total)} eel-hole events "
                 "failed to parse or have missing or unexpected fields -- the log format, AG Grid's "
-                "vocabulary or the viewer's request params changed. If AG Grid added "
+                "vocabulary or the Eel Hole's request params changed. If AG Grid added "
                 "a value, add it to ALLOWABLE_FIELD_TYPES / ALLOWABLE_OPERATIONS. See "
                 "the 'report' metadata below for the full breakdown."
             ),
@@ -748,7 +747,7 @@ def core_eel_hole_log_ins(
 ) -> pd.DataFrame:
     """Create table of log-in events from eel-hole logs.
 
-    Logged when a user returns from Auth0 to the viewer after logging in.
+    Logged when a user returns from Auth0 to the Eel Hole after logging in.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
@@ -1044,7 +1043,7 @@ def core_eel_hole_email_verification_refresh_failures(
 
     Distinct from core_eel_hole_verify_email_failures: this is Auth0 rejecting
     our lookup of the user's *current* verification status (triggered when the
-    viewer polls to see if a user has clicked the verification link yet), not
+    Eel Hole polls to see if a user has clicked the verification link yet), not
     a failure to send the email in the first place. status_code is Auth0's
     HTTP response code.
     """

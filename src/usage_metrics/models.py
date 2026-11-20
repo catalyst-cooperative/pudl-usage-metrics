@@ -41,8 +41,7 @@ LOGGED_IN_USER_ID_DESCRIPTION = (
 )
 LOGGED_IN_USER_DOMAIN_DESCRIPTION = (
     "User's email domain - the part of a user's email address that follows the '@' "
-    "symbol. Always set in recent data; older partitions can't be rebuilt and may "
-    "have it null."
+    "symbol."
 )
 
 
@@ -1104,7 +1103,7 @@ core_eel_hole_log_ins = _table_schema(
     ],
     description=(
         "Log-ins to PUDL's data viewer (the eel hole), recorded when a user returns "
-        "from Auth0 to the viewer."
+        "from Auth0 to the Eel Hole."
     ),
     primary_key=["insert_id"],
 )
@@ -1160,9 +1159,8 @@ _eel_hole_preview_columns = [
         name="user_id",
         dtype=str,
         description=(
-            "The unique ID of the logged-in user. Always set now that /api/duckdb "
-            "requires login; older rows from anonymous requests (bots and scrapers) "
-            "have it null."
+            "The unique ID of the logged-in user. Always set, because /api/duckdb "
+            "requires login."
         ),
         nullable=False,
     ),
@@ -1206,8 +1204,7 @@ _eel_hole_preview_columns = [
         dtype=str,
         description=(
             "A session ID for a logged in user. A new session is created after a user "
-            "has been inactive for 30 minutes. Always set in recent data; older "
-            "partitions can't be rebuilt and may have it null."
+            "has been inactive for 30 minutes."
         ),
         nullable=False,
     ),
@@ -1287,7 +1284,7 @@ core_eel_hole_duckdb_other = _table_schema(
     description=(
         "DuckDB query events recorded by PUDL's data viewer (the eel hole) that "
         "don't match the expected format of either a table preview or a CSV "
-        "download (the viewer's grid requests a fixed page size for each). These "
+        "download (the Eel Hole's grid requests a fixed page size for each). These "
         "are likely hand-built or automated requests rather than ordinary use."
     ),
     primary_key=["insert_id"],
