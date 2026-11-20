@@ -7,27 +7,57 @@ from pathlib import Path
 
 import pytest
 from dagster import build_asset_context
+from google.api_core.exceptions import BadRequest, PreconditionFailed
 
 from usage_metrics.raw import extract
 
 DATA_DIR = Path(__file__).parents[2] / "data"
 
 
+MAX_COMPOSE_SOURCES = 32
+MAX_COMPONENTS = 1024
+
+
 class FakeBlob:
     """Stand-in for ``google.cloud.storage.Blob`` backed by in-memory bytes."""
 
     def __init__(
-        self, name: str, data: bytes, bucket: object = None, time_created=None
+        self,
+        name: str,
+        data: bytes = b"",
+        bucket: FakeBucket | None = None,
+        time_created=None,
+        components: int = 1,
     ):
         """Store the blob name and contents."""
         self.name = name
         self._data = data
         self.bucket = bucket
         self.time_created = time_created
+        self.components = components
 
     def download_to_filename(self, filename) -> None:
         """Write the blob contents to a local path."""
         Path(filename).write_bytes(self._data)
+
+    def _store(self) -> None:
+        assert self.bucket is not None
+        self.bucket._blobs[self.name] = self
+
+    def compose(self, sources, if_generation_match=None, **_kwargs) -> None:
+        """Concatenate ``sources`` into this blob, enforcing GCS's limits."""
+        assert self.bucket is not None
+        if not 1 <= len(sources) <= MAX_COMPOSE_SOURCES:
+            raise ValueError(f"Can compose 1-{MAX_COMPOSE_SOURCES} sources.")
+        if if_generation_match == 0 and self.name in self.bucket._blobs:
+            raise PreconditionFailed(f"{self.name} already exists.")
+        components = sum(s.components for s in sources)
+        if components > MAX_COMPONENTS:
+            raise BadRequest(f"Composite would have {components} components.")
+        self._data = b"".join(s._data for s in sources)
+        self.components = components
+        self._store()
+        self.bucket.compose_calls.append(self.name)
 
 
 class FakeBucket:
@@ -36,6 +66,7 @@ class FakeBucket:
     def __init__(self, blobs: dict[str, bytes]):
         """Build fake blobs from a ``{name: bytes}`` mapping."""
         self._blobs = {name: FakeBlob(name, data, self) for name, data in blobs.items()}
+        self.compose_calls: list[str] = []
 
     def list_blobs(self, prefix: str | None = None) -> list[FakeBlob]:
         """Return blobs (name-sorted, like GCS) whose name matches ``prefix``."""
@@ -44,6 +75,10 @@ class FakeBucket:
             for name, blob in sorted(self._blobs.items())
             if prefix is None or name.startswith(prefix)
         ]
+
+    def blob(self, name: str) -> FakeBlob:
+        """Return a blob handle; it isn't stored until it's written."""
+        return FakeBlob(name, bucket=self)
 
 
 class FakeClient:
