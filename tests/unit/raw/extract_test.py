@@ -277,30 +277,45 @@ def test_get_blobs_from_gcs_passes_string_filenames(
     assert captured["kwargs"]["max_workers"] == ext.download_workers
 
 
-def test_download_workers_resolution(monkeypatch):
-    """download_workers: explicit arg > env var > default."""
-    monkeypatch.delenv("GCS_DOWNLOAD_WORKERS", raising=False)
-    assert LineExtractor().download_workers == extract.DEFAULT_DOWNLOAD_WORKERS
-    monkeypatch.setenv("GCS_DOWNLOAD_WORKERS", "9")
-    assert LineExtractor().download_workers == 9
-    assert LineExtractor(download_workers=3).download_workers == 3
+@pytest.mark.parametrize(
+    ("attr", "env_var"),
+    [
+        ("download_workers", "GCS_DOWNLOAD_WORKERS"),
+        ("compose_workers", "GCS_COMPOSE_WORKERS"),
+    ],
+)
+def test_worker_count_resolution(monkeypatch, attr, env_var):
+    """An explicit argument beats the env var, which beats the default."""
+    monkeypatch.delenv(env_var, raising=False)
+    assert getattr(LineExtractor(), attr) == getattr(extract, f"DEFAULT_{attr.upper()}")
+    monkeypatch.setenv(env_var, "9")
+    assert getattr(LineExtractor(), attr) == 9
+    explicit: dict[str, Any] = {attr: 3}
+    assert getattr(LineExtractor(**explicit), attr) == 3
 
 
-def test_gcs_client_is_lazy_and_sizes_the_pool(monkeypatch):
-    """No client until first use; then a sized HTTPS adapter is mounted."""
-    fake = mock.Mock()
+@pytest.mark.parametrize(
+    ("download_workers", "compose_workers", "pool_size"),
+    [(17, 5, 17), (8, 128, 128)],
+)
+def test_gcs_client_is_lazy_and_sizes_the_pool(
+    monkeypatch, download_workers, compose_workers, pool_size
+):
+    """No client until first use; the pool fits the larger worker count."""
     calls = []
+    fake = mock.Mock()
     monkeypatch.setattr(
         extract.storage, "Client", lambda *a, **k: calls.append(1) or fake
     )
-    ext = LineExtractor(download_workers=17)
+    ext = LineExtractor(
+        download_workers=download_workers, compose_workers=compose_workers
+    )
     assert calls == []
     assert ext.gcs_client is fake
     assert calls == [1]
     fake._http.mount.assert_called_once()
     assert fake._http.mount.call_args.args[0] == "https://"
-    adapter = fake._http.mount.call_args.args[1]
-    assert adapter._pool_maxsize == 17
+    assert fake._http.mount.call_args.args[1]._pool_maxsize == pool_size
 
 
 def test_retry_policy_shape():

@@ -10,11 +10,13 @@ instance handling schedules and job launching.
 import logging
 import os
 import sys
+from datetime import date, timedelta
 
 import click
 import coloredlogs
 
 from usage_metrics.defs import defs
+from usage_metrics.raw.s3 import compacted_s3_logs
 from usage_metrics.scripts import CONTEXT_SETTINGS
 from usage_metrics.scripts.partitions import compute_partitions
 
@@ -64,6 +66,16 @@ def _execute(job, **execute_kwargs) -> bool:
     return result.success
 
 
+REBUILD_RUN_CONFIG = {"ops": {compacted_s3_logs.op.name: {"config": {"rebuild": True}}}}
+"""Run config that makes ``compacted_s3_logs`` replace an existing artifact."""
+
+
+def _window_dates(anchor: str, days: int) -> list[str]:
+    """The ``days`` ISO dates ending at (and including) ``anchor``, oldest first."""
+    end = date.fromisoformat(anchor)
+    return [(end - timedelta(days=n)).isoformat() for n in reversed(range(days))]
+
+
 def _resolve_jobs(job_alias: str | None, partitioned: bool | None):
     """Resolve --job/--partitioned/--no-partitioned into the job(s) to run.
 
@@ -81,6 +93,34 @@ def _resolve_jobs(job_alias: str | None, partitioned: bool | None):
         defs.resolve_job_def(name="all_partitioned_metrics_etl"),
         defs.resolve_job_def(name="all_nonpartitioned_metrics_etl"),
     ]
+
+
+def _check_options(
+    partition: str | None,
+    start: str | None,
+    end: str | None,
+    job_alias: str | None,
+    partitioned: bool | None,
+    window: int | None,
+    rebuild: bool,
+) -> None:
+    """Reject combinations of options that don't make sense together."""
+    if job_alias and partitioned is not None:
+        raise click.UsageError(
+            "--job cannot be combined with --partitioned/--no-partitioned -- "
+            "they're two ways of picking which job(s) to run."
+        )
+    if partition and (start or end):
+        raise click.UsageError("--partition cannot be combined with --start/--end.")
+    if (window or rebuild) and job_alias != "s3":
+        raise click.UsageError(
+            "--window and --rebuild are only supported with --job s3."
+        )
+    if window and start:
+        raise click.UsageError(
+            "--window cannot be combined with --start; give --end or --partition "
+            "as the last day instead."
+        )
 
 
 @click.command("etl", context_settings=CONTEXT_SETTINGS)
@@ -111,25 +151,39 @@ def _resolve_jobs(job_alias: str | None, partitioned: bool | None):
         "Default (neither flag) runs both. Not allowed together with --job."
     ),
 )
+@click.option(
+    "--window",
+    type=click.IntRange(min=1),
+    default=None,
+    help=(
+        "Process the last N partitions ending at --end/--partition (default: the "
+        "latest), oldest first. Only with --job s3, where re-running days is cheap "
+        "because the day's logs are compacted once."
+    ),
+)
+@click.option(
+    "--rebuild",
+    is_flag=True,
+    default=False,
+    help=(
+        "Rebuild the compacted S3 log artifact even if one exists. Only with --job s3."
+    ),
+)
 def etl(
     partition: str | None,
     start: str | None,
     end: str | None,
     job_alias: str | None,
     partitioned: bool | None,
+    window: int | None,
+    rebuild: bool,
 ):
     """Load the latest partition of every metrics source to Google Cloud Storage."""
     log_format = "%(asctime)s [%(levelname)8s] %(name)s:%(lineno)s %(message)s"
     coloredlogs.install(fmt=log_format, level="INFO", logger=logger)
     logger.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} storage.")
 
-    if job_alias and partitioned is not None:
-        raise click.UsageError(
-            "--job cannot be combined with --partitioned/--no-partitioned -- "
-            "they're two ways of picking which job(s) to run."
-        )
-    if partition and (start or end):
-        raise click.UsageError("--partition cannot be combined with --start/--end.")
+    _check_options(partition, start, end, job_alias, partitioned, window, rebuild)
 
     try:
         dates = compute_partitions(start or partition, end)
@@ -146,13 +200,17 @@ def etl(
         )
 
     results: dict[str, bool] = {}
+    execute_kwargs = {"run_config": REBUILD_RUN_CONFIG} if rebuild else {}
 
     for job in partitioned_jobs:
         assert job.partitions_def is not None, (
             f"{job.name} is expected to have a partitions_def."
         )
         partition_keys = job.partitions_def.get_partition_keys()
-        for requested in dates:
+        requested_dates = dates
+        if window:
+            requested_dates = _window_dates(dates[0] or max(partition_keys), window)
+        for requested in requested_dates:
             resolved = requested or max(partition_keys)
             if resolved not in partition_keys:
                 raise click.BadParameter(
@@ -160,7 +218,9 @@ def etl(
                     f"(range: {partition_keys[0]}..{partition_keys[-1]})."
                 )
             logger.info(f"Processing partitioned data for {job.name} / {resolved}.")
-            results[f"{job.name}:{resolved}"] = _execute(job, partition_key=resolved)
+            results[f"{job.name}:{resolved}"] = _execute(
+                job, partition_key=resolved, **execute_kwargs
+            )
 
     for job in nonpartitioned_jobs:
         results[job.name] = _execute(job)
