@@ -43,9 +43,10 @@ EVENT_FIELDS: dict[str, frozenset[str]] = {
 """The events that have a ``core_eel_hole_*`` table, and the fields the viewer always
 logs with each.
 
-A field may be null but must be present: a missing one means the viewer's logging
-changed, and fails the coverage check. An event not listed here is reported by the
-coverage check as unrouted, so add it here together with the table that persists it."""
+A field may be null but must be present, and no other field may appear: either means
+the viewer's logging changed, and fails the coverage check. An event not listed here is
+reported by the coverage check as unrouted, so add it here together with the table that
+persists it."""
 
 ALWAYS_LOGGED_FIELDS = frozenset({"user_id", "user_domain"})
 """Fields the viewer logs with every event, null for anonymous visitors."""
@@ -305,6 +306,15 @@ def _missing_fields(payload: dict) -> frozenset[str]:
     return (expected | ALWAYS_LOGGED_FIELDS) - payload.keys()
 
 
+def _unexpected_fields(payload: dict) -> frozenset[str]:
+    """The fields in ``payload`` that the viewer isn't expected to log with its event."""
+    expected = EVENT_FIELDS.get(str(payload.get("event")))
+    if expected is None:
+        return frozenset()
+    known = expected | ALWAYS_LOGGED_FIELDS | {"event", "timestamp"}
+    return frozenset(payload.keys() - known)
+
+
 def _payload_error(payload: Any) -> str:
     """One-line summary of the first reason ``payload`` is malformed."""
     try:
@@ -313,8 +323,14 @@ def _payload_error(payload: Any) -> str:
         first = exc.errors()[0]
         loc = ".".join(str(part) for part in first["loc"]) or "(root)"
         return f"{loc}: {first['msg']}"
-    if isinstance(payload, dict) and (missing := _missing_fields(payload)):
-        return f"missing fields: {', '.join(sorted(missing))}"
+    if isinstance(payload, dict):
+        problems = []
+        if missing := _missing_fields(payload):
+            problems.append(f"missing fields: {', '.join(sorted(missing))}")
+        if unexpected := _unexpected_fields(payload):
+            problems.append(f"unexpected fields: {', '.join(sorted(unexpected))}")
+        if problems:
+            return "; ".join(problems)
     return "(now valid)"
 
 
@@ -384,7 +400,7 @@ def _coverage_report(
         lines += [
             "",
             (
-                "  Slug events that FAILED to parse or lack fields -- "
+                "  Slug events that FAILED to parse or have missing or unexpected fields -- "
                 f"{_n_pct(len(malformed), total)} of events"
             ),
             "  (the eel-hole log format may have changed -- this fails the check):",
@@ -490,7 +506,11 @@ def _classify_events(rows: list[dict], models: list[dict]) -> _EventClasses:
                     case_variants[event] += 1
         elif is_anonymous_duckdb_event(payload):
             anonymous_duckdb += 1
-        elif model["json_payload"] is None or _missing_fields(payload):
+        elif (
+            model["json_payload"] is None
+            or _missing_fields(payload)
+            or _unexpected_fields(payload)
+        ):
             malformed.append(payload)
         elif event in ROUTED_EVENT_TYPES:
             routed[event] += 1
@@ -508,10 +528,10 @@ def _event_coverage_check(
 
     * Parsed events not in ``ROUTED_EVENT_TYPES``, and event names that differ from a
       slug only by case (``Preview``): WARN outside ``prod``, ERROR in ``prod``.
-    * An event that fails to parse, lacks a field in ``EVENT_FIELDS``, or is a
-      logged-in ``duckdb_*`` request outside AG Grid's vocabulary or the known params:
-      ERROR, even a single one. We control both the logger and this parser, so any
-      such event means one of them changed.
+    * An event that fails to parse, lacks a field in ``EVENT_FIELDS``, carries one that
+      isn't listed there, or is a logged-in ``duckdb_*`` request outside AG Grid's
+      vocabulary or the known params: ERROR, even a single one. We control both the
+      logger and this parser, so any such event means one of them changed.
 
     Anonymous ``duckdb_*`` requests (bots) are ignored, counted and left out of the
     totals.
@@ -556,7 +576,7 @@ def _event_coverage_check(
             severity=AssetCheckSeverity.ERROR,
             description=(
                 f"{partition_key}: {_n_pct(len(malformed), total)} eel-hole events "
-                "failed to parse or lack fields -- the log format, AG Grid's "
+                "failed to parse or have missing or unexpected fields -- the log format, AG Grid's "
                 "vocabulary or the viewer's request params changed. If AG Grid added "
                 "a value, add it to ALLOWABLE_FIELD_TYPES / ALLOWABLE_OPERATIONS. See "
                 "the 'report' metadata below for the full breakdown."
@@ -666,6 +686,12 @@ def _core_eel_hole_logs(
 
     # Remove json_payload from the column names
     converted_df.columns = converted_df.columns.str.replace("json_payload_", "")
+
+    # A partition with no duckdb requests (or none with filters) has none of these
+    # columns; the tables that select them expect them, null.
+    for column in PARAM_COLUMNS:
+        if column not in converted_df.columns:
+            converted_df[column] = pd.NA
 
     # Handle mixed none types in the URL column
     converted_df["url"] = converted_df["url"].replace({None: pd.NA})
@@ -802,7 +828,7 @@ def core_eel_hole_previews(
     preview_df = preview_df.loc[
         :,
         ["insert_id", "user_id", "user_domain", "timestamp", "url", "session_id"]
-        + [col for col in PARAM_COLUMNS if col in preview_df.columns],
+        + list(PARAM_COLUMNS),
     ]
 
     return preview_df.reset_index(drop=True)
@@ -829,7 +855,7 @@ def core_eel_hole_downloads(
     download_df = download_df.loc[
         :,
         ["insert_id", "user_id", "user_domain", "timestamp", "url", "session_id"]
-        + [col for col in PARAM_COLUMNS if col in download_df.columns],
+        + list(PARAM_COLUMNS),
     ]
 
     return download_df.reset_index(drop=True)
@@ -860,7 +886,7 @@ def core_eel_hole_duckdb_other(
     other_df = other_df.loc[
         :,
         ["insert_id", "user_id", "user_domain", "timestamp", "url", "session_id"]
-        + [col for col in PARAM_COLUMNS if col in other_df.columns],
+        + list(PARAM_COLUMNS),
     ]
 
     return other_df.reset_index(drop=True)

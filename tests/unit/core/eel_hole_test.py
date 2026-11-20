@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 from dagster import AssetCheckResult, Output, build_asset_context
 
+from usage_metrics.core import eel_hole as eel_hole_module
 from usage_metrics.core.eel_hole import (
     _EVENT_SLUG,
     ALWAYS_LOGGED_FIELDS,
@@ -30,6 +31,7 @@ from usage_metrics.core.eel_hole import (
     core_eel_hole_verify_email_requests,
     payload_is_event,
 )
+from usage_metrics.models import usage_metrics_schemas
 
 PARTITION = "2026-09-06"
 TS = "2026-09-06T00:00:00Z"
@@ -304,7 +306,7 @@ def test_handles_partition_with_no_search_filters():
 
     ``pd.json_normalize`` only emits the ``json_payload_params_filters`` column
     when at least one record has search filters, so the transform must not
-    assume that column exists.
+    assume that column exists, and adds it as null instead.
     """
     raw = pd.DataFrame(
         [
@@ -316,7 +318,29 @@ def test_handles_partition_with_no_search_filters():
     out = _run(raw)
 
     assert sorted(out["insert_id"]) == ["a", "b"]
-    assert not any("filters" in col for col in out.columns)
+    assert out["params_filters"].isna().all()
+
+
+@pytest.mark.parametrize(
+    "table_name", [t for t in usage_metrics_schemas if t.startswith("core_eel_hole_")]
+)
+def test_every_table_has_exactly_the_columns_of_its_schema(table_name):
+    """An asset must produce each schema column, even for a day without its events.
+
+    The IO manager fills in a column the asset doesn't produce, with nulls, so a
+    column missing from the asset would otherwise pass silently. The raw data has no
+    duckdb request at all, so none of the optional ``params_*`` columns exist.
+    """
+    asset_fn = getattr(eel_hole_module, table_name, None)
+    if asset_fn is None:  # the schema of a table whose asset was removed
+        pytest.skip(f"no asset for {table_name}")
+    core = _run(pd.DataFrame([_record("a", event="search", user_id="user-1")]))
+
+    out = asset_fn(_ctx(), core)
+
+    assert set(out.columns) | {"partition_key"} == set(
+        usage_metrics_schemas[table_name].columns
+    )
 
 
 def test_keeps_any_number_of_filters_as_one_json_column():
@@ -638,6 +662,22 @@ def test_an_event_missing_a_field_eel_hole_always_logs_is_an_error():
     assert "missing fields: partition, table_name, user_domain, user_id" in report
 
 
+def test_an_event_with_a_field_eel_hole_doesnt_log_is_an_error():
+    """A new key on a routed event means the logger changed, so say so loudly."""
+    complete = _record("ok", event="search", user_id="u")
+    extra = _record(
+        "bad",
+        payload={"event": "search", "timestamp": TS, "referrer": "https://x.org"},
+    )
+    result = _coverage([complete, extra])
+
+    assert result.passed is False
+    assert result.severity.value == "ERROR"
+    assert result.metadata["malformed_slug_events"].value == 1
+    report = cast(str, result.metadata["report"].value)
+    assert "unexpected fields: referrer" in report
+
+
 def test_null_event_fields_are_fine():
     """``query`` and ``partition`` are legitimately null; only absence is an error."""
     rows = [
@@ -692,7 +732,10 @@ def test_coverage_report_shows_malformed_events():
         unrouted={},
         malformed=[{"event": "search", "timestamp": "not-a-date"}],
     )
-    assert "FAILED to parse or lack fields -- 1 (10%) of events" in report
+    assert (
+        "FAILED to parse or have missing or unexpected fields -- 1 (10%) of events"
+        in report
+    )
     assert "search -- 1 (10%) -- timestamp:" in report
 
 
