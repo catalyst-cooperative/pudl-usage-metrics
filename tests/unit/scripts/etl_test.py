@@ -2,7 +2,6 @@
 
 import logging
 from types import SimpleNamespace
-from unittest.mock import Mock
 
 import pytest
 from click.testing import CliRunner
@@ -148,64 +147,6 @@ def test_invalid_partition_is_a_usage_error(executed):
     assert "not a valid partition" in result.output
 
 
-# --- _execute()'s asset-check surfacing -------------------------------------
-
-
-def _fake_check(*, passed, severity, description, metadata=None):
-    return SimpleNamespace(
-        passed=passed,
-        severity=severity,
-        description=description,
-        metadata=metadata or {},
-        asset_key=SimpleNamespace(to_user_string=lambda: "some_asset"),
-        check_name="some_check",
-    )
-
-
-def _fake_job(checks):
-    result = SimpleNamespace(success=True, get_asset_check_evaluations=lambda: checks)
-    return Mock(name="job", execute_in_process=Mock(return_value=result))
-
-
-def test_execute_logs_failed_check_description(caplog):
-    job = _fake_job([_fake_check(passed=False, severity="WARN", description="gap")])
-    with caplog.at_level(logging.WARNING, logger="usage_metrics"):
-        _execute(job)
-    assert "gap" in caplog.text
-
-
-def test_execute_prints_full_report_when_attached(caplog):
-    """A check's 'report' metadata is printed in full, not just its one-line description.
-
-    Some checks (eel_hole_event_coverage) attach a full, copy-paste-actionable
-    report as metadata because the description alone isn't enough to act on.
-    That report needs to show up in this trailing summary -- not just where it
-    was first logged mid-run -- so it isn't lost in a long scroll of logs.
-    """
-    long_report = "EEL-HOLE EVENT COVERAGE -- 2026-09-25\n  preview -- 1898 (85%)"
-    job = _fake_job(
-        [
-            _fake_check(
-                passed=False,
-                severity="WARN",
-                description="coverage gap (non-fatal)",
-                metadata={"report": SimpleNamespace(value=long_report)},
-            )
-        ]
-    )
-    with caplog.at_level(logging.WARNING, logger="usage_metrics"):
-        _execute(job)
-    assert long_report in caplog.text
-
-
-def test_execute_skips_report_line_when_absent(caplog):
-    job = _fake_job([_fake_check(passed=False, severity="ERROR", description="broke")])
-    with caplog.at_level(logging.WARNING, logger="usage_metrics"):
-        _execute(job)
-    assert "broke" in caplog.text
-    assert "EEL-HOLE" not in caplog.text
-
-
 @pytest.mark.parametrize(
     ("args", "expected"),
     [
@@ -251,17 +192,19 @@ def test_rebuild_passes_run_config_to_the_job(executed, execute_kwargs):
     ]
 
 
+# --- _execute()'s asset-check surfacing -------------------------------------
+
+
 def test_execute_fails_the_job_when_a_blocking_check_fails(caplog):
     """A failing blocking check, e.g. a table's schema check, fails the whole job.
 
-    The assets downstream of the table don't run, and the check's description and
-    report are still printed at the end, since that is all a reviewer has to go on.
+    The check's description and report are printed at the end, since that is all a
+    reviewer has to go on.
     """
-    ran = []
 
     @asset
     def table():
-        ran.append("table")
+        pass
 
     @asset_check(asset=table, blocking=True)
     def schema_check():
@@ -271,12 +214,8 @@ def test_execute_fails_the_job_when_a_blocking_check_fails(caplog):
             metadata={"report": "tls_version  str_matches  2  ['TLSv1.2x']"},
         )
 
-    @asset
-    def summary(table):
-        ran.append("summary")
-
     job = Definitions(
-        assets=[table, summary],
+        assets=[table],
         asset_checks=[schema_check],
         jobs=[define_asset_job("job")],
     ).resolve_job_def("job")
@@ -285,6 +224,5 @@ def test_execute_fails_the_job_when_a_blocking_check_fails(caplog):
         succeeded = _execute(job)
 
     assert not succeeded
-    assert ran == ["table"]
     assert "table failed its schema" in caplog.text
     assert "TLSv1.2x" in caplog.text

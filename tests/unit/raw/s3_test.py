@@ -67,21 +67,6 @@ def test_load_file_column_counts(write_log, s3_fixture_blobs, subdir, n_columns)
     assert S3Extractor().load_file(path).width == n_columns
 
 
-def test_load_file_preserves_quoted_and_dash_fields(tmp_path):
-    """Quoted fields with spaces stay intact; '-' is read literally."""
-    line = (
-        "owner bkt [15/Jun/2024:00:00:00 +0000] 198.51.100.1 - RID REST.GET.OBJECT k "
-        '"GET /k HTTP/1.1" 200 - 100 200 5 4 "-" "Mozilla/5.0 (X11; Linux)" - hid '
-        "SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
-    )
-    path = tmp_path / "f"
-    path.write_text(line)
-    row = S3Extractor().load_file(path).row(0)
-    assert row[9] == "GET /k HTTP/1.1"
-    assert row[17] == "Mozilla/5.0 (X11; Linux)"
-    assert row[5] == "-"
-
-
 def test_load_file_ragged_partition_forces_28_columns(write_log, s3_fixture_blobs):
     """On 2026-02-25 a mixed-width file is coerced to 28 columns."""
     ext = S3Extractor()

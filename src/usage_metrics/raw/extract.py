@@ -157,6 +157,8 @@ class GCSExtractor(ABC):
         for blob in blobs:
             assert blob.name is not None, f"Blob {blob} has no name."
             file_paths.append(Path(download_dir, blob.name.replace("/", "-")))
+        # Targets must be strings: given Path objects, skip_if_exists is silently
+        # ignored.
         transfer_manager.download_many(
             [(blob, str(path)) for blob, path in zip(blobs, file_paths, strict=True)],
             skip_if_exists=True,

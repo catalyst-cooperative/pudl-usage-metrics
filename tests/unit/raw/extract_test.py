@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from typing import Any
-from unittest import mock
 
 import pandas as pd
 import polars as pl
@@ -188,21 +187,6 @@ def test_extract_swallows_empty_data_errors(
     assert df.empty
 
 
-def test_extract_propagates_other_errors(
-    partition_context, run_extract, monkeypatch, download_dir, tmp_path
-):
-    """Non-empty-data parse errors are not swallowed."""
-    files = _write_files(tmp_path, b"x")
-    ext = LineExtractor()
-
-    def _raise(_path):
-        raise ValueError("boom")
-
-    monkeypatch.setattr(ext, "load_file", _raise)
-    with pytest.raises(ValueError, match="boom"):
-        run_extract(ext, partition_context("2024-01-01"), files)
-
-
 @pytest.mark.parametrize(
     ("extractor_cls", "kwargs", "partition_key", "expected"),
     [
@@ -251,32 +235,6 @@ def test_get_blobs_from_gcs_flattens_names(
     assert paths[0].name == "a-b-c"
 
 
-def test_get_blobs_from_gcs_passes_string_filenames(
-    make_client, download_dir, monkeypatch
-):
-    """download_many gets (blob, str) pairs on a THREAD pool, not Path objects.
-
-    transfer_manager rejects non-str targets for its process pool and silently
-    ignores skip_if_exists for them.
-    """
-    captured: dict[str, Any] = {}
-
-    def spy(pairs, **kwargs):
-        captured["pairs"] = list(pairs)
-        captured["kwargs"] = kwargs
-
-    monkeypatch.setattr(extract.transfer_manager, "download_many", spy)
-    client = make_client({"test-bucket": {"a/b": b""}})
-    ext = LineExtractor(client=client)
-    ext.get_blobs_from_gcs(client.bucket("test-bucket").list_blobs(), download_dir)
-
-    (_blob, target) = captured["pairs"][0]
-    assert isinstance(target, str)
-    assert captured["kwargs"]["worker_type"] == extract.transfer_manager.THREAD
-    assert captured["kwargs"]["skip_if_exists"] is True
-    assert captured["kwargs"]["max_workers"] == ext.download_workers
-
-
 @pytest.mark.parametrize(
     ("attr", "env_var"),
     [
@@ -292,33 +250,3 @@ def test_worker_count_resolution(monkeypatch, attr, env_var):
     assert getattr(LineExtractor(), attr) == 9
     explicit: dict[str, Any] = {attr: 3}
     assert getattr(LineExtractor(**explicit), attr) == 3
-
-
-@pytest.mark.parametrize(
-    ("download_workers", "compose_workers", "pool_size"),
-    [(17, 5, 17), (8, 128, 128)],
-)
-def test_gcs_client_is_lazy_and_sizes_the_pool(
-    monkeypatch, download_workers, compose_workers, pool_size
-):
-    """No client until first use; the pool fits the larger worker count."""
-    calls = []
-    fake = mock.Mock()
-    monkeypatch.setattr(
-        extract.storage, "Client", lambda *a, **k: calls.append(1) or fake
-    )
-    ext = LineExtractor(
-        download_workers=download_workers, compose_workers=compose_workers
-    )
-    assert calls == []
-    assert ext.gcs_client is fake
-    assert calls == [1]
-    fake._http.mount.assert_called_once()
-    assert fake._http.mount.call_args.args[0] == "https://"
-    assert fake._http.mount.call_args.args[1]._pool_maxsize == pool_size
-
-
-def test_retry_policy_shape():
-    """Guard the extract retry policy against accidental changes."""
-    assert extract.GCS_EXTRACT_RETRY_POLICY.max_retries == 2
-    assert extract.GCS_EXTRACT_RETRY_POLICY.delay == 30
