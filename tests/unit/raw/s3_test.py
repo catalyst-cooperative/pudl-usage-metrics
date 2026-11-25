@@ -191,6 +191,10 @@ def test_zstd_with_guard_round_trips(tmp_path, records):
             id="fused_records",
         ),
         pytest.param(b"\n", id="malformed_first_line"),
+        pytest.param(
+            RECORD_A + b"fragment" + RECORD_B,
+            id="record_after_a_fragment",
+        ),
     ],
 )
 def test_zstd_with_guard_rejects_bad_lines(tmp_path, data):
@@ -242,6 +246,26 @@ def stored_artifact(client) -> tuple[bytes, dict]:
     blob = artifact_blob(client)
     assert blob is not None, "no artifact was stored"
     return zstd.decompress(blob.download_as_bytes()), blob.metadata
+
+
+@pytest.mark.parametrize(
+    ("base_path", "expected"),
+    [
+        (None, ("metrics.catalyst.coop", f"raw/pudl_s3_logs/{DAY}.log.zst")),
+        (
+            "gs://other-bucket/prefix/",
+            ("other-bucket", f"prefix/raw/pudl_s3_logs/{DAY}.log.zst"),
+        ),
+    ],
+    ids=["default", "overridden"],
+)
+def test_compacted_location(monkeypatch, base_path, expected):
+    """Artifacts live under the output location, so overriding it redirects them."""
+    if base_path is None:
+        monkeypatch.delenv("PUDL_METRICS_GCS_BASE_PATH", raising=False)
+    else:
+        monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", base_path)
+    assert compacted_location(DAY) == expected
 
 
 def test_compact_then_read(fake_s3_gcs, s3_fixture_blobs):

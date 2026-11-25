@@ -11,6 +11,7 @@ from dagster import (
     asset,
     asset_check,
     define_asset_job,
+    validate_run_config,
 )
 
 from usage_metrics.scripts import etl as etl_module
@@ -171,6 +172,15 @@ def test_rebuild_passes_run_config_to_the_job(executed):
             },
         )
     ]
+
+
+def test_rebuild_run_config_is_valid_for_the_real_job():
+    """``--rebuild`` must ask the real job to rebuild, or it silently reuses the
+    artifact.
+    """
+    job = etl_module.defs.resolve_job_def("s3_metrics_etl")
+    config = validate_run_config(job, etl_module.REBUILD_RUN_CONFIG)
+    assert config["ops"]["compacted_s3_logs"]["config"] == {"rebuild": True}
 
 
 # --- _execute()'s asset-check surfacing -------------------------------------
