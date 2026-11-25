@@ -214,6 +214,8 @@ def test_zstd_with_guard_rejects_bad_lines(tmp_path, data):
 def fake_s3_gcs(fake_gcs, patch_download_many, download_dir, monkeypatch):
     """Factory: a fake client (source + artifact buckets) wired into the assets."""
 
+    monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", "gs://test-outputs")
+
     def _make(source_blobs: dict[str, bytes]):
         client = fake_gcs({BUCKET: source_blobs, compacted_location(DAY)[0]: {}})
         monkeypatch.setattr(
@@ -251,23 +253,42 @@ def stored_artifact(client) -> tuple[bytes, dict]:
 
 
 @pytest.mark.parametrize(
-    ("base_path", "expected"),
+    ("environment", "base_path", "bucket", "prefix"),
     [
-        (None, ("metrics.catalyst.coop", f"raw/pudl_s3_logs/{DAY}.log.zst")),
-        (
-            "gs://other-bucket/prefix/",
-            ("other-bucket", f"prefix/raw/pudl_s3_logs/{DAY}.log.zst"),
+        pytest.param("prod", None, "metrics.catalyst.coop", "", id="prod_default"),
+        pytest.param(
+            "prod", "gs://other/prefix/", "other", "prefix/", id="prod_overridden"
+        ),
+        pytest.param(
+            "local", "gs://other/prefix", "other", "prefix/", id="local_overridden"
         ),
     ],
-    ids=["default", "overridden"],
 )
-def test_compacted_location(monkeypatch, base_path, expected):
+def test_compacted_location(monkeypatch, environment, base_path, bucket, prefix):
     """Artifacts live under the output location, so overriding it redirects them."""
+    monkeypatch.setenv("METRICS_PROD_ENV", environment)
     if base_path is None:
         monkeypatch.delenv("PUDL_METRICS_GCS_BASE_PATH", raising=False)
     else:
         monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", base_path)
-    assert compacted_location(DAY) == expected
+    path = f"{prefix}raw/pudl_s3_logs/{DAY}.log.zst"
+    assert compacted_location(DAY) == (bucket, path)
+
+
+@pytest.mark.parametrize(
+    "base_path",
+    [None, "gs://metrics.catalyst.coop/scratch"],
+    ids=["default", "inside_the_bucket"],
+)
+def test_only_prod_runs_may_use_the_production_bucket(monkeypatch, base_path):
+    """A development or test run can't read or replace production artifacts."""
+    monkeypatch.delenv("METRICS_PROD_ENV", raising=False)
+    if base_path is None:
+        monkeypatch.delenv("PUDL_METRICS_GCS_BASE_PATH", raising=False)
+    else:
+        monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", base_path)
+    with pytest.raises(ValueError):
+        compacted_location(DAY)
 
 
 def test_compact_then_read(fake_s3_gcs, s3_fixture_blobs):

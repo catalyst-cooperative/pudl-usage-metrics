@@ -222,6 +222,22 @@ To write to a different path or bucket, set `PUDL_METRICS_GCS_BASE_PATH` to a `g
 export PUDL_METRICS_GCS_BASE_PATH="gs://test.catalyst.coop"
 ```
 
+#### Local S3 runs also write to GCS
+
+`METRICS_PROD_ENV=local` keeps only the processed Parquet outputs on your machine. To
+avoid downloading each of a day's many log files, the S3 assets first combine them
+inside GCS, so building a day's compacted log writes to GCS in two places:
+
+| What                 | Where                                                              | Can you change it?                   |
+| -------------------- | ------------------------------------------------------------------ | ------------------------------------ |
+| The compacted log    | `raw/` under `PUDL_METRICS_GCS_BASE_PATH`                          | Yes, and you must for a local run    |
+| Temporary part files | `_compacted/tmp/` in the raw log bucket, `pudl-s3-logs.catalyst.coop` | No: GCS only combines within a bucket |
+
+Unless `METRICS_PROD_ENV=prod`, set `PUDL_METRICS_GCS_BASE_PATH` to a location outside
+the production bucket, `gs://metrics.catalyst.coop`, before running the S3 assets.
+You need permission to write to both places. The temporary files get new names on
+every run, never replace raw logs, and are deleted after seven days.
+
 ### IP Geocoding with ipinfo
 
 The ETL uses [ipinfo](https://ipinfo.io/) for geocoding the user ip addresses which provides 50k free API requests a month.
