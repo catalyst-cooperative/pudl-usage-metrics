@@ -19,9 +19,8 @@ COMPOSE_FANOUT = 32
 COMPOSE_ROUNDS = 2
 """Number of compose rounds.
 
-GCS allows 1024 components per composite, and composing composites adds up their
-components, so two rounds of 32-way compose reach that limit exactly with no need to
-flatten composites. A 176k-object day reduces to ~172 objects.
+Two rounds of 32-way compose leave one composite per 1024 source objects, so a
+176k-object day reduces to ~172 objects, few enough to download quickly.
 """
 
 COMPOSE_TMP_PREFIX = "_compacted/tmp"
@@ -37,8 +36,9 @@ def _compose_group(
     if len(group) == 1:
         return group[0]
     dest = bucket.blob(dest_name)
-    # A conditional request is the only kind the client retries automatically, and
-    # it turns an accidental overwrite into an error.
+    # if_generation_match=0 means "only write if dest doesn't exist yet". The client
+    # retries compose() after a transient error only when it has such a precondition,
+    # and it also turns an accidental overwrite into an error.
     dest.compose(list(group), if_generation_match=0)
     return dest
 

@@ -38,8 +38,12 @@ next day. Building an artifact earlier could bake in a partial day.
 """
 
 ZSTD_LEVEL = 9
-"""zstd level for the compacted artifact: smaller and faster to read than gzip, with
-level 19 offering little further gain for far more compression time."""
+"""zstd compression level for the compacted artifact.
+
+Levels run from 1 to 22, and the default is 3. These logs compress well, so a higher
+level is worth it: at 9 they're 9% smaller than with gzip and faster to read. Level 19
+gained little more for far longer compression time.
+"""
 
 # Some clients embed raw, unescaped double quotes inside a quoted field --
 # e.g. pip (>= 20) sends a User-Agent like
@@ -92,7 +96,11 @@ def _utcnow() -> datetime:
 
 
 def _read_text(path: Path) -> str:
-    """Read a (possibly zstd-compressed) text file, replacing undecodable bytes."""
+    """Read a (possibly zstd-compressed) text file, replacing undecodable bytes.
+
+    Bytes that aren't valid UTF-8 become U+FFFD, and stay that way in any data parsed
+    from the returned text.
+    """
     if path.suffix == ".zst":
         with zstd.open(path, "rt", errors="replace") as f:
             return f.read()
@@ -117,6 +125,7 @@ def _record_signature(first_line: bytes) -> bytes:
 def zstd_with_guard(src: Path, dest: Path) -> int:
     """Compress ``src`` to ``dest``, checking that each line is exactly one record.
 
+    We may have used GCS ``compose()`` to produce the contents of ``src``.
     ``compose()`` concatenates objects with no separator, so an object lacking a
     trailing newline fuses its last record with the next object's first. A fused
     line contains the record prefix twice.
@@ -257,8 +266,8 @@ def _combine_day(
     """Download a day's logs into one local file.
 
     Args:
-        compose: Reduce the objects server-side first, so only a few hundred
-            composites are downloaded, rather than every object.
+        compose: Reduce the objects server-side first (up to 1024 per composite),
+            so we download far fewer files.
 
     Returns:
         The combined file and the number of source objects, or ``None`` if the
@@ -303,7 +312,10 @@ def _build_artifact(
         )
         rebuilt = _combine_day(context, ext, compose=False)
         if rebuilt is None:
-            raise RuntimeError("Fallback found no files that compose found.") from e
+            raise RuntimeError(
+                "Downloading every object instead of composing found no files; "
+                f"expected {count:,}."
+            ) from e
         combined, count = rebuilt
         zstd_compress(combined, dest)
     return dest, count
@@ -322,8 +334,8 @@ def compacted_s3_logs(
 
     An existing artifact is reused without touching the source bucket. Otherwise
     the day's objects are composed server-side, downloaded, compressed and
-    uploaded. An empty day is stored as an empty artifact, so ``raw_s3_logs`` can
-    tell "no logs" from "not compacted yet".
+    uploaded. An empty day is stored as an empty artifact (and reported as
+    "no-data"), so ``raw_s3_logs`` can tell "no logs" from "not compacted yet".
     """
     key = context.partition_key
     ext = S3Extractor()
