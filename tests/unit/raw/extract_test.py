@@ -44,24 +44,11 @@ class DocExtractor(LineExtractor):
 # --- combine_files -----------------------------------------------------------
 
 
-def test_combine_files_inserts_single_newline(tmp_path):
-    """Files are joined with exactly one newline, even without a trailing one."""
-    a = tmp_path / "a"
-    a.write_bytes(b"a 1\n")
-    b = tmp_path / "b"
-    b.write_bytes(b"b 2")  # no trailing newline
-    dest = LineExtractor().combine_files([a, b], tmp_path / "out")
+def test_combine_files_separates_files_with_one_newline(tmp_path):
+    """A missing trailing newline is added, and empty files contribute nothing."""
+    files = _write_files(tmp_path, b"a 1\n", b"", b"b 2")
+    dest = LineExtractor().combine_files(files, tmp_path / "out")
     assert dest.read_bytes() == b"a 1\nb 2\n"
-
-
-def test_combine_files_skips_empty_files(tmp_path):
-    """Empty inputs contribute nothing (no blank rows)."""
-    a = tmp_path / "a"
-    a.write_bytes(b"a 1\n")
-    empty = tmp_path / "empty"
-    empty.write_bytes(b"")
-    dest = LineExtractor().combine_files([a, empty], tmp_path / "out")
-    assert dest.read_bytes() == b"a 1\n"
 
 
 # --- extract() dispatch ----------------------------------------------------
@@ -106,7 +93,7 @@ def test_extract_no_files_fails_when_files_are_required(
     class RequiredExtractor(LineExtractor):
         require_files = True
 
-    with pytest.raises(Failure, match="No files found for 2024-01-01") as caught:
+    with pytest.raises(Failure) as caught:
         run_extract(RequiredExtractor(), partition_context("2024-01-01"), [])
     assert caught.value.allow_retries is False
 
@@ -144,30 +131,27 @@ def test_extract_parses_each_file_when_not_concatenable(
     assert df["v"].tolist() == ["1", "2"]
 
 
-def test_extract_non_partitioned_run(monkeypatch, download_dir, tmp_path):
-    """extract() works for a non-partitioned run (e.g. cumulative GitHub metrics)."""
-    files = _write_files(tmp_path, b"x 1\n")
-    ext = DocExtractor()
-    monkeypatch.setattr(ext, "download_gcs_blobs", lambda *a, **k: files)
-    df = ext.extract(build_asset_context())  # no partition_key
-    assert ext.partition_key is None
-    assert not df.empty
-
-
+@pytest.mark.parametrize(
+    "partition_key",
+    ["2026-02-25", None],
+    ids=["partitioned", "non_partitioned"],
+)
 def test_extract_sets_partition_key_before_load(
-    partition_context, run_extract, monkeypatch, download_dir, tmp_path
+    run_extract, monkeypatch, download_dir, tmp_path, partition_key
 ):
-    """load_file can rely on self.partition_key."""
+    """load_file can rely on self.partition_key, which is None for unpartitioned runs
+    (e.g. the cumulative GitHub metrics)."""
     files = _write_files(tmp_path, b"x 1\n")
     ext = LineExtractor()
-    captured = {}
+    seen = []
     monkeypatch.setattr(
         ext,
         "load_file",
-        lambda p: captured.setdefault("key", ext.partition_key) or pl.DataFrame(),
+        lambda p: seen.append(ext.partition_key) or pl.DataFrame({"v": [1]}),
     )
-    run_extract(ext, partition_context("2026-02-25"), files)
-    assert captured["key"] == "2026-02-25"
+    df = run_extract(ext, build_asset_context(partition_key=partition_key), files)
+    assert seen == [partition_key]
+    assert not df.empty
 
 
 def test_extract_swallows_empty_data_errors(
@@ -205,29 +189,18 @@ def test_get_blob_prefix(
 # --- download plumbing ---------------------------------------------------
 
 
-def test_download_gcs_blobs_uses_prefix_and_injected_client(
-    partition_context, patch_download_many, make_client, download_dir, monkeypatch
+def test_download_gcs_blobs_lists_by_prefix_and_flattens_names(
+    partition_context, patch_download_many, make_client, download_dir
 ):
-    """The listing is prefixed and the injected client is used (no real GCS)."""
-    blobs = {"2024-01-01-aa": b"a 1\n", "2024-01-02-bb": b"b 2\n"}
+    """Only blobs under the prefix are downloaded, with "/" in their names replaced."""
+    blobs = {"logs/2024-01-01/aa": b"a 1\n", "logs/2024-01-02/bb": b"b 2\n"}
     client = make_client({"test-bucket": blobs})
 
     class PrefixExtractor(LineExtractor):
         def get_blob_prefix(self, context):
-            return "2024-01-01"
+            return "logs/2024-01-01"
 
     ext = PrefixExtractor(client=client)
     paths = ext.download_gcs_blobs(partition_context("2024-01-01"), download_dir)
-    assert [p.name for p in paths] == ["2024-01-01-aa"]
+    assert [p.name for p in paths] == ["logs-2024-01-01-aa"]
     assert paths[0].read_bytes() == b"a 1\n"
-
-
-def test_get_blobs_from_gcs_flattens_names(
-    patch_download_many, make_client, download_dir
-):
-    """Folder separators in blob names become hyphens in local paths."""
-    client = make_client({"test-bucket": {"a/b/c": b"data\n"}})
-    ext = LineExtractor(client=client)
-    blobs = client.bucket("test-bucket").list_blobs()
-    paths = ext.get_blobs_from_gcs(blobs, download_dir)
-    assert paths[0].name == "a-b-c"

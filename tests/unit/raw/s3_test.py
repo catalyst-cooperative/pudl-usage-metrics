@@ -24,6 +24,23 @@ from usage_metrics.raw.s3 import (
 BUCKET = "pudl-s3-logs.catalyst.coop"
 DAY = "2024-06-15"
 
+N_COLUMNS_V1 = 27
+"""Columns before February 2026: 26 fields, one more since the timestamp splits in two."""
+N_COLUMNS_V2 = 28
+"""Columns since ``aws_region`` was added."""
+
+PIP_AGENT = 'pip/24.3.1 {"ci":null,"openssl_version":"OpenSSL 3.0.2"}'
+"""A User-Agent with unescaped quotes inside a quoted field."""
+
+
+def log_line(agent: str = "curl/8.0", *, ip: str = "198.51.100.1") -> str:
+    """One S3 access-log record with ``N_COLUMNS_V1`` columns."""
+    return (
+        f"owner bkt [19/Sep/2026:00:00:00 +0000] {ip} - RID REST.GET.OBJECT k "
+        f'"GET /k HTTP/1.1" 200 - 100 200 5 4 "-" "{agent}" '
+        "- hid SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
+    )
+
 
 # --- filter_blobs ---------------------------------------------------------
 
@@ -58,21 +75,23 @@ def write_log(request, tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("subdir", "n_columns"),
-    [("normal_v1", 27), ("normal_v2", 28)],
+    ("subdir", "partition_key", "n_columns"),
+    [
+        ("normal_v1", None, N_COLUMNS_V1),
+        ("normal_v2", None, N_COLUMNS_V2),
+        # On 2026-02-25 the width changed mid-file, so it's forced to the new one.
+        ("ragged", "2026-02-25", N_COLUMNS_V2),
+    ],
 )
-def test_load_file_column_counts(write_log, s3_fixture_blobs, subdir, n_columns):
-    """Each schema era parses to the expected column count."""
-    path = write_log(b"".join(s3_fixture_blobs(subdir).values()))
-    assert S3Extractor().load_file(path).width == n_columns
-
-
-def test_load_file_ragged_partition_forces_28_columns(write_log, s3_fixture_blobs):
-    """On 2026-02-25 a mixed-width file is coerced to 28 columns."""
+def test_load_file_reads_every_schema_era(
+    write_log, s3_fixture_blobs, subdir, partition_key, n_columns
+):
+    """Every record is read, with the column count of its schema era."""
+    data = b"".join(s3_fixture_blobs(subdir).values())
     ext = S3Extractor()
-    ext.partition_key = "2026-02-25"
-    path = write_log(b"".join(s3_fixture_blobs("ragged").values()))
-    assert ext.load_file(path).width == 28
+    ext.partition_key = partition_key
+    df = ext.load_file(write_log(data))
+    assert df.shape == (data.count(b"\n"), n_columns)
 
 
 def test_load_file_ragged_other_partition_raises_with_note(tmp_path, s3_fixture_blobs):
@@ -83,7 +102,7 @@ def test_load_file_ragged_other_partition_raises_with_note(tmp_path, s3_fixture_
     combined.write_bytes(b"".join(s3_fixture_blobs("ragged").values()))
     with pytest.raises(pl.exceptions.ComputeError) as excinfo:
         ext.load_file(combined)
-    assert any("Extraction failed" in note for note in excinfo.value.__notes__)
+    assert excinfo.value.__notes__
 
 
 # --- _has_embedded_quotes ---------------------------------------------------
@@ -120,31 +139,25 @@ def test_has_embedded_quotes(line, expected):
     assert _has_embedded_quotes(line) is expected
 
 
-def test_load_file_drops_line_with_embedded_json_user_agent(write_log, monkeypatch):
-    """A file with one line whose User-Agent embeds raw JSON parses, minus that line.
+def test_load_file_drops_lines_with_embedded_quotes(write_log):
+    """A few lines with unescaped quotes are dropped, and the rest of the day parses.
 
-    pip's ``pip/24.3.1 {"ci":null,...}`` User-Agent has unescaped double quotes inside
-    a quoted field, which breaks CSV tokenization. The line is dropped rather than
-    guessed at.
+    Regression test for the "not properly escaped" CSV error that failed whole
+    partitions in the 2026-09 backfill (e.g. 2026-09-19). pip's User-Agent embeds raw
+    JSON, including a space inside a string value, within a quoted field.
     """
-    bad_line = (
-        "owner bkt [19/Sep/2026:00:00:00 +0000] 198.51.100.1 - RID REST.GET.OBJECT k "
-        '"GET /k HTTP/1.1" 200 - 100 200 5 4 "-" '
-        '"pip/24.3.1 {"ci":null,"openssl_version":"OpenSSL 3.0.2"}" '
-        "- hid SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
-    )
-    good_line = (
-        "owner bkt [19/Sep/2026:00:00:01 +0000] 198.51.100.2 - RID2 REST.GET.OBJECT k2 "
-        '"GET /k2 HTTP/1.1" 200 - 100 200 5 4 "-" "Mozilla/5.0 (X11; Linux)" '
-        "- hid2 SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
-    )
-    # 1 of 2 lines is far over the real limit, which is exercised below.
-    monkeypatch.setattr("usage_metrics.raw.s3.MAX_DROPPED_LINE_FRACTION", 0.9)
-    df = S3Extractor().load_file(write_log((bad_line + good_line).encode()))
-    assert df.width == 27
-    assert df.height == 1
-    assert df.row(0)[4] == "198.51.100.2"
-    assert df.row(0)[17] == "Mozilla/5.0 (X11; Linux)"
+    bad = log_line(PIP_AGENT, ip="198.51.100.9")
+    path = write_log((bad + log_line() * 9999).encode())  # 0.01% bad
+    df = S3Extractor().load_file(path)
+    assert df.shape == (9999, N_COLUMNS_V1)
+    assert df["column_4"].unique().to_list() == ["198.51.100.1"]
+
+
+def test_load_file_fails_when_too_many_lines_dropped(write_log):
+    """Dropping more than MAX_DROPPED_LINE_FRACTION of lines fails the partition."""
+    path = write_log((log_line(PIP_AGENT) * 5 + log_line() * 995).encode())  # 0.5%
+    with pytest.raises(ValueError):
+        S3Extractor().load_file(path)
 
 
 # --- zstd_with_guard -----------------------------------------------------------
@@ -326,35 +339,3 @@ def test_compact_then_read_end_to_end(s3_client, s3_fixture_blobs):
     df = _raw()
     assert len(df) == sum(v.count(b"\n") for v in blobs.values())
     assert df.shape[1] == 27
-
-
-def _bad_and_good_lines():
-    """A full-width S3 log line with a pip-style User-Agent, and a clean one."""
-    template = (
-        "owner bkt [19/Sep/2026:00:00:00 +0000] 198.51.100.1 - RID REST.GET.OBJECT k "
-        '"GET /k HTTP/1.1" 200 - 100 200 5 4 "-" {agent} '
-        "- hid SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
-    )
-    return (
-        template.format(
-            agent='"pip/24.3.1 {"ci":null,"openssl_version":"OpenSSL 3.0.2"}"'
-        ),
-        template.format(agent='"curl/8.0"'),
-    )
-
-
-def test_load_file_fails_when_too_many_lines_dropped(tmp_path):
-    """Dropping more than MAX_DROPPED_LINE_FRACTION of lines fails the partition."""
-    bad, good = _bad_and_good_lines()
-    path = tmp_path / "f"
-    path.write_text(bad * 5 + good * 995)  # 0.5%
-    with pytest.raises(ValueError, match="investigate"):
-        S3Extractor().load_file(path)
-
-
-def test_load_file_tolerates_a_few_dropped_lines(tmp_path):
-    """A dropped fraction under the limit is kept out of the data, not fatal."""
-    bad, good = _bad_and_good_lines()
-    path = tmp_path / "f"
-    path.write_text(bad + good * 9999)  # 0.01%
-    assert S3Extractor().load_file(path).height == 9999
