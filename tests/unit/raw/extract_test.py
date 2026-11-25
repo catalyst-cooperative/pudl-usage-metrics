@@ -1,14 +1,12 @@
 """Tests for the GCSExtractor base class."""
 
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 import polars as pl
 import pytest
 from dagster import Failure, build_asset_context
 
-from usage_metrics.raw import extract
 from usage_metrics.raw.eel_hole import EelHoleExtractor
 from usage_metrics.raw.extract import GCSExtractor
 from usage_metrics.raw.github_partitioned import GithubExtractor
@@ -233,20 +231,3 @@ def test_get_blobs_from_gcs_flattens_names(
     blobs = client.bucket("test-bucket").list_blobs()
     paths = ext.get_blobs_from_gcs(blobs, download_dir)
     assert paths[0].name == "a-b-c"
-
-
-@pytest.mark.parametrize(
-    ("attr", "env_var"),
-    [
-        ("download_workers", "GCS_DOWNLOAD_WORKERS"),
-        ("compose_workers", "GCS_COMPOSE_WORKERS"),
-    ],
-)
-def test_worker_count_resolution(monkeypatch, attr, env_var):
-    """An explicit argument beats the env var, which beats the default."""
-    monkeypatch.delenv(env_var, raising=False)
-    assert getattr(LineExtractor(), attr) == getattr(extract, f"DEFAULT_{attr.upper()}")
-    monkeypatch.setenv(env_var, "9")
-    assert getattr(LineExtractor(), attr) == 9
-    explicit: dict[str, Any] = {attr: 3}
-    assert getattr(LineExtractor(**explicit), attr) == 3

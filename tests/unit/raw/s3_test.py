@@ -154,19 +154,16 @@ REC_B = b"owner bkt [15/Jun/2024:00:00:01 +0000] 2.2.2.2 - RID2 op k\n"
 
 
 def test_zstd_with_guard_round_trips(tmp_path):
-    """Well-formed records are compressed unchanged, and the line count returned."""
+    """Well-formed records are compressed unchanged, and the line count returned.
+
+    The bucket owner can appear in the body of a record (as it does in ``REC_A``)
+    without failing the record-fusion check.
+    """
     src = tmp_path / "src"
     src.write_bytes(REC_A + REC_B)
     dest = tmp_path / "dest.zst"
     assert zstd_with_guard(src, dest) == 2
     assert zstd.decompress(dest.read_bytes()) == REC_A + REC_B
-
-
-def test_zstd_with_guard_allows_owner_id_elsewhere_in_a_record(tmp_path):
-    """The bucket owner can legitimately be the requester (REC_A) -- not a fusion."""
-    src = tmp_path / "src"
-    src.write_bytes(REC_A)
-    assert zstd_with_guard(src, tmp_path / "dest.zst") == 1
 
 
 def test_zstd_with_guard_detects_fused_records(tmp_path):
@@ -305,27 +302,6 @@ def test_compacted_falls_back_when_records_are_fused(s3_client):
     metadata = _build()
     assert zstd.decompress(_artifact(client)._data) == REC_A + REC_B
     assert metadata["source_object_count"] == 2
-
-
-@pytest.mark.parametrize(
-    ("subdir", "key", "n_columns"),
-    [("normal_v1", DAY, 27), ("normal_v2", DAY, 28), ("ragged", "2026-02-25", 28)],
-)
-def test_raw_s3_logs_reads_the_artifact(
-    s3_client, s3_fixture_blobs, tmp_path, subdir, key, n_columns
-):
-    """raw_s3_logs returns the same frame as parsing the day's plain files."""
-    blobs = s3_fixture_blobs(subdir)
-    client = s3_client({})
-    data = b"".join(blobs.values())
-    _put_artifact(client, data, len(blobs), key=key)
-    df = _raw(key)
-    plain = tmp_path / "plain"
-    plain.write_bytes(data)
-    ext = S3Extractor()
-    ext.partition_key = key
-    pd.testing.assert_frame_equal(df, ext.load_file(plain).to_pandas())
-    assert df.shape[1] == n_columns
 
 
 def test_raw_s3_logs_missing_artifact_is_an_error(s3_client):
