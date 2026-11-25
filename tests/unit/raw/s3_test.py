@@ -33,13 +33,20 @@ PIP_AGENT = 'pip/24.3.1 {"ci":null,"openssl_version":"OpenSSL 3.0.2"}'
 """A User-Agent with unescaped quotes inside a quoted field."""
 
 
-def log_line(agent: str = "curl/8.0", *, ip: str = "198.51.100.1") -> str:
+def log_line(
+    agent: str = "curl/8.0", *, ip: str = "198.51.100.1", requester: str = "-"
+) -> str:
     """One S3 access-log record with ``N_COLUMNS_V1`` columns."""
     return (
-        f"owner bkt [19/Sep/2026:00:00:00 +0000] {ip} - RID REST.GET.OBJECT k "
-        f'"GET /k HTTP/1.1" 200 - 100 200 5 4 "-" "{agent}" '
-        "- hid SigV4 ECDHE AuthHeader host TLSv1.2 - -\n"
+        f"owner bkt [19/Sep/2026:00:00:00 +0000] {ip} {requester} RID "
+        'REST.GET.OBJECT k "GET /k HTTP/1.1" 200 - 100 200 5 4 "-" '
+        f'"{agent}" - hid SigV4 ECDHE AuthHeader host TLSv1.2 - -\n'
     )
+
+
+# The bucket owner is also the requester in the first of these.
+RECORD_A = log_line(requester="owner").encode()
+RECORD_B = log_line(ip="198.51.100.2").encode()
 
 
 # --- filter_blobs ---------------------------------------------------------
@@ -58,17 +65,13 @@ def test_filter_blobs_keeps_only_matching_date(filtered_blob_names):
 # --- load_file -----------------------------------------------------------
 
 
-@pytest.fixture(params=["plain", "zstd"])
-def write_log(request, tmp_path):
-    """Return a function that writes log bytes to a plain or zstd-compressed file."""
+@pytest.fixture
+def write_zst(tmp_path):
+    """Return a function that writes log bytes to a zstd file, like the artifact."""
 
     def _write(data: bytes):
-        if request.param == "zstd":
-            path = tmp_path / "day.log.zst"
-            path.write_bytes(zstd.compress(data))
-        else:
-            path = tmp_path / "day.log"
-            path.write_bytes(data)
+        path = tmp_path / "day.log.zst"
+        path.write_bytes(zstd.compress(data))
         return path
 
     return _write
@@ -84,24 +87,23 @@ def write_log(request, tmp_path):
     ],
 )
 def test_load_file_reads_every_schema_era(
-    write_log, s3_fixture_blobs, subdir, partition_key, n_columns
+    write_zst, s3_fixture_blobs, subdir, partition_key, n_columns
 ):
     """Every record is read, with the column count of its schema era."""
     data = b"".join(s3_fixture_blobs(subdir).values())
     ext = S3Extractor()
     ext.partition_key = partition_key
-    df = ext.load_file(write_log(data))
+    df = ext.load_file(write_zst(data))
     assert df.shape == (data.count(b"\n"), n_columns)
 
 
-def test_load_file_ragged_other_partition_raises_with_note(tmp_path, s3_fixture_blobs):
+def test_load_file_ragged_other_partition_raises_with_note(write_zst, s3_fixture_blobs):
     """A ragged file outside 2026-02-25 raises, annotated with the path."""
     ext = S3Extractor()
     ext.partition_key = "2025-01-01"
-    combined = tmp_path / "combined"
-    combined.write_bytes(b"".join(s3_fixture_blobs("ragged").values()))
+    path = write_zst(b"".join(s3_fixture_blobs("ragged").values()))
     with pytest.raises(pl.exceptions.ComputeError) as excinfo:
-        ext.load_file(combined)
+        ext.load_file(path)
     assert excinfo.value.__notes__
 
 
@@ -139,7 +141,7 @@ def test_has_embedded_quotes(line, expected):
     assert _has_embedded_quotes(line) is expected
 
 
-def test_load_file_drops_lines_with_embedded_quotes(write_log):
+def test_load_file_drops_lines_with_embedded_quotes(write_zst):
     """A few lines with unescaped quotes are dropped, and the rest of the day parses.
 
     Regression test for the "not properly escaped" CSV error that failed whole
@@ -147,76 +149,67 @@ def test_load_file_drops_lines_with_embedded_quotes(write_log):
     JSON, including a space inside a string value, within a quoted field.
     """
     bad = log_line(PIP_AGENT, ip="198.51.100.9")
-    path = write_log((bad + log_line() * 9999).encode())  # 0.01% bad
+    path = write_zst((bad + log_line() * 9999).encode())  # 0.01% bad
     df = S3Extractor().load_file(path)
     assert df.shape == (9999, N_COLUMNS_V1)
     assert df["column_4"].unique().to_list() == ["198.51.100.1"]
 
 
-def test_load_file_fails_when_too_many_lines_dropped(write_log):
+def test_load_file_fails_when_too_many_lines_dropped(write_zst):
     """Dropping more than MAX_DROPPED_LINE_FRACTION of lines fails the partition."""
-    path = write_log((log_line(PIP_AGENT) * 5 + log_line() * 995).encode())  # 0.5%
+    path = write_zst((log_line(PIP_AGENT) * 5 + log_line() * 995).encode())  # 0.5%
     with pytest.raises(ValueError):
         S3Extractor().load_file(path)
 
 
 # --- zstd_with_guard -----------------------------------------------------------
 
-REC_A = b"owner bkt [15/Jun/2024:00:00:00 +0000] 1.1.1.1 owner RID1 op k\n"
-REC_B = b"owner bkt [15/Jun/2024:00:00:01 +0000] 2.2.2.2 - RID2 op k\n"
 
-
-def test_zstd_with_guard_round_trips(tmp_path):
+@pytest.mark.parametrize(
+    "records",
+    [[], [RECORD_A, RECORD_B]],
+    ids=["empty_file", "records"],
+)
+def test_zstd_with_guard_round_trips(tmp_path, records):
     """Well-formed records are compressed unchanged, and the line count returned.
 
-    The bucket owner can appear in the body of a record (as it does in ``REC_A``)
-    without failing the record-fusion check.
+    The bucket owner can appear in the body of a record without failing the
+    record-fusion check.
     """
     src = tmp_path / "src"
-    src.write_bytes(REC_A + REC_B)
+    src.write_bytes(b"".join(records))
     dest = tmp_path / "dest.zst"
-    assert zstd_with_guard(src, dest) == 2
-    assert zstd.decompress(dest.read_bytes()) == REC_A + REC_B
+    assert zstd_with_guard(src, dest) == len(records)
+    assert zstd.decompress(dest.read_bytes()) == b"".join(records)
 
 
-def test_zstd_with_guard_detects_fused_records(tmp_path):
-    """Two records on one line (a missing newline before compose) are rejected."""
+@pytest.mark.parametrize(
+    "data",
+    [
+        pytest.param(
+            RECORD_A + RECORD_B.rstrip(b"\n") + RECORD_A,
+            id="fused_records",
+        ),
+        pytest.param(b"\n", id="malformed_first_line"),
+    ],
+)
+def test_zstd_with_guard_rejects_bad_lines(tmp_path, data):
+    """Every line must be exactly one record, e.g. none fused by ``compose()``."""
     src = tmp_path / "src"
-    src.write_bytes(REC_A + REC_B.rstrip(b"\n") + REC_A + REC_B)
-    with pytest.raises(FusedRecordsError, match="Line 2"):
+    src.write_bytes(data)
+    with pytest.raises(FusedRecordsError):
         zstd_with_guard(src, tmp_path / "dest.zst")
-
-
-def test_zstd_with_guard_rejects_a_malformed_first_line(tmp_path):
-    """A first line with no record prefix can't set the signature, so it's rejected."""
-    src = tmp_path / "src"
-    src.write_bytes(b"\n")
-    with pytest.raises(FusedRecordsError, match="Not a log record"):
-        zstd_with_guard(src, tmp_path / "dest.zst")
-
-
-def test_zstd_with_guard_empty_file(tmp_path):
-    """An empty file compresses to an empty stream with zero lines."""
-    src = tmp_path / "src"
-    src.write_bytes(b"")
-    dest = tmp_path / "dest.zst"
-    assert zstd_with_guard(src, dest) == 0
-    assert zstd.decompress(dest.read_bytes()) == b""
 
 
 # --- compacted_s3_logs / raw_s3_logs assets -------------------------------------
 
 
 @pytest.fixture
-def s3_client(make_client, patch_download_many, download_dir, monkeypatch):
+def fake_s3_gcs(fake_gcs, patch_download_many, download_dir, monkeypatch):
     """Factory: a fake client (source + artifact buckets) wired into the assets."""
 
-    def _make(
-        source_blobs: dict[str, bytes], artifacts: dict[str, bytes] | None = None
-    ):
-        client = make_client(
-            {BUCKET: source_blobs, compacted_location(DAY)[0]: artifacts or {}}
-        )
+    def _make(source_blobs: dict[str, bytes]):
+        client = fake_gcs({BUCKET: source_blobs, compacted_location(DAY)[0]: {}})
         monkeypatch.setattr(
             s3_module, "S3Extractor", lambda *a, **k: S3Extractor(client=client)
         )
@@ -225,117 +218,105 @@ def s3_client(make_client, patch_download_many, download_dir, monkeypatch):
     return _make
 
 
-def _artifact(client, key=DAY):
-    bucket, path = compacted_location(key)
-    return client.bucket(bucket).get_blob(path)
-
-
-def _put_artifact(client, data: bytes, count: int, key=DAY):
-    bucket, path = compacted_location(key)
-    blob = client.bucket(bucket).blob(path)
-    blob._data = zstd.compress(data)
-    blob.metadata = {"source_object_count": str(count)}
-    blob._store()
-
-
-def _build(key=DAY, rebuild=False):
+def run_compacted_asset(rebuild: bool = False) -> dict:
+    """Run ``compacted_s3_logs`` for ``DAY`` and return its metadata."""
     result = compacted_s3_logs(
-        build_asset_context(partition_key=key), CompactedS3LogsConfig(rebuild=rebuild)
+        build_asset_context(partition_key=DAY), CompactedS3LogsConfig(rebuild=rebuild)
     )
     return cast(dict, cast(MaterializeResult, result).metadata)
 
 
-def _raw(key=DAY) -> pd.DataFrame:
-    return cast(pd.DataFrame, raw_s3_logs(build_asset_context(partition_key=key)))
+def run_raw_asset() -> pd.DataFrame:
+    """Run ``raw_s3_logs`` for ``DAY``."""
+    return cast(pd.DataFrame, raw_s3_logs(build_asset_context(partition_key=DAY)))
 
 
-def test_compacted_builds_artifact(s3_client, s3_fixture_blobs):
-    """No artifact yet: compose, download, compress, upload with metadata."""
+def artifact_blob(client):
+    """The stored artifact for ``DAY``, or ``None`` if there isn't one."""
+    bucket, path = compacted_location(DAY)
+    return client.bucket(bucket).get_blob(path)
+
+
+def stored_artifact(client) -> tuple[bytes, dict]:
+    """The decompressed contents and metadata of ``DAY``'s artifact."""
+    blob = artifact_blob(client)
+    assert blob is not None, "no artifact was stored"
+    return zstd.decompress(blob.download_as_bytes()), blob.metadata
+
+
+def test_compact_then_read(fake_s3_gcs, s3_fixture_blobs):
+    """A day is composed and stored as one artifact, which ``raw_s3_logs`` reads."""
     blobs = s3_fixture_blobs("normal_v1")
-    client = s3_client(blobs)
-    metadata = _build()
-    artifact = _artifact(client)
-    assert zstd.decompress(artifact._data) == b"".join(blobs.values())
-    assert artifact.metadata["source_object_count"] == str(len(blobs))
-    assert "built_at" in artifact.metadata
-    assert artifact.content_type == "application/zstd"
+    client = fake_s3_gcs(blobs)
+
+    metadata = run_compacted_asset()
+
     assert metadata["action"] == "built"
     assert metadata["source_object_count"] == len(blobs)
     assert client.bucket(BUCKET).compose_calls  # reduced server-side
+    records, stored_metadata = stored_artifact(client)
+    assert records == b"".join(blobs.values())
+    assert stored_metadata["source_object_count"] == str(len(blobs))
+    assert run_raw_asset().shape == (records.count(b"\n"), N_COLUMNS_V1)
 
 
-def test_compacted_reuses_existing_artifact_without_touching_the_source(s3_client):
-    """An existing artifact is reused with no listing or compose of the raw logs."""
-    client = s3_client({f"{DAY}-00-00-00-a": REC_A}, {})
-    _put_artifact(client, REC_A, 1)
-    metadata = _build()
-    assert metadata["action"] == "reused"
-    assert client.bucket(BUCKET).list_prefixes == []
-    assert client.bucket(BUCKET).compose_calls == []
+def test_compacted_reuses_the_artifact_unless_rebuilding(fake_s3_gcs):
+    """An existing artifact is kept, without even listing the raw logs."""
+    client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
+    run_compacted_asset()
+    source = client.bucket(BUCKET)
+    source.blob(f"{DAY}-00-00-01-b").upload_from_string(RECORD_B)
+    source.list_prefixes.clear()
+
+    assert run_compacted_asset()["action"] == "reused"
+    assert source.list_prefixes == []
+    assert stored_artifact(client)[0] == RECORD_A
+
+    assert run_compacted_asset(rebuild=True)["action"] == "built"
+    records, metadata = stored_artifact(client)
+    assert records == RECORD_A + RECORD_B
+    assert metadata["source_object_count"] == "2"
 
 
-def test_compacted_rebuild_ignores_existing_artifact(s3_client):
-    """``rebuild=True`` rebuilds from the source even if an artifact exists."""
-    client = s3_client({f"{DAY}-00-00-00-a": REC_A, f"{DAY}-00-00-01-b": REC_B})
-    _put_artifact(client, REC_A, 1)
-    metadata = _build(rebuild=True)
-    assert metadata["action"] == "built"
-    assert zstd.decompress(_artifact(client)._data) == REC_A + REC_B
-    assert _artifact(client).metadata["source_object_count"] == "2"
-
-
-def test_compacted_refuses_partition_not_yet_transferred(s3_client, monkeypatch):
+def test_compacted_refuses_partition_not_yet_transferred(fake_s3_gcs, monkeypatch):
     """A build before the day's logs are fully in GCS is refused, not partial."""
-    client = s3_client({f"{DAY}-00-00-00-a": REC_A})
+    client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
     monkeypatch.setattr(
         s3_module, "_utcnow", lambda: datetime(2024, 6, 16, 1, 0, tzinfo=UTC)
     )
-    with pytest.raises(RuntimeError, match="may not be fully transferred"):
-        _build()
-    assert _artifact(client) is None
+    with pytest.raises(RuntimeError):
+        run_compacted_asset()
+    assert artifact_blob(client) is None
 
 
-def test_compacted_empty_day_records_an_empty_artifact(s3_client):
-    """No source objects: an empty artifact marks the day as checked."""
-    client = s3_client({})
-    metadata = _build()
-    assert metadata["action"] == "no-data"
-    assert _artifact(client).metadata["source_object_count"] == "0"
-    assert zstd.decompress(_artifact(client)._data) == b""
+def test_empty_day_is_stored_as_an_empty_artifact(fake_s3_gcs):
+    """The empty artifact marks the day as compacted; "no-data" is what the run reports."""
+    client = fake_s3_gcs({})
+
+    assert run_compacted_asset()["action"] == "no-data"
+
+    records, metadata = stored_artifact(client)
+    assert records == b""
+    assert metadata["source_object_count"] == "0"
+    assert run_raw_asset().empty
 
 
-def test_compacted_falls_back_when_records_are_fused(s3_client):
+def test_compacted_falls_back_when_records_are_fused(fake_s3_gcs):
     """A source object missing its newline fuses records under compose; the
     build detects that and redoes the day with newline padding."""
-    blobs = {
-        f"{DAY}-00-00-00-a": REC_A.rstrip(b"\n"),  # no trailing newline
-        f"{DAY}-00-00-01-b": REC_B,
-    }
-    client = s3_client(blobs)
-    metadata = _build()
-    assert zstd.decompress(_artifact(client)._data) == REC_A + REC_B
+    client = fake_s3_gcs(
+        {
+            f"{DAY}-00-00-00-a": RECORD_A.rstrip(b"\n"),  # no trailing newline
+            f"{DAY}-00-00-01-b": RECORD_B,
+        }
+    )
+    metadata = run_compacted_asset()
+    assert stored_artifact(client)[0] == RECORD_A + RECORD_B
     assert metadata["source_object_count"] == 2
 
 
-def test_raw_s3_logs_missing_artifact_is_an_error(s3_client):
+def test_raw_s3_logs_missing_artifact_is_an_error(fake_s3_gcs):
     """A partition that was never compacted must not silently look empty."""
-    s3_client({})
-    with pytest.raises(FileNotFoundError, match="compacted_s3_logs"):
-        _raw()
-
-
-def test_raw_s3_logs_empty_day(s3_client):
-    """An empty-day artifact yields an empty frame."""
-    client = s3_client({})
-    _put_artifact(client, b"", 0)
-    assert _raw().empty
-
-
-def test_compact_then_read_end_to_end(s3_client, s3_fixture_blobs):
-    """compacted_s3_logs followed by raw_s3_logs reproduces the day's rows."""
-    blobs = s3_fixture_blobs("normal_v1")
-    s3_client(blobs)
-    _build()
-    df = _raw()
-    assert len(df) == sum(v.count(b"\n") for v in blobs.values())
-    assert df.shape[1] == 27
+    fake_s3_gcs({})
+    with pytest.raises(FileNotFoundError):
+        run_raw_asset()

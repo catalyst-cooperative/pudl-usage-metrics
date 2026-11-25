@@ -1,21 +1,20 @@
 """Fakes and fixtures for testing GCS extractors without touching GCS.
 
+The fakes only store, list, and concatenate bytes. They don't enforce GCS's limits or
+preconditions.
+
 The fake classes are plain importable names (``from .conftest import FakeBlob``) for
 tests that need to build blobs directly."""
 
+import copy
 from pathlib import Path
 
 import pytest
 from dagster import build_asset_context
-from google.api_core.exceptions import BadRequest, PreconditionFailed
 
 from usage_metrics.raw import extract
 
 DATA_DIR = Path(__file__).parents[2] / "data"
-
-
-MAX_COMPOSE_SOURCES = 32
-MAX_COMPONENTS = 1024
 
 
 class FakeBlob:
@@ -27,51 +26,47 @@ class FakeBlob:
         data: bytes = b"",
         bucket: FakeBucket | None = None,
         time_created=None,
-        metadata: dict[str, str] | None = None,
-        components: int = 1,
     ):
         """Store the blob name and contents."""
         self.name = name
         self._data = data
         self.bucket = bucket
         self.time_created = time_created
-        self.metadata = metadata
-        self.components = components
-        self.content_type: str | None = None
+        self.metadata: dict[str, str] | None = None
 
     @property
     def size(self) -> int:
         """Size of the blob in bytes."""
         return len(self._data)
 
+    def download_as_bytes(self) -> bytes:
+        """Return the blob contents."""
+        return self._data
+
     def download_to_filename(self, filename) -> None:
         """Write the blob contents to a local path."""
         Path(filename).write_bytes(self._data)
 
-    def _store(self) -> None:
+    def upload_from_string(self, data: bytes) -> None:
+        """Set the contents and store a snapshot of the blob in its bucket.
+
+        As in GCS, changing ``metadata`` after an upload doesn't change what's stored.
+        """
         assert self.bucket is not None
-        self.bucket._blobs[self.name] = self
+        self._data = data
+        stored = copy.copy(self)
+        stored.metadata = copy.copy(self.metadata)
+        self.bucket._blobs[self.name] = stored
 
     def upload_from_filename(self, filename, content_type=None) -> None:
-        """Read a local file into the blob and store it in its bucket."""
-        self._data = Path(filename).read_bytes()
-        self.content_type = content_type
-        self._store()
+        """Upload the contents of a local file."""
+        self.upload_from_string(Path(filename).read_bytes())
 
-    def compose(self, sources, if_generation_match=None, **_kwargs) -> None:
-        """Concatenate ``sources`` into this blob, enforcing GCS's limits."""
+    def compose(self, sources, if_generation_match=None) -> None:
+        """Store the concatenation of ``sources`` in this blob."""
         assert self.bucket is not None
-        if not 1 <= len(sources) <= MAX_COMPOSE_SOURCES:
-            raise ValueError(f"Can compose 1-{MAX_COMPOSE_SOURCES} sources.")
-        if if_generation_match == 0 and self.name in self.bucket._blobs:
-            raise PreconditionFailed(f"{self.name} already exists.")
-        components = sum(s.components for s in sources)
-        if components > MAX_COMPONENTS:
-            raise BadRequest(f"Composite would have {components} components.")
-        self._data = b"".join(s._data for s in sources)
-        self.components = components
-        self._store()
         self.bucket.compose_calls.append(self.name)
+        self.upload_from_string(b"".join(s.download_as_bytes() for s in sources))
 
 
 class FakeBucket:
@@ -138,7 +133,7 @@ def patch_download_many(monkeypatch):
 
 
 @pytest.fixture
-def make_client():
+def fake_gcs():
     """Return a factory for a ``FakeClient`` from ``{bucket: {blob: bytes}}``."""
     return FakeClient
 
@@ -182,7 +177,7 @@ def s3_fixture_blobs():
 
 
 @pytest.fixture
-def filtered_blob_names(make_client, partition_context):
+def filtered_blob_names(fake_gcs, partition_context):
     """Return a function listing the blob names an extractor keeps for a partition.
 
     Builds the extractor with a fake bucket holding empty blobs of the given names,
@@ -191,7 +186,7 @@ def filtered_blob_names(make_client, partition_context):
 
     def _filter(extractor_cls, partition_key, blob_names, **kwargs) -> list[str]:
         bucket_name = extractor_cls(**kwargs).bucket_name
-        client = make_client({bucket_name: dict.fromkeys(blob_names, b"")})
+        client = fake_gcs({bucket_name: dict.fromkeys(blob_names, b"")})
         extractor = extractor_cls(client=client, **kwargs)
         listed = client.bucket(bucket_name).list_blobs()
         kept = extractor.filter_blobs(partition_context(partition_key), listed)

@@ -190,11 +190,11 @@ def test_get_blob_prefix(
 
 
 def test_download_gcs_blobs_lists_by_prefix_and_flattens_names(
-    partition_context, patch_download_many, make_client, download_dir
+    partition_context, patch_download_many, fake_gcs, download_dir
 ):
     """Only blobs under the prefix are downloaded, with "/" in their names replaced."""
     blobs = {"logs/2024-01-01/aa": b"a 1\n", "logs/2024-01-02/bb": b"b 2\n"}
-    client = make_client({"test-bucket": blobs})
+    client = fake_gcs({"test-bucket": blobs})
 
     class PrefixExtractor(LineExtractor):
         def get_blob_prefix(self, context):
