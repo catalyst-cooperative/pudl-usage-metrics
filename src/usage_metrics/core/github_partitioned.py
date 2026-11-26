@@ -86,8 +86,9 @@ def core_github_clones(
 ) -> pd.DataFrame:
     """Transform the clones to the PUDL Github repository.
 
-    The raw data includes clones from a two week window. To avoid duplication between
-    partitions, we filter the records here by the time window in the partition key.
+    The raw data holds the day's counts as listed by each archive that has them. The
+    counts only grow while a day is under way, and the oldest day in an archive covers
+    only part of that day, so the largest is the day's total.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
@@ -104,23 +105,9 @@ def core_github_clones(
         }
     )
 
-    # Drop any repeated timestamps between snapshots
-    df = df.drop_duplicates("metrics_date")
     # Get date from timestamp, as this is always 00:00:00.000000
     df["metrics_date"] = pd.to_datetime(df["metrics_date"]).dt.date
-
-    # Only keep records within the week covered by the partition key to avoid duplicated
-    # values between partitions
-    week_start_date_str = context.partition_key
-    week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
-    df = df.loc[
-        (df.metrics_date >= week_date_range.min().date())
-        & (df.metrics_date <= week_date_range.max().date())
-    ]
-
-    # Check validity of PK column
-    df = df.set_index("metrics_date")
-    assert df.index.is_unique
+    df = df.groupby("metrics_date")[["total_clones", "unique_clones"]].max()
 
     context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 
@@ -139,8 +126,9 @@ def core_github_views(
 ) -> pd.DataFrame:
     """Transform the views to the PUDL Github repository.
 
-    The raw data includes views from a two week window. To avoid duplication between
-    partitions, we filter the records here by the time window in the partition key.
+    The raw data holds the day's counts as listed by each archive that has them. The
+    counts only grow while a day is under way, and the oldest day in an archive covers
+    only part of that day, so the largest is the day's total.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
@@ -157,25 +145,9 @@ def core_github_views(
         }
     )
 
-    # Drop any repeated timestamps between snapshots
-    df = df.drop_duplicates("metrics_date")
     # Get date from timestamp, as this is always 00:00:00.000000
     df["metrics_date"] = pd.to_datetime(df["metrics_date"]).dt.date
-
-    # Only keep records within the week covered by the partition key to avoid duplicated
-    # values between partitions
-    week_start_date_str = context.partition_key
-    week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
-    df = df.loc[
-        df.metrics_date.between(
-            week_date_range.min().date(),
-            week_date_range.max().date(),
-        )
-    ]
-
-    # Check validity of PK column
-    df = df.set_index("metrics_date")
-    assert df.index.is_unique
+    df = df.groupby("metrics_date")[["total_views", "unique_views"]].max()
 
     context.log.info(f"Saving to {os.getenv('METRICS_PROD_ENV', 'local')} environment.")
 

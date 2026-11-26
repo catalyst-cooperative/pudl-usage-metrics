@@ -240,6 +240,14 @@ To write to a different path or bucket, set `PUDL_METRICS_GCS_BASE_PATH` to a `g
 export PUDL_METRICS_GCS_BASE_PATH="gs://test.catalyst.coop"
 ```
 
+#### GitHub and Zenodo days
+
+Zenodo, Kaggle, and GitHub's popular paths and referrers are snapshots, so a partition
+holds what was archived that day. GitHub counts views and clones per day, and lists the
+last two weeks. A partition holds the largest counts listed for its day by the archives
+saved 2 to 15 days later, so it can't be published until two days afterwards. GitHub
+leaves out days without any traffic, and those get no row.
+
 #### S3 days
 
 S3 often logs a request made late in a day on the following day. So each S3 partition

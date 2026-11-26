@@ -78,5 +78,5 @@ class KaggleExtractor(GCSExtractor):
     output_required=False,
 )
 def raw_kaggle_logs(context: AssetExecutionContext) -> Iterator[Output[pd.DataFrame]]:
-    """Extract Kaggle logs from daily files and return one weekly DataFrame."""
+    """Extract the Kaggle statistics archived on a day."""
     yield from KaggleExtractor().extract_partition(context)
