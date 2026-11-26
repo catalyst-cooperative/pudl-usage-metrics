@@ -209,6 +209,11 @@ The `load-metrics` GitHub action is responsible for updating each parquet with f
 **If you configure a run for a previously-existing partition, it will overwrite what is already there.**
 Be sure this is what you want before you kick off the run!
 
+The one exception, in local runs too, is that an empty result never replaces a file
+that has rows: the run fails and keeps the file. If a partition really should become
+empty, delete its Parquet file and run it again. This doesn't protect against a result
+that merely has fewer rows than before.
+
 If a new column is added or data is processed in a new way,
 you'll have to run a complete backfill to overwrite all previous partitions.
 
