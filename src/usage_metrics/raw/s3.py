@@ -2,7 +2,7 @@
 
 import re
 import shutil
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from compression import zstd
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
@@ -14,6 +14,7 @@ from dagster import (
     Config,
     DailyPartitionsDefinition,
     MaterializeResult,
+    Output,
     asset,
     get_dagster_logger,
 )
@@ -25,7 +26,11 @@ from usage_metrics.paths import (
     split_gcs_uri,
 )
 from usage_metrics.raw.compose import compose_day
-from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
+from usage_metrics.raw.extract import (
+    GCS_EXTRACT_RETRY_POLICY,
+    GCSExtractor,
+    report_missing_input,
+)
 
 DATASET_NAME = "pudl_s3_logs"
 """Names the local ``raw/`` subdirectory and the compacted artifacts in GCS."""
@@ -381,9 +386,13 @@ def compacted_s3_logs(
     deps=[compacted_s3_logs],
     tags={"source": "s3"},
     retry_policy=GCS_EXTRACT_RETRY_POLICY,
+    output_required=False,
 )
-def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
-    """Read a day's compacted S3 logs (see ``compacted_s3_logs``) into one DataFrame."""
+def raw_s3_logs(context: AssetExecutionContext) -> Iterator[Output[pd.DataFrame]]:
+    """Read a day's compacted S3 logs (see ``compacted_s3_logs``) into one DataFrame.
+
+    Nothing is produced for a day without logs, so nothing downstream runs.
+    """
     key = context.partition_key
     ext = S3Extractor()
     ext.partition_key = key
@@ -399,6 +408,6 @@ def raw_s3_logs(context: AssetExecutionContext) -> pd.DataFrame:
     try:
         frame = ext.load_file(local)
     except pl.exceptions.NoDataError:
-        context.log.warning(f"No S3 logs for {key}.")
-        return pd.DataFrame()
-    return frame.to_pandas()
+        report_missing_input(context, f"No S3 logs for {key}.")
+        return
+    yield Output(frame.to_pandas())

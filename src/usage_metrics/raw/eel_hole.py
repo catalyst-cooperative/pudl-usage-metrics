@@ -1,14 +1,14 @@
 """Extract data from PUDL Viewer (aka "eel hole") logs."""
 
-from collections.abc import Iterable
-from datetime import date
+from collections.abc import Iterable, Iterator
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 
 import pandas as pd
 from dagster import (
     AssetExecutionContext,
     DailyPartitionsDefinition,
-    Failure,
+    Output,
     asset,
 )
 from google.cloud import storage
@@ -23,14 +23,18 @@ Older logs expired under a retention rule that has since been relaxed, and 2026-
 only has part of its day. Outputs for earlier days can't be produced again.
 """
 
+TRANSFER_DELAY = timedelta(days=1, hours=2)
+"""How long after the start of a partition's day its logs are all in GCS."""
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
+
 
 class EelHoleExtractor(GCSExtractor):
     """Extractor for eel hole logs stored in GCS."""
 
     concatenable_files = True
-    require_files = True
-    """The bucket's logs expire, so a backfill of an expired day must fail instead of
-    writing an empty partition over its existing output."""
 
     def __init__(self, *args, **kwargs):
         """Initialize the extractor."""
@@ -77,21 +81,22 @@ class EelHoleExtractor(GCSExtractor):
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     tags={"source": "eel_hole"},
     retry_policy=GCS_EXTRACT_RETRY_POLICY,
+    output_required=False,
 )
-def raw_eel_hole_logs(context: AssetExecutionContext) -> pd.DataFrame:
-    """Extract eel hole logs from sub-daily files and return one weekly DataFrame.
+def raw_eel_hole_logs(
+    context: AssetExecutionContext,
+) -> Iterator[Output[pd.DataFrame]]:
+    """Extract one day of eel hole logs from its sub-daily files.
 
-    Raises:
-        Failure: For a day before ``FIRST_COMPLETE_RAW_DAY``, so that nothing is made
-            from what's left of its logs and written over its outputs.
+    Nothing is produced for a day whose logs have expired, or aren't all in GCS yet:
+    processing part of a day could replace its complete outputs.
     """
     day = date.fromisoformat(context.partition_key)
     if day < FIRST_COMPLETE_RAW_DAY:
-        raise Failure(
-            description=(
-                f"Not processing {day}: its raw logs have expired, in whole or in "
-                "part, so its existing outputs can't be produced again."
-            ),
-            allow_retries=False,
-        )
-    return EelHoleExtractor().extract(context)
+        context.log.info(f"Skipping {day}: its raw logs have expired.")
+        return
+    ready = datetime.combine(day, time(0), UTC) + TRANSFER_DELAY
+    if _utcnow() < ready:
+        context.log.info(f"Skipping {day}: its logs aren't due until {ready}.")
+        return
+    yield from EelHoleExtractor().extract_partition(context)

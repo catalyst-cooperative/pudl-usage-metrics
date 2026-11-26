@@ -53,7 +53,7 @@ def executed(monkeypatch):
 
     def fake_execute(job, **kwargs):
         calls.append((job.name, kwargs))
-        return True
+        return True, []
 
     monkeypatch.setattr(
         etl_module.defs,
@@ -183,6 +183,42 @@ def test_rebuild_run_config_is_valid_for_the_real_job():
     assert config["ops"]["compacted_s3_logs"]["config"] == {"rebuild": True}
 
 
+@pytest.mark.parametrize("succeeded", [True, False], ids=["success", "failure"])
+def test_missing_input_from_every_run_reaches_the_workflow(
+    executed, monkeypatch, tmp_path, succeeded
+):
+    """The Zulip message reads one step output, so it must list every run's missing
+    input, even when a run failed.
+    """
+    monkeypatch.setattr(
+        etl_module,
+        "_execute",
+        lambda job, **kw: (succeeded, [f"no input on {kw['partition_key']}"]),
+    )
+    output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    _run(["--job", "s3", "--window", "2"])
+
+    first, *listed, last = output.read_text().splitlines()
+    name, delimiter = first.split("<<")
+    assert (name, last) == ("missing_input", delimiter)
+    assert len(listed) == 2
+    assert all(day in line for day, line in zip(_S3_DAYS[-2:], listed, strict=True))
+
+
+def test_no_missing_input_output_when_nothing_is_missing(
+    executed, monkeypatch, tmp_path
+):
+    """Any value in the output turns the Zulip message into a warning."""
+    output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    _run(["--job", "s3"])
+
+    assert not output.exists()
+
+
 # --- _execute()'s asset-check surfacing -------------------------------------
 
 
@@ -212,7 +248,7 @@ def test_execute_fails_the_job_when_a_blocking_check_fails(caplog):
     ).resolve_job_def("job")
 
     with caplog.at_level(logging.WARNING, logger="usage_metrics"):
-        succeeded = _execute(job)
+        succeeded, _ = _execute(job)
 
     assert not succeeded
     assert "table failed its schema" in caplog.text

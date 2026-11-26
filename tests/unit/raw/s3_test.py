@@ -1,5 +1,6 @@
 """Tests for the S3 log extractor."""
 
+from collections.abc import Iterator
 from compression import zstd
 from datetime import UTC, datetime
 from typing import cast
@@ -7,7 +8,7 @@ from typing import cast
 import pandas as pd
 import polars as pl
 import pytest
-from dagster import MaterializeResult, build_asset_context
+from dagster import MaterializeResult, Output, build_asset_context
 
 from usage_metrics.raw import s3 as s3_module
 from usage_metrics.raw.s3 import (
@@ -234,9 +235,16 @@ def run_compacted_asset(rebuild: bool = False) -> dict:
     return cast(dict, cast(MaterializeResult, result).metadata)
 
 
+def raw_asset_outputs() -> list[Output]:
+    """Run ``raw_s3_logs`` for ``DAY`` and return what it produced."""
+    outputs = raw_s3_logs(build_asset_context(partition_key=DAY))
+    return list(cast(Iterator[Output], outputs))
+
+
 def run_raw_asset() -> pd.DataFrame:
-    """Run ``raw_s3_logs`` for ``DAY``."""
-    return cast(pd.DataFrame, raw_s3_logs(build_asset_context(partition_key=DAY)))
+    """The data ``raw_s3_logs`` produces for ``DAY``."""
+    (output,) = raw_asset_outputs()
+    return cast(pd.DataFrame, output.value)
 
 
 def artifact_blob(client):
@@ -345,7 +353,7 @@ def test_empty_day_is_stored_as_an_empty_artifact(fake_s3_gcs):
     records, metadata = stored_artifact(client)
     assert records == b""
     assert metadata["source_object_count"] == "0"
-    assert run_raw_asset().empty
+    assert raw_asset_outputs() == []
 
 
 def test_compacted_falls_back_when_records_are_fused(fake_s3_gcs):

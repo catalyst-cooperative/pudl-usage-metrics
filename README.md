@@ -190,6 +190,18 @@ Click "Select All" and then click the "Submit" button.
 This will submit a run for each partition.
 You can follow the runs on the ["Runs" tab](http://localhost:3000/instance/runs).
 
+### Days without input
+
+A source may have no logs for a day. Its `raw` asset then produces nothing, so
+everything downstream is skipped, stored tables are left as they are, and the run
+succeeds. `usage-metrics etl` lists the missing input at the end of the run, and the
+`load-metrics` Zulip message shows it with a warning. Running the partition again later
+fills the gap if the logs have turned up.
+
+Eel hole days before 2026-05-28 are skipped without a warning: their raw logs expired
+under an earlier retention rule, so their existing outputs can't be produced again. So is
+a day whose logs aren't all in GCS yet (before 02:00 UTC the next day).
+
 ### Local vs. production development
 
 The choice between local development (written to local storage)

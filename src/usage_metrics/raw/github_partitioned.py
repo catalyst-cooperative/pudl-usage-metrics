@@ -6,7 +6,7 @@ querying the Github API.
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from datetime import date, datetime
 from pathlib import Path
 from typing import ClassVar, Literal, get_args
@@ -16,6 +16,7 @@ from dagster import (
     AssetExecutionContext,
     AssetsDefinition,
     DailyPartitionsDefinition,
+    Output,
     asset,
 )
 from google.cloud import storage
@@ -159,10 +160,13 @@ def daily_metrics_extraction_factory(
         partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
         tags={"source": "github_partitioned"},
         retry_policy=GCS_EXTRACT_RETRY_POLICY,
+        output_required=False,
     )
-    def _raw_github_logs(context: AssetExecutionContext) -> pd.DataFrame:
+    def _raw_github_logs(
+        context: AssetExecutionContext,
+    ) -> Iterator[Output[pd.DataFrame]]:
         """Extract Github logs from daily files and return one daily DataFrame."""
-        return GithubExtractor(metric=metric).extract(context)
+        yield from GithubExtractor(metric=metric).extract_partition(context)
 
     return _raw_github_logs
 

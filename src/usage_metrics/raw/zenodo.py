@@ -6,7 +6,7 @@ scripts/save_zenodo_metrics.py.
 
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from datetime import datetime
 from pathlib import Path
 
@@ -14,6 +14,7 @@ import pandas as pd
 from dagster import (
     AssetExecutionContext,
     DailyPartitionsDefinition,
+    Output,
     asset,
 )
 from google.cloud import storage
@@ -113,7 +114,8 @@ class ZenodoExtractor(GCSExtractor):
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     tags={"source": "zenodo"},
+    output_required=False,
 )
-def raw_zenodo_logs(context: AssetExecutionContext) -> pd.DataFrame:
+def raw_zenodo_logs(context: AssetExecutionContext) -> Iterator[Output[pd.DataFrame]]:
     """Extract Zenodo logs from sub-daily files and return one weekly DataFrame."""
-    return ZenodoExtractor().extract(context)
+    yield from ZenodoExtractor().extract_partition(context)
