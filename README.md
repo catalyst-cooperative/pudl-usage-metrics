@@ -192,11 +192,12 @@ You can follow the runs on the ["Runs" tab](http://localhost:3000/instance/runs)
 
 ### Days without input
 
-A source may have no logs for a day. Its `raw` asset then produces nothing, so
-everything downstream is skipped, stored tables are left as they are, and the run
-succeeds. `usage-metrics etl` lists the missing input at the end of the run, and the
-`load-metrics` Zulip message shows it with a warning. Running the partition again later
-fills the gap if the logs have turned up.
+A source may have no logs for a day. Its first asset (`compacted_s3_logs` for S3,
+otherwise the `raw` asset) then produces nothing, so everything downstream is skipped,
+stored tables and files are left as they are, and the run succeeds. `usage-metrics etl`
+lists the missing input at the end of the run, and the `load-metrics` Zulip message
+shows it with a warning. Running the partition again later fills the gap if the logs
+have turned up.
 
 Eel hole days before 2026-05-28 are skipped without a warning: their raw logs expired
 under an earlier retention rule, so their existing outputs can't be produced again. So is
@@ -238,6 +239,15 @@ To write to a different path or bucket, set `PUDL_METRICS_GCS_BASE_PATH` to a `g
 ```
 export PUDL_METRICS_GCS_BASE_PATH="gs://test.catalyst.coop"
 ```
+
+#### Compacted S3 logs
+
+Each day's S3 logs are combined into one compacted log, which later runs reuse.
+`--rebuild` builds it again from the raw logs, with these protections:
+
+- If there are no raw logs, the existing compacted log is kept, used, and reported.
+- If there are fewer raw logs than it was built from, or they hold no records, the run
+  fails and the compacted log is left alone. Delete it first if it should be replaced.
 
 #### Local S3 runs also write to GCS
 

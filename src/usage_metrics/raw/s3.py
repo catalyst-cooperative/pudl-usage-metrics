@@ -13,6 +13,7 @@ from dagster import (
     AssetExecutionContext,
     Config,
     DailyPartitionsDefinition,
+    Failure,
     MaterializeResult,
     Output,
     asset,
@@ -303,11 +304,22 @@ def _build_artifact(
 
     Returns:
         The artifact and the number of source objects, or ``None`` for an empty day.
+
+    Raises:
+        Failure: If the day has source objects, but they hold no records.
     """
     built = _combine_day(context, ext, compose=True)
     if built is None:
         return None
     combined, count = built
+    if combined.stat().st_size == 0:
+        raise Failure(
+            description=(
+                f"The {count:,} raw log objects for {context.partition_key} hold no "
+                "records, so no compacted log was stored."
+            ),
+            allow_retries=False,
+        )
     dest = combined.parent / f"{context.partition_key}.log.zst"
     try:
         zstd_with_guard(combined, dest)
@@ -326,21 +338,43 @@ def _build_artifact(
     return dest, count
 
 
+def _source_count(artifact: storage.Blob) -> int:
+    """How many raw log objects an artifact was built from, or 0 if it doesn't say."""
+    return int((artifact.metadata or {}).get("source_object_count", 0))
+
+
+def _is_marked_empty(artifact: storage.Blob) -> bool:
+    """Whether an artifact records a day without logs.
+
+    Earlier versions of ``compacted_s3_logs`` stored these. They hold nothing, so they
+    count as no artifact at all.
+    """
+    return (artifact.metadata or {}).get("source_object_count") == "0"
+
+
 @asset(
     partitions_def=S3_PARTITIONS,
     tags={"source": "s3"},
     retry_policy=GCS_EXTRACT_RETRY_POLICY,
     kinds={"gcs"},
+    output_required=False,
 )
 def compacted_s3_logs(
     context: AssetExecutionContext, config: CompactedS3LogsConfig
-) -> MaterializeResult:
+) -> Iterator[MaterializeResult]:
     """Concatenate a day's S3 log objects into one zstd file in GCS.
 
-    An existing artifact is reused without touching the source bucket. Otherwise
-    the day's objects are composed server-side, downloaded, compressed and
-    uploaded. An empty day is stored as an empty artifact (and reported as
-    "no-data"), so ``raw_s3_logs`` can tell "no logs" from "not compacted yet".
+    An existing artifact is reused without touching the source bucket, unless a
+    rebuild is asked for. Otherwise the day's objects are composed server-side,
+    downloaded, compressed and uploaded.
+
+    A day without logs stores nothing and produces nothing, so nothing downstream
+    runs, and a later run looks for the logs again. A rebuild that finds no logs keeps
+    the existing artifact.
+
+    Raises:
+        Failure: If a rebuild finds fewer raw log objects than the existing artifact
+            was built from, or the objects hold no records. Nothing is replaced.
     """
     key = context.partition_key
     ext = S3Extractor()
@@ -348,8 +382,12 @@ def compacted_s3_logs(
     bucket_name, path = compacted_location(key)
     artifacts = ext.gcs_client.bucket(bucket_name)
 
-    if artifacts.get_blob(path) is not None and not config.rebuild:
-        return MaterializeResult(metadata={"action": "reused"})
+    existing = artifacts.get_blob(path)
+    if existing is not None and _is_marked_empty(existing):
+        existing = None
+    if existing is not None and not config.rebuild:
+        yield MaterializeResult(metadata={"action": "reused"})
+        return
 
     ready = datetime.combine(date.fromisoformat(key), time(0), UTC) + TRANSFER_DELAY
     if _utcnow() < ready:
@@ -360,11 +398,25 @@ def compacted_s3_logs(
 
     built = _build_artifact(context, ext)
     if built is None:
-        context.log.warning(f"No S3 logs found for {key}; recording an empty day.")
-        local = ext.get_download_dir() / f"{key}.log.zst"
-        local.write_bytes(zstd.compress(b""))
-        built = (local, 0)
+        if existing is None:
+            report_missing_input(context, f"No S3 logs for {key}; nothing was written.")
+            return
+        report_missing_input(
+            context,
+            f"No S3 logs for {key}, so the rebuild kept the existing compacted log.",
+        )
+        yield MaterializeResult(metadata={"action": "kept"})
+        return
     local, count = built
+    if existing is not None and count < _source_count(existing):
+        raise Failure(
+            description=(
+                f"Found {count:,} raw log objects for {key}, but gs://{bucket_name}/"
+                f"{path} was built from {_source_count(existing):,}, so it was not "
+                "replaced. If it really should be, delete it and run again."
+            ),
+            allow_retries=False,
+        )
 
     blob = artifacts.blob(path)
     blob.metadata = {
@@ -372,9 +424,9 @@ def compacted_s3_logs(
         "built_at": _utcnow().isoformat(),
     }
     blob.upload_from_filename(str(local), content_type="application/zstd")
-    return MaterializeResult(
+    yield MaterializeResult(
         metadata={
-            "action": "built" if count else "no-data",
+            "action": "built",
             "source_object_count": count,
             "compacted_mb": round((blob.size or 0) / 1e6, 2),
         }

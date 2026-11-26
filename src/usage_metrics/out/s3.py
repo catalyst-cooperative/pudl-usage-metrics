@@ -55,8 +55,6 @@ def out_s3_logs(
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
-    if core_s3_logs.empty:
-        return core_s3_logs
     # Only keep GET requests
     out = core_s3_logs.loc[
         (core_s3_logs.operation == "REST.GET.BUCKET")
@@ -70,7 +68,9 @@ def out_s3_logs(
     out = out.loc[~out.requester.isin(REQUESTERS_IGNORE)]
 
     # Add columns for tables and versions
-    out[["version", "table"]] = out["key"].str.split("/", expand=True, n=1)
+    # Reindexing provides both columns even if no key has a slash, or no rows are left.
+    key_parts = out["key"].str.split("/", expand=True, n=1).reindex(columns=[0, 1])
+    out[["version", "table"]] = key_parts.astype(out["key"].dtype)
     out["version"] = out["version"].replace(["-", ""], pd.NA)
 
     # Drop .js files and old accidental hourly emissions data

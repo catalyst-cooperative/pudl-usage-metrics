@@ -292,7 +292,8 @@ class GCSExtractor(ABC):
         if frame.empty:
             report_missing_input(
                 context,
-                f"No data in {self.bucket_name} for {context.partition_key}.",
+                f"No data in {self.bucket_name} for {context.partition_key}; nothing "
+                "was written.",
             )
             return
         yield Output(frame)

@@ -88,7 +88,7 @@ def _report_missing_input(missing_input: list[str]) -> None:
     if not missing_input:
         return
     summary = "\n".join(f"- {line}" for line in missing_input)
-    logger.warning(f"No input, so nothing was written downstream of:\n{summary}")
+    logger.warning(f"Missing input:\n{summary}")
     if output_path := os.getenv("GITHUB_OUTPUT"):
         with Path(output_path).open("a") as output:
             output.write(f"missing_input<<END_OF_LIST\n{summary}\nEND_OF_LIST\n")

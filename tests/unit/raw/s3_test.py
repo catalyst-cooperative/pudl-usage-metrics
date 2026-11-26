@@ -8,8 +8,20 @@ from typing import cast
 import pandas as pd
 import polars as pl
 import pytest
-from dagster import MaterializeResult, Output, build_asset_context
+from dagster import (
+    Definitions,
+    Failure,
+    MaterializeResult,
+    Output,
+    build_asset_context,
+    define_asset_job,
+    load_assets_from_modules,
+)
 
+from usage_metrics import helpers
+from usage_metrics.checks import build_schema_checks
+from usage_metrics.core import s3 as core_s3
+from usage_metrics.out import s3 as out_s3
 from usage_metrics.raw import s3 as s3_module
 from usage_metrics.raw.s3 import (
     CompactedS3LogsConfig,
@@ -21,6 +33,7 @@ from usage_metrics.raw.s3 import (
     raw_s3_logs,
     zstd_with_guard,
 )
+from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
 
 BUCKET = "pudl-s3-logs.catalyst.coop"
 DAY = "2024-06-15"
@@ -227,12 +240,18 @@ def fake_s3_gcs(fake_gcs, patch_download_many, download_dir, monkeypatch):
     return _make
 
 
-def run_compacted_asset(rebuild: bool = False) -> dict:
-    """Run ``compacted_s3_logs`` for ``DAY`` and return its metadata."""
-    result = compacted_s3_logs(
+def compacted_asset_results(rebuild: bool = False) -> list[MaterializeResult]:
+    """Run ``compacted_s3_logs`` for ``DAY`` and return what it produced."""
+    results = compacted_s3_logs(
         build_asset_context(partition_key=DAY), CompactedS3LogsConfig(rebuild=rebuild)
     )
-    return cast(dict, cast(MaterializeResult, result).metadata)
+    return list(cast(Iterator[MaterializeResult], results))
+
+
+def run_compacted_asset(rebuild: bool = False) -> dict:
+    """The metadata of what ``compacted_s3_logs`` produces for ``DAY``."""
+    (result,) = compacted_asset_results(rebuild)
+    return cast(dict, result.metadata)
 
 
 def raw_asset_outputs() -> list[Output]:
@@ -344,16 +363,58 @@ def test_compacted_refuses_partition_not_yet_transferred(fake_s3_gcs, monkeypatc
     assert artifact_blob(client) is None
 
 
-def test_empty_day_is_stored_as_an_empty_artifact(fake_s3_gcs):
-    """The empty artifact marks the day as compacted; "no-data" is what the run reports."""
+def test_a_day_without_logs_stores_nothing_until_they_arrive(fake_s3_gcs):
+    """Nothing marks the day as done, so a later run fills the gap."""
     client = fake_s3_gcs({})
 
-    assert run_compacted_asset()["action"] == "no-data"
+    assert compacted_asset_results() == []
+    assert artifact_blob(client) is None
 
-    records, metadata = stored_artifact(client)
-    assert records == b""
-    assert metadata["source_object_count"] == "0"
-    assert raw_asset_outputs() == []
+    client.bucket(BUCKET).blob(f"{DAY}-00-00-00-a").upload_from_string(RECORD_A)
+    assert run_compacted_asset()["action"] == "built"
+    assert stored_artifact(client)[0] == RECORD_A
+
+
+def test_an_empty_artifact_from_an_earlier_version_is_replaced(fake_s3_gcs):
+    client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
+    bucket, path = compacted_location(DAY)
+    empty = client.bucket(bucket).blob(path)
+    empty.metadata = {"source_object_count": "0"}
+    empty.upload_from_string(zstd.compress(b""))
+
+    assert run_compacted_asset()["action"] == "built"
+    assert stored_artifact(client)[0] == RECORD_A
+
+
+def test_rebuild_without_raw_logs_keeps_the_artifact_and_uses_it(fake_s3_gcs):
+    client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
+    run_compacted_asset()
+    client.bucket(BUCKET)._blobs.clear()
+
+    assert run_compacted_asset(rebuild=True)["action"] == "kept"
+    assert stored_artifact(client)[0] == RECORD_A
+
+
+@pytest.mark.parametrize(
+    "remaining",
+    [
+        pytest.param({f"{DAY}-00-00-00-a": RECORD_A}, id="fewer_raw_logs"),
+        pytest.param(
+            {f"{DAY}-00-00-00-a": b"", f"{DAY}-00-00-01-b": b""}, id="no_records"
+        ),
+    ],
+)
+def test_rebuild_never_replaces_the_artifact_with_less(fake_s3_gcs, remaining):
+    client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A, f"{DAY}-00-00-01-b": RECORD_B})
+    run_compacted_asset()
+    source = client.bucket(BUCKET)
+    source._blobs.clear()
+    for name, data in remaining.items():
+        source.blob(name).upload_from_string(data)
+
+    with pytest.raises(Failure):
+        run_compacted_asset(rebuild=True)
+    assert stored_artifact(client)[0] == RECORD_A + RECORD_B
 
 
 def test_compacted_falls_back_when_records_are_fused(fake_s3_gcs):
@@ -375,3 +436,43 @@ def test_raw_s3_logs_missing_artifact_is_an_error(fake_s3_gcs):
     fake_s3_gcs({})
     with pytest.raises(FileNotFoundError):
         run_raw_asset()
+
+
+@pytest.mark.parametrize(
+    "logs",
+    [
+        pytest.param({}, id="no_logs"),
+        pytest.param(
+            {"a": log_line().replace("REST.GET.OBJECT", "S3.TRANSITION_INT.OBJECT")},
+            id="only_lifecycle_transitions",
+        ),
+        pytest.param(
+            {"a": log_line().replace("REST.GET.OBJECT", "REST.PUT.OBJECT")},
+            id="nothing_downloaded",
+        ),
+    ],
+)
+def test_s3_job_succeeds_on_a_day_with_nothing_to_summarize(
+    fake_s3_gcs, monkeypatch, tmp_path, logs
+):
+    """A quiet day mustn't fail forever."""
+    monkeypatch.setattr(helpers, "geocode_ip", lambda ip: {"ip": ip})
+    fake_s3_gcs(
+        {
+            f"{DAY}-00-00-00-{name}": line.replace("owner", "a" * 64, 1).encode()
+            for name, line in logs.items()
+        }
+    )
+    assets = load_assets_from_modules([s3_module, core_s3, out_s3])
+    job = Definitions(
+        assets=assets,
+        asset_checks=build_schema_checks(assets),
+        jobs=[define_asset_job("job")],
+        resources={
+            "parquet_manager": PartitionedParquetIOManager(
+                base_path=str(tmp_path / "parquet")
+            )
+        },
+    ).resolve_job_def("job")
+
+    assert job.execute_in_process(partition_key=DAY, raise_on_error=False).success
