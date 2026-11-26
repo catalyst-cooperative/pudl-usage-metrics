@@ -1,5 +1,7 @@
 """Create outputs from S3 logs."""
 
+from datetime import date
+
 import pandas as pd
 import polars as pl
 from dagster import (
@@ -49,16 +51,21 @@ def out_s3_logs(
 ) -> pd.DataFrame:
     """Output daily S3 logs.
 
-    Filter to GET requests, drop Catalyst and AWS traffic, and add version/table
+    Filter to the day's GET requests, drop Catalyst and AWS traffic, and add version/table
     columns. Also drop old EPACEMS files, JSON files, and traffic where no
     data is sent.
     """
     context.log.info(f"Processing data for {context.partition_key}")
 
+    # Only keep requests made on the partition's day. core_s3_logs can also hold a few
+    # stragglers logged long after they were made, which would add rows to the summaries
+    # of a day that already has its own.
+    day = date.fromisoformat(context.partition_key)
+    out = core_s3_logs.loc[core_s3_logs.time.dt.date == day]
+
     # Only keep GET requests
-    out = core_s3_logs.loc[
-        (core_s3_logs.operation == "REST.GET.BUCKET")
-        | (core_s3_logs.operation == "REST.GET.OBJECT")
+    out = out.loc[
+        (out.operation == "REST.GET.BUCKET") | (out.operation == "REST.GET.OBJECT")
     ]
 
     # Only keep records with data sent

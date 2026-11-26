@@ -17,7 +17,7 @@ import click
 import coloredlogs
 
 from usage_metrics.defs import defs
-from usage_metrics.raw.extract import MISSING_INPUT_METADATA_KEY
+from usage_metrics.raw.extract import WARNING_METADATA_KEY
 from usage_metrics.raw.s3 import compacted_s3_logs
 from usage_metrics.scripts import CONTEXT_SETTINGS
 from usage_metrics.scripts.partitions import compute_partitions
@@ -39,7 +39,7 @@ def _execute(job, **execute_kwargs) -> tuple[bool, list[str]]:
     """Run a job to completion without raising.
 
     Returns:
-        Whether it succeeded, and a description of each asset that had no input.
+        Whether it succeeded, and the warnings its assets reported.
     """
     logger.info(f"Starting {job.name}.")
     result = job.execute_in_process(raise_on_error=False, **execute_kwargs)
@@ -68,30 +68,30 @@ def _execute(job, **execute_kwargs) -> tuple[bool, list[str]]:
             if "report" in check.metadata:
                 message += f"\n{check.metadata['report'].value}"
             logger.log(level, message)
-    missing_input = []
+    warnings = []
     for event in result.get_asset_observation_events():
         observation = event.asset_observation_data.asset_observation
-        if reason := observation.metadata.get(MISSING_INPUT_METADATA_KEY):
-            missing_input.append(
-                f"`{observation.asset_key.to_user_string()}`: {reason.value}"
+        if message := observation.metadata.get(WARNING_METADATA_KEY):
+            warnings.append(
+                f"`{observation.asset_key.to_user_string()}`: {message.value}"
             )
     logger.info(f"{job.name} {'succeeded' if result.success else 'FAILED'}.")
-    return result.success, missing_input
+    return result.success, warnings
 
 
-def _report_missing_input(missing_input: list[str]) -> None:
-    """List the missing input at the end of the run, for the log and for Zulip.
+def _report_warnings(warnings: list[str]) -> None:
+    """List the warnings at the end of the run, for the log and for Zulip.
 
-    In GitHub Actions the list also becomes the step's ``missing_input`` output, which
-    the ``load-metrics`` workflow puts in its Zulip message.
+    In GitHub Actions the list also becomes the step's ``warnings`` output, which the
+    ``load-metrics`` workflow puts in its Zulip message.
     """
-    if not missing_input:
+    if not warnings:
         return
-    summary = "\n".join(f"- {line}" for line in missing_input)
-    logger.warning(f"Missing input:\n{summary}")
+    summary = "\n".join(f"- {line}" for line in warnings)
+    logger.warning(f"Warnings:\n{summary}")
     if output_path := os.getenv("GITHUB_OUTPUT"):
         with Path(output_path).open("a") as output:
-            output.write(f"missing_input<<END_OF_LIST\n{summary}\nEND_OF_LIST\n")
+            output.write(f"warnings<<END_OF_LIST\n{summary}\nEND_OF_LIST\n")
 
 
 REBUILD_RUN_CONFIG = {"ops": {compacted_s3_logs.op.name: {"config": {"rebuild": True}}}}
@@ -194,7 +194,8 @@ def _check_options(
     is_flag=True,
     default=False,
     help=(
-        "Rebuild the compacted S3 log artifact even if one exists. Only with --job s3."
+        "Rebuild each partition's compacted S3 log even if one exists. Only with "
+        "--job s3."
     ),
 )
 def etl(
@@ -228,7 +229,7 @@ def etl(
         )
 
     results: dict[str, bool] = {}
-    missing_input: list[str] = []
+    warnings: list[str] = []
     execute_kwargs = {"run_config": REBUILD_RUN_CONFIG} if rebuild else {}
 
     for job in partitioned_jobs:
@@ -247,16 +248,16 @@ def etl(
                     f"(range: {partition_keys[0]}..{partition_keys[-1]})."
                 )
             logger.info(f"Processing partitioned data for {job.name} / {resolved}.")
-            results[f"{job.name}:{resolved}"], missing = _execute(
+            results[f"{job.name}:{resolved}"], reported = _execute(
                 job, partition_key=resolved, **execute_kwargs
             )
-            missing_input += missing
+            warnings += reported
 
     for job in nonpartitioned_jobs:
-        results[job.name], missing = _execute(job)
-        missing_input += missing
+        results[job.name], reported = _execute(job)
+        warnings += reported
 
-    _report_missing_input(missing_input)
+    _report_warnings(warnings)
     failed = [name for name, succeeded in results.items() if not succeeded]
     if failed:
         logger.error(f"Failed job(s): {', '.join(failed)}")

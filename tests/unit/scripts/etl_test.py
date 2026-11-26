@@ -185,11 +185,11 @@ def test_rebuild_run_config_is_valid_for_the_real_job():
 
 
 @pytest.mark.parametrize("succeeded", [True, False], ids=["success", "failure"])
-def test_missing_input_from_every_run_reaches_the_workflow(
+def test_warnings_from_every_run_reach_the_workflow(
     executed, mocker, tmp_path, succeeded
 ):
-    """The Zulip message reads one step output, so it must list every run's missing
-    input, even when a run failed, and not exist when nothing is missing.
+    """The Zulip message reads one step output, so it must list every run's warnings,
+    even when a run failed, and not exist when there are none.
     """
     output = tmp_path / "github_output"
     mocker.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)})
@@ -206,7 +206,7 @@ def test_missing_input_from_every_run_reaches_the_workflow(
     _run(["--job", "s3", "--window", "2"])
 
     written = output.read_text()
-    assert "missing_input" in written
+    assert "warnings" in written
     assert all(day in written for day in _S3_DAYS[-2:])
 
 

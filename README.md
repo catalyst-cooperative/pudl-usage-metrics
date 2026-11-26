@@ -240,10 +240,21 @@ To write to a different path or bucket, set `PUDL_METRICS_GCS_BASE_PATH` to a `g
 export PUDL_METRICS_GCS_BASE_PATH="gs://test.catalyst.coop"
 ```
 
+#### S3 days
+
+S3 often logs a request made late in a day on the following day. So each S3 partition
+reads the logs of its own day and the next, and publishes the requests made on its day.
+That means a day can't be published until 02:00 UTC two days later, and running it
+sooner does nothing. If the next day has no logs, the day is published with a warning.
+
+Very rarely a record is logged two or more days late. It is kept in `core_s3_logs`, in
+the partition of the day it was logged, left out of the summaries, and reported.
+
 #### Compacted S3 logs
 
 Each day's S3 logs are combined into one compacted log, which later runs reuse.
-`--rebuild` builds it again from the raw logs, with these protections:
+`--rebuild` builds the partition's own compacted log again from the raw logs (not the
+next day's), with these protections:
 
 - If there are no raw logs, the existing compacted log is kept, used, and reported.
 - If there are fewer raw logs than it was built from, or they hold no records, the run

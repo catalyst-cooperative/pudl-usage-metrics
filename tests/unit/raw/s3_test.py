@@ -4,7 +4,7 @@ import os
 from collections.abc import Iterator
 from compression import zstd
 from contextlib import nullcontext
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import cast
 
 import pandas as pd
@@ -39,6 +39,7 @@ from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManag
 
 BUCKET = "pudl-s3-logs.catalyst.coop"
 DAY = "2024-06-15"
+NEXT_DAY = "2024-06-16"
 
 N_COLUMNS_V1 = 27
 """Columns parsed from logs written before February 2026, which have 26 fields.
@@ -54,11 +55,17 @@ PIP_AGENT = 'pip/24.3.1 {"ci":null,"openssl_version":"OpenSSL 3.0.2"}'
 
 
 def log_line(
-    agent: str = "curl/8.0", *, ip: str = "198.51.100.1", requester: str = "-"
+    agent: str = "curl/8.0",
+    *,
+    ip: str = "198.51.100.1",
+    requester: str = "-",
+    day: str = DAY,
+    request_id: str = "RID",
 ) -> str:
-    """One S3 access-log record with ``N_COLUMNS_V1`` columns."""
+    """One S3 access-log record with ``N_COLUMNS_V1`` columns, made on ``day``."""
+    made = date.fromisoformat(day).strftime("%d/%b/%Y")
     return (
-        f"owner bkt [19/Sep/2026:00:00:00 +0000] {ip} {requester} RID "
+        f"owner bkt [{made}:00:00:00 +0000] {ip} {requester} {request_id} "
         'REST.GET.OBJECT k "GET /k HTTP/1.1" 200 - 100 200 5 4 "-" '
         f'"{agent}" - hid SigV4 ECDHE AuthHeader host TLSv1.2 - -\n'
     )
@@ -242,41 +249,43 @@ def fake_s3_gcs(fake_gcs, patch_download_many, download_dir, mocker):
     return _make
 
 
-def compacted_asset_results(rebuild: bool = False) -> list[MaterializeResult]:
-    """Run ``compacted_s3_logs`` for ``DAY`` and return what it produced."""
+def compacted_asset_results(
+    rebuild: bool = False, day: str = DAY
+) -> list[MaterializeResult]:
+    """Run ``compacted_s3_logs`` for ``day`` and return what it produced."""
     results = compacted_s3_logs(
-        build_asset_context(partition_key=DAY), CompactedS3LogsConfig(rebuild=rebuild)
+        build_asset_context(partition_key=day), CompactedS3LogsConfig(rebuild=rebuild)
     )
     return list(cast(Iterator[MaterializeResult], results))
 
 
-def run_compacted_asset(rebuild: bool = False) -> dict:
-    """The metadata of what ``compacted_s3_logs`` produces for ``DAY``."""
-    (result,) = compacted_asset_results(rebuild)
+def run_compacted_asset(rebuild: bool = False, day: str = DAY) -> dict:
+    """The metadata of what ``compacted_s3_logs`` produces for ``day``."""
+    (result,) = compacted_asset_results(rebuild, day)
     return cast(dict, result.metadata)
 
 
-def raw_asset_outputs() -> list[Output]:
-    """Run ``raw_s3_logs`` for ``DAY`` and return what it produced."""
-    outputs = raw_s3_logs(build_asset_context(partition_key=DAY))
+def raw_asset_outputs(day: str = DAY) -> list[Output]:
+    """Run ``raw_s3_logs`` for ``day`` and return what it produced."""
+    outputs = raw_s3_logs(build_asset_context(partition_key=day))
     return list(cast(Iterator[Output], outputs))
 
 
-def run_raw_asset() -> pd.DataFrame:
-    """The data ``raw_s3_logs`` produces for ``DAY``."""
-    (output,) = raw_asset_outputs()
+def run_raw_asset(day: str = DAY) -> pd.DataFrame:
+    """The data ``raw_s3_logs`` produces for ``day``."""
+    (output,) = raw_asset_outputs(day)
     return cast(pd.DataFrame, output.value)
 
 
-def artifact_blob(client):
-    """The stored artifact for ``DAY``, or ``None`` if there isn't one."""
-    bucket, path = compacted_location(DAY)
+def artifact_blob(client, day: str = DAY):
+    """The stored artifact for ``day``, or ``None`` if there isn't one."""
+    bucket, path = compacted_location(day)
     return client.bucket(bucket).get_blob(path)
 
 
-def stored_artifact(client) -> tuple[bytes, dict]:
-    """The decompressed contents and metadata of ``DAY``'s artifact."""
-    blob = artifact_blob(client)
+def stored_artifact(client, day: str = DAY) -> tuple[bytes, dict]:
+    """The decompressed contents and metadata of ``day``'s artifact."""
+    blob = artifact_blob(client, day)
     assert blob is not None, "no artifact was stored"
     return zstd.decompress(blob.download_as_bytes()), blob.metadata
 
@@ -335,7 +344,8 @@ def test_compact_then_read(fake_s3_gcs, s3_fixture_blobs):
     records, stored_metadata = stored_artifact(client)
     assert records == b"".join(blobs.values())
     assert stored_metadata["source_object_count"] == str(len(blobs))
-    assert run_raw_asset().shape == (records.count(b"\n"), N_COLUMNS_V1)
+    previous_day = records.count(b"[14/Jun/2024:")
+    assert len(run_raw_asset()) == records.count(b"\n") - previous_day
 
 
 def test_compacted_reuses_the_artifact_unless_rebuilding(fake_s3_gcs):
@@ -347,7 +357,7 @@ def test_compacted_reuses_the_artifact_unless_rebuilding(fake_s3_gcs):
     source.list_prefixes.clear()
 
     assert run_compacted_asset()["action"] == "reused"
-    assert source.list_prefixes == []
+    assert DAY not in source.list_prefixes
     assert stored_artifact(client)[0] == RECORD_A
 
     assert run_compacted_asset(rebuild=True)["action"] == "built"
@@ -356,15 +366,80 @@ def test_compacted_reuses_the_artifact_unless_rebuilding(fake_s3_gcs):
     assert metadata["source_object_count"] == "2"
 
 
-def test_compacted_refuses_partition_not_yet_transferred(fake_s3_gcs, monkeypatch):
-    """A build before the day's logs are fully in GCS is refused, not partial."""
+def test_compacted_waits_until_the_next_days_logs_are_due(fake_s3_gcs, monkeypatch):
+    """A day published early would be missing requests, so nothing is built, and
+    running early isn't a failure.
+    """
     client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
     monkeypatch.setattr(
-        s3_module, "_utcnow", lambda: datetime(2024, 6, 16, 1, 0, tzinfo=UTC)
+        s3_module, "_utcnow", lambda: datetime(2024, 6, 17, 1, 0, tzinfo=UTC)
     )
-    with pytest.raises(RuntimeError):
-        run_compacted_asset()
+    assert compacted_asset_results() == []
     assert artifact_blob(client) is None
+
+
+def test_rebuild_leaves_the_next_days_artifact_alone(fake_s3_gcs):
+    """The fewer-logs protection only covers the day being rebuilt."""
+    client = fake_s3_gcs(
+        {f"{DAY}-00-00-00-a": RECORD_A, f"{NEXT_DAY}-00-00-00-a": RECORD_B}
+    )
+    run_compacted_asset()
+    client.bucket(BUCKET)._blobs.pop(f"{NEXT_DAY}-00-00-00-a")
+    client.bucket(BUCKET).blob(f"{NEXT_DAY}-00-00-01-b").upload_from_string(RECORD_A)
+
+    run_compacted_asset(rebuild=True)
+
+    assert stored_artifact(client, NEXT_DAY)[0] == RECORD_B
+
+
+@pytest.mark.parametrize(
+    ("day", "next_day"),
+    [
+        pytest.param(DAY, NEXT_DAY, id="same_layout"),
+        # aws_region first appears in the logs of the second day.
+        pytest.param("2026-02-15", "2026-02-16", id="new_column_added"),
+    ],
+)
+def test_every_record_is_published_by_exactly_one_day(fake_s3_gcs, day, next_day):
+    """Requests go to the day they were made, wherever they were logged, and the rare
+    record logged much later goes with the day it was logged.
+    """
+    previous = (date.fromisoformat(day) - timedelta(days=1)).isoformat()
+    long_ago = (date.fromisoformat(day) - timedelta(days=9)).isoformat()
+
+    def logs(*records: tuple[str, str], logged: str) -> bytes:
+        extra = " us-west-2" if logged > "2026-02-15" else ""
+        return "".join(
+            log_line(request_id=request_id, day=made).replace("\n", f"{extra}\n")
+            for request_id, made in records
+        ).encode()
+
+    fake_s3_gcs(
+        {
+            f"{day}-00-00-00-a": logs(
+                ("previous", previous),
+                ("own", day),
+                ("straggler", long_ago),
+                logged=day,
+            ),
+            f"{next_day}-00-00-00-a": logs(
+                ("late", day), ("tomorrow", next_day), logged=next_day
+            ),
+        }
+    )
+    run_compacted_asset(day=day)
+
+    published = run_raw_asset(day=day)
+
+    assert sorted(published["request_id"]) == ["late", "own", "straggler"]
+
+
+def test_a_day_is_published_when_the_next_has_no_logs(fake_s3_gcs):
+    """One day's missing logs mustn't hold back the day before it."""
+    fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
+
+    assert run_compacted_asset()["next_day_action"] == "no logs"
+    assert len(run_raw_asset()) == 1
 
 
 def test_a_day_without_logs_stores_nothing_until_they_arrive(fake_s3_gcs):
@@ -472,3 +547,23 @@ def test_s3_job_succeeds_on_a_day_with_nothing_to_summarize(
     ).resolve_job_def("job")
 
     assert job.execute_in_process(partition_key=DAY, raise_on_error=False).success
+
+
+def test_summaries_only_count_requests_made_on_their_day():
+    """A straggler would give a second day's file a row with another day's id."""
+    core = pd.DataFrame(
+        {
+            "time": pd.to_datetime([f"{DAY} 12:00", "2024-06-06 12:00"]),
+            "operation": "REST.GET.OBJECT",
+            "megabytes_sent": 1.0,
+            "requester": pd.NA,
+            "bucket_owner": "owner",
+            "bucket": "bkt",
+            "key": "v1/a.parquet",
+            "referer": "-",
+        }
+    )
+
+    out = out_s3.out_s3_logs(build_asset_context(partition_key=DAY), core)
+
+    assert list(cast(pd.DataFrame, out)["time"].dt.strftime("%Y-%m-%d")) == [DAY]

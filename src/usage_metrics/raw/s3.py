@@ -21,6 +21,7 @@ from dagster import (
 )
 from google.cloud import storage
 
+from usage_metrics.core.s3 import name_s3_log_columns
 from usage_metrics.paths import (
     PUDL_METRICS_S3_LOGS_BUCKET,
     get_gcs_raw_path,
@@ -30,7 +31,7 @@ from usage_metrics.raw.compose import compose_day
 from usage_metrics.raw.extract import (
     GCS_EXTRACT_RETRY_POLICY,
     GCSExtractor,
-    report_missing_input,
+    report_warning,
 )
 
 DATASET_NAME = "pudl_s3_logs"
@@ -179,12 +180,9 @@ class S3Extractor(GCSExtractor):
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
-        Note that the timestamp on the S3 file name corresponds to the end of the window
-        in which the logs were produced, meaning that logs can sometimes contain data
-        from more than one day. We read these records in based on the file name and use
-        the time column as the referent timestamp, so this can look unusual in the
-        context of examining a single partition but does not cause any issues in the
-        overall complete timeseries analysis.
+        The timestamp in an S3 log file's name is when it was written, so it can hold
+        requests made the day before. ``raw_s3_logs`` sorts out which day each
+        request belongs to.
 
         Args:
             context: The Dagster asset execution context
@@ -267,11 +265,12 @@ class CompactedS3LogsConfig(Config):
 
 
 def _combine_day(
-    context: AssetExecutionContext, ext: S3Extractor, *, compose: bool
+    context: AssetExecutionContext, ext: S3Extractor, day: str, *, compose: bool
 ) -> tuple[Path, int] | None:
     """Download a day's logs into one local file.
 
     Args:
+        day: The ISO date whose log objects to combine.
         compose: Reduce the objects server-side first (up to 1024 per composite),
             so we download far fewer files.
 
@@ -279,28 +278,26 @@ def _combine_day(
         The combined file and the number of source objects, or ``None`` if the
         day has no objects.
     """
-    key = context.partition_key
     bucket = ext.gcs_client.bucket(ext.bucket_name)
-    prefix = ext.get_blob_prefix(context)
     if compose:
-        blobs, count = compose_day(bucket, prefix, key, ext.compose_workers)
+        blobs, count = compose_day(bucket, day, day, ext.compose_workers)
     else:
-        blobs = ext.filter_blobs(context, bucket.list_blobs(prefix=prefix))
+        blobs = list(bucket.list_blobs(prefix=day))
         count = len(blobs)
     if not blobs:
         return None
     context.log.info(
-        f"Downloading {len(blobs):,} blobs for {count:,} objects of {key}."
+        f"Downloading {len(blobs):,} blobs for {count:,} objects of {day}."
     )
     download_dir = ext.get_download_dir()
     paths = ext.get_blobs_from_gcs(blobs, download_dir)
-    return ext.combine_files(paths, download_dir / f"{key}.combined"), count
+    return ext.combine_files(paths, download_dir / f"{day}.combined"), count
 
 
 def _build_artifact(
-    context: AssetExecutionContext, ext: S3Extractor
+    context: AssetExecutionContext, ext: S3Extractor, day: str
 ) -> tuple[Path, int] | None:
-    """Build the day's ``.log.zst`` locally.
+    """Build a day's ``.log.zst`` locally.
 
     Returns:
         The artifact and the number of source objects, or ``None`` for an empty day.
@@ -308,26 +305,26 @@ def _build_artifact(
     Raises:
         Failure: If the day has source objects, but they hold no records.
     """
-    built = _combine_day(context, ext, compose=True)
+    built = _combine_day(context, ext, day, compose=True)
     if built is None:
         return None
     combined, count = built
     if combined.stat().st_size == 0:
         raise Failure(
             description=(
-                f"The {count:,} raw log objects for {context.partition_key} hold no "
-                "records, so no compacted log was stored."
+                f"The {count:,} raw log objects for {day} hold no records, so no "
+                "compacted log was stored."
             ),
             allow_retries=False,
         )
-    dest = combined.parent / f"{context.partition_key}.log.zst"
+    dest = combined.parent / f"{day}.log.zst"
     try:
         zstd_with_guard(combined, dest)
     except FusedRecordsError as e:
         context.log.warning(
             f"Composed logs contain fused records ({e}); downloading every object."
         )
-        rebuilt = _combine_day(context, ext, compose=False)
+        rebuilt = _combine_day(context, ext, day, compose=False)
         if rebuilt is None:
             raise RuntimeError(
                 "Downloading every object instead of composing found no files; "
@@ -343,64 +340,44 @@ def _source_count(artifact: storage.Blob) -> int:
     return int((artifact.metadata or {}).get("source_object_count", 0))
 
 
-@asset(
-    partitions_def=S3_PARTITIONS,
-    tags={"source": "s3"},
-    retry_policy=GCS_EXTRACT_RETRY_POLICY,
-    kinds={"gcs"},
-    output_required=False,
-)
-def compacted_s3_logs(
-    context: AssetExecutionContext, config: CompactedS3LogsConfig
-) -> Iterator[MaterializeResult]:
-    """Concatenate a day's S3 log objects into one zstd file in GCS.
+def _ensure_compacted(
+    context: AssetExecutionContext, ext: S3Extractor, day: str, *, rebuild: bool
+) -> dict[str, str | int | float] | None:
+    """Make sure a day's compacted log is in GCS, building it if need be.
 
-    An existing artifact is reused without touching the source bucket, unless a
-    rebuild is asked for. Otherwise the day's objects are composed server-side,
-    downloaded, compressed and uploaded.
+    Args:
+        day: The ISO date of the logs.
+        rebuild: Replace an existing artifact instead of reusing it.
 
-    A day without logs stores nothing and produces nothing, so nothing downstream
-    runs, and a later run looks for the logs again. A rebuild that finds no logs keeps
-    the existing artifact.
+    Returns:
+        What was done, as asset metadata, or ``None`` if the day has neither logs nor
+        a compacted log.
 
     Raises:
         Failure: If a rebuild finds fewer raw log objects than the existing artifact
             was built from, or the objects hold no records. Nothing is replaced.
     """
-    key = context.partition_key
-    ext = S3Extractor()
-    ext.partition_key = key
-    bucket_name, path = compacted_location(key)
+    bucket_name, path = compacted_location(day)
     artifacts = ext.gcs_client.bucket(bucket_name)
 
     existing = artifacts.get_blob(path)
-    if existing is not None and not config.rebuild:
-        yield MaterializeResult(metadata={"action": "reused"})
-        return
+    if existing is not None and not rebuild:
+        return {"action": "reused"}
 
-    ready = datetime.combine(date.fromisoformat(key), time(0), UTC) + TRANSFER_DELAY
-    if _utcnow() < ready:
-        raise RuntimeError(
-            f"Logs for {key} may not be fully transferred to GCS until "
-            f"{ready.isoformat()}; refusing to build a partial artifact."
-        )
-
-    built = _build_artifact(context, ext)
+    built = _build_artifact(context, ext, day)
     if built is None:
         if existing is None:
-            report_missing_input(context, f"No S3 logs for {key}; nothing was written.")
-            return
-        report_missing_input(
+            return None
+        report_warning(
             context,
-            f"No S3 logs for {key}, so the rebuild kept the existing compacted log.",
+            f"No S3 logs for {day}, so the rebuild kept the existing compacted log.",
         )
-        yield MaterializeResult(metadata={"action": "kept"})
-        return
+        return {"action": "kept"}
     local, count = built
     if existing is not None and count < _source_count(existing):
         raise Failure(
             description=(
-                f"Found {count:,} raw log objects for {key}, but gs://{bucket_name}/"
+                f"Found {count:,} raw log objects for {day}, but gs://{bucket_name}/"
                 f"{path} was built from {_source_count(existing):,}, so it was not "
                 "replaced. If it really should be, delete it and run again."
             ),
@@ -413,13 +390,105 @@ def compacted_s3_logs(
         "built_at": _utcnow().isoformat(),
     }
     blob.upload_from_filename(str(local), content_type="application/zstd")
+    return {
+        "action": "built",
+        "source_object_count": count,
+        "compacted_mb": round((blob.size or 0) / 1e6, 2),
+    }
+
+
+def _day_after(day: str) -> str:
+    return (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+
+
+@asset(
+    partitions_def=S3_PARTITIONS,
+    tags={"source": "s3"},
+    retry_policy=GCS_EXTRACT_RETRY_POLICY,
+    kinds={"gcs"},
+    output_required=False,
+)
+def compacted_s3_logs(
+    context: AssetExecutionContext, config: CompactedS3LogsConfig
+) -> Iterator[MaterializeResult]:
+    """Concatenate S3 log objects into one zstd file per day in GCS.
+
+    Publishing a day takes its own logs and the next day's, since requests made late
+    in a day are often logged the day after. So this ensures both days have a
+    compacted log, and produces nothing until the next day's logs are due in GCS.
+
+    An existing artifact is reused without touching the source bucket, unless a
+    rebuild is asked for, which applies to the partition's own day only. Otherwise
+    the day's objects are composed server-side, downloaded, compressed and uploaded.
+
+    A day without logs stores nothing and produces nothing, so nothing downstream
+    runs, and a later run looks for the logs again. A rebuild that finds no logs keeps
+    the existing artifact.
+
+    Raises:
+        Failure: If a rebuild finds fewer raw log objects than the existing artifact
+            was built from, or the objects hold no records. Nothing is replaced.
+    """
+    key = context.partition_key
+    next_day = _day_after(key)
+    ready = datetime.combine(date.fromisoformat(next_day), time(0), UTC)
+    ready += TRANSFER_DELAY
+    if _utcnow() < ready:
+        context.log.info(
+            f"Skipping {key}: the logs of {next_day} aren't due in GCS until {ready}."
+        )
+        return
+
+    ext = S3Extractor()
+    own = _ensure_compacted(context, ext, key, rebuild=config.rebuild)
+    if own is None:
+        report_warning(context, f"No S3 logs for {key}; nothing was written.")
+        return
+    following = _ensure_compacted(context, ext, next_day, rebuild=False)
+    if following is None:
+        report_warning(
+            context,
+            f"No S3 logs for {next_day}, so {key} is published without the requests "
+            "that were logged the day after they were made.",
+        )
     yield MaterializeResult(
         metadata={
-            "action": "built",
-            "source_object_count": count,
-            "compacted_mb": round((blob.size or 0) / 1e6, 2),
+            **own,
+            "next_day_action": following["action"] if following else "no logs",
         }
     )
+
+
+def _read_compacted(ext: S3Extractor, day: str) -> pl.DataFrame | None:
+    """Read a day's compacted log, with unnamed columns, or ``None`` if it's empty.
+
+    Raises:
+        FileNotFoundError: If the day has no compacted log.
+    """
+    bucket_name, path = compacted_location(day)
+    blob = ext.gcs_client.bucket(bucket_name).get_blob(path)
+    if blob is None:
+        raise FileNotFoundError(
+            f"gs://{bucket_name}/{path} does not exist; "
+            "materialize compacted_s3_logs for this partition first."
+        )
+    local = ext.get_download_dir() / f"{day}.log.zst"
+    blob.download_to_filename(str(local))
+    ext.partition_key = day
+    try:
+        return ext.load_file(local)
+    except pl.exceptions.NoDataError:
+        return None
+
+
+def _made_on(day: date) -> pl.Expr:
+    """Whether a record's request was made on ``day``, going by its raw time field.
+
+    S3 log times are in UTC, look like ``[06/Feb/2019:00:00:38``, and are the third
+    field. The column is picked by position, since polars doesn't name the columns the
+    same way for every way ``load_file`` reads them.
+    """
+    return pl.nth(2).str.starts_with(day.strftime("[%d/%b/%Y:")).fill_null(False)
 
 
 @asset(
@@ -430,25 +499,42 @@ def compacted_s3_logs(
     output_required=False,
 )
 def raw_s3_logs(context: AssetExecutionContext) -> Iterator[Output[pd.DataFrame]]:
-    """Read a day's compacted S3 logs (see ``compacted_s3_logs``) into one DataFrame.
+    """Read the S3 log records that belong to a day, with named columns.
+
+    These are the requests made on that day, from its own compacted log and the next
+    day's. Requests from the day before that are in its own log belong to that day's
+    partition. The very rare records that are in its log but were made at some other
+    time are kept here, since no other partition reads them, and reported.
 
     Nothing is produced for a day without logs, so nothing downstream runs.
     """
     key = context.partition_key
+    day = date.fromisoformat(key)
+    next_day = _day_after(key)
     ext = S3Extractor()
-    ext.partition_key = key
-    bucket_name, path = compacted_location(key)
-    blob = ext.gcs_client.bucket(bucket_name).get_blob(path)
-    if blob is None:
-        raise FileNotFoundError(
-            f"gs://{bucket_name}/{path} does not exist; "
-            "materialize compacted_s3_logs for this partition first."
-        )
-    local = ext.get_download_dir() / f"{key}.log.zst"
-    blob.download_to_filename(str(local))
-    try:
-        frame = ext.load_file(local)
-    except pl.exceptions.NoDataError:
-        report_missing_input(context, f"No S3 logs for {key}.")
+
+    own = _read_compacted(ext, key)
+    if own is None:
+        report_warning(context, f"No S3 logs for {key}; nothing was written.")
         return
-    yield Output(frame.to_pandas())
+    own = own.filter(~_made_on(day - timedelta(days=1)))
+    if stragglers := own.filter(~_made_on(day)).height:
+        report_warning(
+            context,
+            f"{stragglers:,} records in the S3 logs of {key} were made neither that "
+            "day nor the day before. They're in core_s3_logs, but not the summaries.",
+        )
+    frames = [name_s3_log_columns(own.to_pandas(), key)]
+    del own
+
+    try:
+        following = _read_compacted(ext, next_day)
+    except FileNotFoundError:
+        context.log.warning(f"There is no compacted log for {next_day}.")
+        following = None
+    if following is not None:
+        following = following.filter(_made_on(day))
+        if following.height:
+            frames.append(name_s3_log_columns(following.to_pandas(), next_day))
+
+    yield Output(pd.concat(frames, ignore_index=True))
