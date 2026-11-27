@@ -2,12 +2,19 @@
 
 This includes data which returns a window of results (e.g., the last two weeks) when
 querying the Github API.
+
+``scripts/save_github_metrics.py`` archives each response once a day. The popular
+paths and referrers are totals over the whole window, so a day's partition is the
+archive saved that day. Views and clones are counted per day, so a day's counts appear
+in every archive saved over the following two weeks. A day isn't complete in the
+archive saved that same day, and GitHub's counts may still grow the day after, so the
+partition reads the archives saved from two days after it onwards.
 """
 
 import json
 import re
 from collections.abc import Iterable, Iterator
-from datetime import date, datetime
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import ClassVar, Literal, get_args
 
@@ -22,7 +29,11 @@ from dagster import (
 from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_ARCHIVES_BUCKET
-from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
+from usage_metrics.raw.extract import (
+    GCS_EXTRACT_RETRY_POLICY,
+    GCSExtractor,
+    report_warning,
+)
 
 DailyMetricType = Literal["clones", "popular_paths", "popular_referrers", "views"]
 CumulativeMetricType = Literal["stargazers", "forks"]
@@ -35,6 +46,20 @@ CUMULATIVE_METRIC_TYPES: list[CumulativeMetricType] = list(
 GITHUB_METRIC_TYPES: list[GithubMetricType] = (
     DAILY_METRIC_TYPES + CUMULATIVE_METRIC_TYPES
 )
+
+PER_DAY_METRIC_TYPES: list[DailyMetricType] = ["clones", "views"]
+"""Metrics whose archives hold a separate count for each of the last two weeks."""
+
+ARCHIVE_AGES = range(2, 16)
+"""How many days after a day the archives holding its views and clones are saved."""
+
+FIRST_ARCHIVE_DUE = timedelta(days=ARCHIVE_AGES.start, hours=10)
+"""How long after the start of a day the first archive of its views and clones is
+saved, with time to spare for a delayed ``save-daily-metrics`` run."""
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class GithubExtractor(GCSExtractor):
@@ -56,8 +81,9 @@ class GithubExtractor(GCSExtractor):
     ) -> list[storage.Blob]:
         """From all possible files in a bucket, filter to include relevant ones.
 
-        For the cumulative metrics, grab the most recent file. For the weekly metrics,
-        grab all within the matching date range.
+        For the cumulative metrics, grab the most recent file. For views and clones,
+        grab the archives that hold the partition's day, and for the popular paths and
+        referrers, the archive saved that day.
 
         Args:
             context: The Dagster asset execution context
@@ -68,11 +94,13 @@ class GithubExtractor(GCSExtractor):
             A list of blobs to be downloaded.
         """
         if self.metric in DAILY_METRIC_TYPES:
-            day_start_date_str = context.partition_key
-            partition_date = date.fromisoformat(day_start_date_str).strftime("%Y-%m-%d")
-            file_name = f"github/{self.metric}/{partition_date}.json"
+            day = date.fromisoformat(context.partition_key)
+            ages = ARCHIVE_AGES if self.metric in PER_DAY_METRIC_TYPES else [0]
+            file_names = {
+                f"github/{self.metric}/{day + timedelta(days=age)}.json" for age in ages
+            }
             filtered_blobs: list[storage.Blob] = [
-                blob for blob in blobs if blob.name == file_name
+                blob for blob in blobs if blob.name in file_names
             ]
         else:
             candidate_blobs: list[storage.Blob] = [
@@ -150,6 +178,35 @@ class GithubExtractor(GCSExtractor):
         return gh_df
 
 
+def _extract_day_counts(
+    context: AssetExecutionContext, extractor: GithubExtractor
+) -> Iterator[Output[pd.DataFrame]]:
+    """Yield the partition day's views or clones from every archive that has them.
+
+    GitHub leaves out days without any traffic, so a day that no archive lists produces
+    nothing, quietly. So does a day whose first archive isn't due yet. Finding no data
+    at all once it is due is reported.
+    """
+    key = context.partition_key
+    frame = extractor.extract(context)
+    if frame.empty:
+        due = datetime.combine(date.fromisoformat(key), time(0), UTC)
+        due += FIRST_ARCHIVE_DUE
+        if _utcnow() < due:
+            context.log.info(f"Skipping {key}: its archives aren't due until {due}.")
+        else:
+            report_warning(
+                context,
+                f"No archived {extractor.metric} for {key}; nothing was written.",
+            )
+        return
+    day_counts = frame.loc[frame.timestamp.str.startswith(key)]
+    if day_counts.empty:
+        context.log.info(f"GitHub lists no {extractor.metric} for {key}.")
+        return
+    yield Output(day_counts)
+
+
 def daily_metrics_extraction_factory(
     metric: DailyMetricType,
 ) -> AssetsDefinition:
@@ -165,8 +222,12 @@ def daily_metrics_extraction_factory(
     def _raw_github_logs(
         context: AssetExecutionContext,
     ) -> Iterator[Output[pd.DataFrame]]:
-        """Extract Github logs from daily files and return one daily DataFrame."""
-        yield from GithubExtractor(metric=metric).extract_partition(context)
+        """Extract the Github metrics of a day from the archived API responses."""
+        extractor = GithubExtractor(metric=metric)
+        if metric in PER_DAY_METRIC_TYPES:
+            yield from _extract_day_counts(context, extractor)
+        else:
+            yield from extractor.extract_partition(context)
 
     return _raw_github_logs
 

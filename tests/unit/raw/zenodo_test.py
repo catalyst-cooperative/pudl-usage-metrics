@@ -9,20 +9,20 @@ def _hits(*ids: int) -> bytes:
     return json.dumps({"hits": {"hits": [{"id": i} for i in ids]}}).encode()
 
 
-def test_filter_blobs_keeps_in_range_json_only(filtered_blob_names):
-    """Only ``zenodo/<date>-<id>.json`` files within the 7-day window are kept."""
+def test_filter_blobs_keeps_only_the_days_json(filtered_blob_names):
+    """Reading other days' archives would put one day's rows in several partitions."""
     kept = filtered_blob_names(
         ZenodoExtractor,
         "2024-01-01",
         [
-            "zenodo/2024-01-01-111.json",  # in window
-            "zenodo/2024-01-07-222.json",  # in window (last day)
-            "zenodo/2024-01-09-333.json",  # out of window
-            "zenodo/2024-01-03-444.csv",  # wrong extension
-            "zenodo/2024-01-05-notanid.json",  # id isn't numeric
+            "zenodo/2024-01-01-111.json",
+            "zenodo/2024-01-01-222.json",  # a second archive the same day
+            "zenodo/2024-01-02-333.json",  # the next day
+            "zenodo/2024-01-01-444.csv",  # wrong extension
+            "zenodo/2024-01-01-notanid.json",  # id isn't numeric
         ],
     )
-    assert kept == ["zenodo/2024-01-01-111.json", "zenodo/2024-01-07-222.json"]
+    assert kept == ["zenodo/2024-01-01-111.json", "zenodo/2024-01-01-222.json"]
 
 
 def test_load_file_dates_rows_from_filename(tmp_path):

@@ -181,6 +181,19 @@ usage-metrics save {github,kaggle,zenodo}                   # snapshot metrics f
 
 `usage-metrics etl` is what the `load-metrics` GitHub Action runs; the `save` commands run daily in `save_daily_metrics`.
 
+### Schedule
+
+| Workflow             | Runs at (UTC) | What it does                                             |
+| -------------------- | ------------- | -------------------------------------------------------- |
+| `save-daily-metrics` | 08:17         | Archives the GitHub, Kaggle and Zenodo snapshots         |
+| `load-metrics`       | 10:17         | Processes each of the last three days, as parallel jobs  |
+
+Running three days each time picks up late data and retries days that failed. Days
+whose data isn't due yet are skipped: in the morning run, S3 and GitHub views and clones
+reach two days ago, and everything else reaches yesterday. Starting `load-metrics` by
+hand without dates does the same; with dates, it processes exactly those. GitHub Actions
+allows at most 256 jobs in one run, so split longer backfills into several.
+
 ### Backfills
 
 To run a a complete backfill from the Dagster UI go to the job's partitions tab.
@@ -240,10 +253,29 @@ To write to a different path or bucket, set `PUDL_METRICS_GCS_BASE_PATH` to a `g
 export PUDL_METRICS_GCS_BASE_PATH="gs://test.catalyst.coop"
 ```
 
+#### GitHub and Zenodo days
+
+Zenodo, Kaggle, and GitHub's popular paths and referrers are snapshots, so a partition
+holds what was archived that day. GitHub counts views and clones per day, and lists the
+last two weeks. A partition holds the largest counts listed for its day by the archives
+saved 2 to 15 days later, so it can't be published until two days afterwards. GitHub
+leaves out days without any traffic, and those get no row.
+
+#### S3 days
+
+S3 often logs a request made late in a day on the following day. So each S3 partition
+reads the logs of its own day and the next, and publishes the requests made on its day.
+That means a day can't be published until 02:00 UTC two days later, and running it
+sooner does nothing. If the next day has no logs, the day is published with a warning.
+
+Very rarely a record is logged two or more days late. It is kept in `core_s3_logs`, in
+the partition of the day it was logged, left out of the summaries, and reported.
+
 #### Compacted S3 logs
 
 Each day's S3 logs are combined into one compacted log, which later runs reuse.
-`--rebuild` builds it again from the raw logs, with these protections:
+`--rebuild` builds the partition's own compacted log again from the raw logs (not the
+next day's), with these protections:
 
 - If there are no raw logs, the existing compacted log is kept, used, and reported.
 - If there are fewer raw logs than it was built from, or they hold no records, the run

@@ -97,14 +97,9 @@ def core_s3_logs(
 ) -> pd.DataFrame:
     """Transform daily S3 logs.
 
-    Add column headers, geocode values,
+    Convert the types of the raw fields, geocode the IP addresses, and add an ``id``.
     """
     context.log.info(f"Processing data for {context.partition_key}")
-
-    if raw_s3_logs.empty:
-        context.log.warning(f"No data found for {context.partition_key}")
-        return raw_s3_logs
-    raw_s3_logs = name_s3_log_columns(raw_s3_logs, context.partition_key)
 
     # Combine time and timezone columns.
     raw_s3_logs["time"] = raw_s3_logs["time"] + " " + raw_s3_logs["timezone"]

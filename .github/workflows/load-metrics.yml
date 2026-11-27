@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       start_partition:
-        description: "First date (YYYY-MM-DD) to ETL. Blank means latest. If end_partition differs, every date in between is backfilled in parallel."
+        description: "First date (YYYY-MM-DD) to ETL. Blank means the last three days. If end_partition differs, every date in between is backfilled in parallel."
         required: false
       end_partition:
         description: "Last date (YYYY-MM-DD, inclusive) to ETL. Defaults to start_partition (a single day) if blank."
@@ -29,11 +29,10 @@ on:
         required: false
         type: boolean
         default: false
-  # Disabled until the stack of PRs that fixes the ETL is merged: a scheduled run
-  # can't succeed before then. Run this workflow with workflow_dispatch from a branch
-  # instead. Restore the daily run afterwards:
-  # schedule:
-  #   - cron: "14 7 * * *" # Every day at 7:14 AM UTC
+  schedule:
+    # Every day at 10:17 AM UTC (early morning US Eastern), two hours after
+    # save-daily-metrics archives the day's snapshots.
+    - cron: "17 10 * * *"
 
 env:
   METRICS_PROD_ENV: "prod"
@@ -73,18 +72,25 @@ jobs:
       - name: Compute the list of partitions to ETL
         id: compute
         shell: bash -l {0}
-        # A multi-day "all" backfill skips non-partitioned jobs on each dated matrix
+        # With no dates given, run the last three days, so that data which arrived late
+        # and days that failed are picked up. Jobs that aren't partitioned take no date.
+        # A multi-day "all" run skips non-partitioned jobs on each dated matrix
         # entry below to avoid them racing to overwrite the same un-dated output file.
         # Add one extra matrix entry -- using the literal string "nonpartitioned" as a
         # sentinel, since real partitions are always YYYY-MM-DD and can't collide with
         # it -- to run them exactly once, so "all" actually refreshes everything.
         run: |
+          job="${{ github.event.inputs.job }}"
+          recent=(--recent 3)
+          if [[ "$job" == *nonpartitioned ]]; then
+            recent=()
+          fi
           partitions=$(pixi run usage-metrics partitions \
             --start "${{ github.event.inputs.start_partition }}" \
-            --end "${{ github.event.inputs.end_partition }}")
+            --end "${{ github.event.inputs.end_partition }}" \
+            "${recent[@]}")
           count=$(echo "$partitions" | jq 'length')
           multiple=$([ "$count" -gt 1 ] && echo true || echo false)
-          job="${{ github.event.inputs.job }}"
           if [[ "$multiple" == "true" && ( -z "$job" || "$job" == "all" ) ]]; then
             partitions=$(echo "$partitions" | jq -c '. + ["nonpartitioned"]')
           fi
@@ -141,7 +147,7 @@ jobs:
         with:
           version: ">= 363.0.0"
 
-      - name: Run ETL on the latest day's data
+      - name: Run ETL on the partition
         id: load-data
         env:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
@@ -197,8 +203,8 @@ jobs:
           to: "pudl-deployments"
           topic: "pudl-usage-metrics"
           content: |
-            ${{ job.status == 'success' && !steps.load-data.outputs.missing_input && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `load-metrics` (partition `${{ matrix.partition }}`) completed with status `${{ job.status }}`.
+            ${{ job.status == 'success' && !steps.load-data.outputs.warnings && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `load-metrics` (partition `${{ matrix.partition }}`) completed with status `${{ job.status }}`.
             [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
 
-            ${{ steps.load-data.outputs.missing_input && '**Missing input:**' || '' }}
-            ${{ steps.load-data.outputs.missing_input }}
+            ${{ steps.load-data.outputs.warnings && '**Warnings:**' || '' }}
+            ${{ steps.load-data.outputs.warnings }}

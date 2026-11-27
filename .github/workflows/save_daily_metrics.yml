@@ -2,9 +2,9 @@ name: save-daily-metrics
 on:
   workflow_dispatch:
   schedule:
-    # Run every day at 8:00 PM UTC
-    # https://crontab.guru/#0_20_*_*_*
-    - cron: "0 20 * * *"
+    # Run every day at 8:17 AM UTC, shortly before load-metrics processes the data
+    # https://crontab.guru/#17_8_*_*_*
+    - cron: "17 8 * * *"
 
 jobs:
   save-daily-metrics:

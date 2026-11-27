@@ -45,18 +45,21 @@ by local resources. Override with ``compose_workers`` or ``GCS_COMPOSE_WORKERS``
 """
 
 
-MISSING_INPUT_METADATA_KEY = "missing_input"
-"""Marks the asset observation recorded for a partition that has no input."""
+WARNING_METADATA_KEY = "warning"
+"""Marks the asset observations that ``usage-metrics etl`` reports as warnings."""
 
 
-def report_missing_input(context: AssetExecutionContext, reason: str) -> None:
-    """Warn that a partition has no input, in a way ``usage-metrics etl`` can report."""
-    context.log.warning(reason)
+def report_warning(context: AssetExecutionContext, message: str) -> None:
+    """Log a warning, such as missing input, that ``usage-metrics etl`` will report.
+
+    Use this for anything that doesn't fail the run but someone should hear about.
+    """
+    context.log.warning(message)
     context.log_event(
         AssetObservation(
             asset_key=context.asset_key,
             partition=context.partition_key,
-            metadata={MISSING_INPUT_METADATA_KEY: reason},
+            metadata={WARNING_METADATA_KEY: message},
         )
     )
 
@@ -290,7 +293,7 @@ class GCSExtractor(ABC):
         """
         frame = self.extract(context)
         if frame.empty:
-            report_missing_input(
+            report_warning(
                 context,
                 f"No data in {self.bucket_name} for {context.partition_key}; nothing "
                 "was written.",

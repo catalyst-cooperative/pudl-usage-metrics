@@ -71,14 +71,10 @@ class ZenodoExtractor(GCSExtractor):
         Returns:
             A list of blobs to be downloaded.
         """
-        week_start_date_str = context.partition_key
-        week_date_range = pd.date_range(start=week_start_date_str, periods=7, freq="D")
-        partition_dates = tuple(week_date_range.strftime("%Y-%m-%d"))
-
         # Construct regex query for zenodo/YYYYMMDD-VERSIONID.json
         # (ignoring older CSV archives)
-        # and only search for files in date range
-        file_name_prefixes = tuple(f"zenodo/{date}-" for date in partition_dates)
+        # and only search for files saved on the partition's day
+        file_name_prefix = f"zenodo/{context.partition_key}-"
         pattern = re.compile(r"\d{4}-\d{2}-\d{2}-\d+\.json$")
 
         filtered_blobs = [
@@ -86,7 +82,7 @@ class ZenodoExtractor(GCSExtractor):
             for blob in blobs
             if blob.name is not None
             and pattern.search(blob.name)
-            and blob.name.startswith(file_name_prefixes)
+            and blob.name.startswith(file_name_prefix)
         ]
         return filtered_blobs
 
@@ -117,5 +113,5 @@ class ZenodoExtractor(GCSExtractor):
     output_required=False,
 )
 def raw_zenodo_logs(context: AssetExecutionContext) -> Iterator[Output[pd.DataFrame]]:
-    """Extract Zenodo logs from sub-daily files and return one weekly DataFrame."""
+    """Extract the Zenodo statistics archived on a day."""
     yield from ZenodoExtractor().extract_partition(context)
