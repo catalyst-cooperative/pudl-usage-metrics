@@ -8,12 +8,20 @@ import pandas as pd
 from dagster import (
     AssetExecutionContext,
     DailyPartitionsDefinition,
+    Failure,
     asset,
 )
 from google.cloud import storage
 
 from usage_metrics.paths import PUDL_METRICS_EEL_HOLE_LOGS_BUCKET
 from usage_metrics.raw.extract import GCS_EXTRACT_RETRY_POLICY, GCSExtractor
+
+FIRST_COMPLETE_RAW_DAY = date(2026, 5, 28)
+"""The first day whose raw logs are all still in GCS.
+
+Older logs expired under a retention rule that has since been relaxed, and 2026-05-27
+only has part of its day. Outputs for earlier days can't be produced again.
+"""
 
 
 class EelHoleExtractor(GCSExtractor):
@@ -71,5 +79,19 @@ class EelHoleExtractor(GCSExtractor):
     retry_policy=GCS_EXTRACT_RETRY_POLICY,
 )
 def raw_eel_hole_logs(context: AssetExecutionContext) -> pd.DataFrame:
-    """Extract eel hole logs from sub-daily files and return one weekly DataFrame."""
+    """Extract eel hole logs from sub-daily files and return one weekly DataFrame.
+
+    Raises:
+        Failure: For a day before ``FIRST_COMPLETE_RAW_DAY``, so that nothing is made
+            from what's left of its logs and written over its outputs.
+    """
+    day = date.fromisoformat(context.partition_key)
+    if day < FIRST_COMPLETE_RAW_DAY:
+        raise Failure(
+            description=(
+                f"Not processing {day}: its raw logs have expired, in whole or in "
+                "part, so its existing outputs can't be produced again."
+            ),
+            allow_retries=False,
+        )
     return EelHoleExtractor().extract(context)
