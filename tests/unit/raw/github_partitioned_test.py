@@ -17,8 +17,6 @@ from usage_metrics.raw.github_partitioned import (
     daily_metrics_extraction_factory,
 )
 
-from .conftest import FakeBlob
-
 DAY = "2024-06-15"
 
 
@@ -37,12 +35,12 @@ def test_filter_blobs_daily_metric_matches_exact_file(filtered_blob_names):
     assert kept == ["github/popular_paths/2024-06-15.json"]
 
 
-def test_filter_blobs_cumulative_metric_takes_newest(partition_context):
+def test_filter_blobs_cumulative_metric_takes_newest(partition_context, fake_blob):
     """A cumulative metric keeps only the most recently created file."""
     blobs = [
-        FakeBlob("github/stargazers/2024-01-01.json", b"[]", time_created=1),
-        FakeBlob("github/stargazers/2024-03-01.json", b"[]", time_created=3),
-        FakeBlob("github/stargazers/2024-02-01.json", b"[]", time_created=2),
+        fake_blob("github/stargazers/2024-01-01.json", b"[]", time_created=1),
+        fake_blob("github/stargazers/2024-03-01.json", b"[]", time_created=3),
+        fake_blob("github/stargazers/2024-02-01.json", b"[]", time_created=2),
     ]
     ext = GithubExtractor(metric="stargazers")
     kept = ext.filter_blobs(
@@ -70,7 +68,7 @@ def test_load_file_popular_paths_adds_metrics_date(tmp_path):
 
 
 @pytest.fixture
-def run_raw_views(fake_gcs, patch_download_many, download_dir, mocker):
+def run_raw_views(fake_gcs, patch_download_many, data_dir, mocker):
     """Run ``raw_github_views`` for ``DAY`` on archives given as
     ``{date saved: {day listed: count}}``. Returns its outputs and the number of
     warnings.

@@ -1,7 +1,6 @@
 """Tests for usage_metrics.core.zenodo."""
 
 import json
-from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -57,18 +56,21 @@ def _raw(tmp_path, archives: dict[str, list[dict]]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def _core(raw: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+@pytest.fixture
+def run_core(mocker):
     """Run core_zenodo_logs, returning its result and the warnings it logged."""
-    with (
-        build_asset_context(partition_key="2026-10-01") as context,
-        patch.object(context.log, "warning") as warning,
-    ):
-        result = core_zenodo_logs(context, raw)
-    assert isinstance(result, pd.DataFrame)
-    return result, [call.args[0] for call in warning.call_args_list]
+
+    def _run(raw: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+        with build_asset_context(partition_key="2026-10-01") as context:
+            warning = mocker.patch.object(context.log, "warning")
+            result = core_zenodo_logs(context, raw)
+        assert isinstance(result, pd.DataFrame)
+        return result, [call.args[0] for call in warning.call_args_list]
+
+    return _run
 
 
-def test_a_version_in_two_archives_of_one_day_keeps_the_latest(tmp_path):
+def test_a_version_in_two_archives_of_one_day_keeps_the_latest(tmp_path, run_core):
     """The archive job ran twice on 2026-10-01 and a version was published in between.
 
     The second archive is named for the new latest version, and has all the versions of
@@ -87,7 +89,7 @@ def test_a_version_in_two_archives_of_one_day_keeps_the_latest(tmp_path):
         },
     )
 
-    result, warnings = _core(raw)
+    result, warnings = run_core(raw)
 
     assert sorted(result["version_id"]) == [1, 100, 200]
     downloads = dict(
@@ -100,7 +102,7 @@ def test_a_version_in_two_archives_of_one_day_keeps_the_latest(tmp_path):
     assert "2026-10-01" in warnings[0]
 
 
-def test_the_same_version_on_different_days_is_kept_for_each_day(tmp_path):
+def test_the_same_version_on_different_days_is_kept_for_each_day(tmp_path, run_core):
     raw = _raw(
         tmp_path,
         {
@@ -109,16 +111,16 @@ def test_the_same_version_on_different_days_is_kept_for_each_day(tmp_path):
         },
     )
 
-    result, warnings = _core(raw)
+    result, warnings = run_core(raw)
 
     assert len(result) == 2
     assert warnings == []
 
 
-def test_unique_versions_are_not_changed(tmp_path):
+def test_unique_versions_are_not_changed(tmp_path, run_core):
     raw = _raw(tmp_path, {"2026-10-01-100.json": [_record(1, 10), _record(100, 10)]})
 
-    result, warnings = _core(raw)
+    result, warnings = run_core(raw)
 
     assert sorted(result["version_id"]) == [1, 100]
     assert warnings == []

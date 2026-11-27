@@ -40,7 +40,7 @@ def test_parquet_round_trip_independent_of_column_order(
     reverse_schema: bool,
     write_then_load,
     distinct_values,
-    monkeypatch,
+    mocker,
 ) -> None:
     """Every value comes back in the column with its name, whatever the order."""
     schema = usage_metrics_schemas[table_name]
@@ -50,16 +50,13 @@ def test_parquet_round_trip_independent_of_column_order(
     if reverse_dataframe:
         df = df[list(reversed(df.columns))]
     if reverse_schema:
-        monkeypatch.setitem(
-            usage_metrics_schemas,
-            table_name,
-            pandera.DataFrameSchema(
-                dict(reversed(schema.columns.items())),
-                unique=schema.unique,
-                strict=False,
-                description=schema.description,
-            ),
+        reversed_schema = pandera.DataFrameSchema(
+            dict(reversed(schema.columns.items())),
+            unique=schema.unique,
+            strict=False,
+            description=schema.description,
         )
+        mocker.patch.dict(usage_metrics_schemas, {table_name: reversed_schema})
 
     loaded = write_then_load(table_name, df)
 

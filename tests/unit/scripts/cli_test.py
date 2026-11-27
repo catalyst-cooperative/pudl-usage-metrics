@@ -2,7 +2,6 @@
 
 import subprocess
 import sys
-from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -38,9 +37,9 @@ def test_import_does_not_pull_in_kaggle():
         ),
     ],
 )
-def test_save_subcommands_dispatch(args, target):
+def test_save_subcommands_dispatch(mocker, args, target):
     """Each `save` subcommand calls its underlying function."""
-    with patch(target) as underlying:
-        result = CliRunner().invoke(cli, args)
+    underlying = mocker.patch(target, autospec=True)
+    result = CliRunner().invoke(cli, args)
     assert result.exit_code == 0, result.output
     underlying.assert_called_once()

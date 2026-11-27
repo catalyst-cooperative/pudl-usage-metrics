@@ -71,29 +71,16 @@ def _write_files(directory: Path, *contents: bytes) -> list[Path]:
     return paths
 
 
-@pytest.fixture
-def loaded_paths(monkeypatch):
-    """Spy on ``load_file`` for an extractor; the list fills with the paths parsed."""
-
-    def _spy(extractor) -> list[Path]:
-        seen: list[Path] = []
-        monkeypatch.setattr(
-            extractor, "load_file", lambda p: seen.append(p) or pl.DataFrame()
-        )
-        return seen
-
-    return _spy
-
-
-def test_extract_no_files_returns_empty(partition_context, run_extract, download_dir):
+def test_extract_no_files_returns_empty(extractor_with, partition_context):
     """A partition with no blobs yields an empty DataFrame."""
-    df = run_extract(LineExtractor(), partition_context("2024-01-01"), [])
+    ext = extractor_with(LineExtractor, {})
+    df = ext.extract(partition_context("2024-01-01"))
     assert isinstance(df, pd.DataFrame)
     assert df.empty
 
 
 def test_no_input_succeeds_with_a_warning_and_runs_nothing_downstream(
-    fake_gcs, download_dir
+    fake_gcs, data_dir
 ):
     """A day without logs mustn't fail forever, pass unnoticed, or overwrite data."""
     client = fake_gcs({LineExtractor.bucket_name: {}})
@@ -121,28 +108,32 @@ def test_no_input_succeeds_with_a_warning_and_runs_nothing_downstream(
 
 @pytest.mark.parametrize("n_files", [1, 2])
 def test_extract_combines_only_multiple_files(
-    partition_context, run_extract, loaded_paths, download_dir, tmp_path, n_files
+    extractor_with, partition_context, mocker, data_dir, n_files
 ):
     """One file is parsed directly; several concatenable files are combined first."""
-    files = _write_files(tmp_path, *[b"x 1\n"] * n_files)
-    ext = LineExtractor()
-    seen = loaded_paths(ext)
-    run_extract(ext, partition_context("2024-01-01"), files)
-    combined = download_dir / "raw" / "test_lines" / "2024-01-01.combined"
-    assert seen == ([files[0]] if n_files == 1 else [combined])
+    names = ["a", "b"][:n_files]
+    ext = extractor_with(LineExtractor, dict.fromkeys(names, b"x 1\n"))
+    load_file = mocker.spy(ext, "load_file")
+    df = ext.extract(partition_context("2024-01-01"))
+    downloads = data_dir / "raw" / "test_lines"
+    combined = downloads / "2024-01-01.combined"
+    parsed = downloads / "a" if n_files == 1 else combined
+    load_file.assert_called_once_with(parsed)
     assert combined.exists() == (n_files > 1)
+    assert len(df) == n_files
 
 
 def test_extract_parses_each_file_when_not_concatenable(
-    partition_context, run_extract, monkeypatch, download_dir, tmp_path
+    extractor_with, partition_context, mocker
 ):
     """Non-concatenable extractors parse per file and concatenate the frames."""
-    files = _write_files(tmp_path, b"1\n", b"2\n")
-    ext = DocExtractor()
-    monkeypatch.setattr(
-        ext, "load_file", lambda p: pd.DataFrame({"v": [p.read_text().strip()]})
+    ext = extractor_with(DocExtractor, {"a": b"1\n", "b": b"2\n"})
+    mocker.patch.object(
+        ext,
+        "load_file",
+        side_effect=lambda p: pd.DataFrame({"v": [p.read_text().strip()]}),
     )
-    df = run_extract(ext, partition_context("2024-01-01"), files)
+    df = ext.extract(partition_context("2024-01-01"))
     assert df["v"].tolist() == ["1", "2"]
 
 
@@ -151,36 +142,27 @@ def test_extract_parses_each_file_when_not_concatenable(
     ["2026-02-25", None],
     ids=["partitioned", "non_partitioned"],
 )
-def test_extract_sets_partition_key_before_load(
-    run_extract, monkeypatch, download_dir, tmp_path, partition_key
-):
+def test_extract_sets_partition_key_before_load(extractor_with, mocker, partition_key):
     """load_file can rely on self.partition_key, which is None for unpartitioned runs
     (e.g. the cumulative GitHub metrics)."""
-    files = _write_files(tmp_path, b"x 1\n")
-    ext = LineExtractor()
+    ext = extractor_with(LineExtractor, {"a": b"x 1\n"})
     seen = []
-    monkeypatch.setattr(
+    mocker.patch.object(
         ext,
         "load_file",
-        lambda p: seen.append(ext.partition_key) or pl.DataFrame({"v": [1]}),
+        side_effect=lambda p: (
+            seen.append(ext.partition_key) or pl.DataFrame({"v": [1]})
+        ),
     )
-    df = run_extract(ext, build_asset_context(partition_key=partition_key), files)
+    df = ext.extract(build_asset_context(partition_key=partition_key))
     assert seen == [partition_key]
     assert not df.empty
 
 
-def test_extract_swallows_empty_data_errors(
-    partition_context, run_extract, monkeypatch, download_dir, tmp_path
-):
+def test_extract_swallows_empty_data_errors(extractor_with, partition_context):
     """An all-empty partition returns an empty DataFrame, not an error."""
-    files = _write_files(tmp_path, b"")
-    ext = LineExtractor()
-
-    def _raise(_path):
-        raise pl.exceptions.NoDataError("empty")
-
-    monkeypatch.setattr(ext, "load_file", _raise)
-    df = run_extract(ext, partition_context("2024-01-01"), files)
+    ext = extractor_with(LineExtractor, {"a": b""})
+    df = ext.extract(partition_context("2024-01-01"))
     assert df.empty
 
 
@@ -205,7 +187,7 @@ def test_get_blob_prefix(
 
 
 def test_download_gcs_blobs_lists_by_prefix_and_flattens_names(
-    partition_context, patch_download_many, fake_gcs, download_dir
+    partition_context, patch_download_many, fake_gcs, data_dir
 ):
     """Only blobs under the prefix are downloaded, with "/" in their names replaced."""
     blobs = {"logs/2024-01-01/aa": b"a 1\n", "logs/2024-01-02/bb": b"b 2\n"}
@@ -216,6 +198,6 @@ def test_download_gcs_blobs_lists_by_prefix_and_flattens_names(
             return "logs/2024-01-01"
 
     ext = PrefixExtractor(client=client)
-    paths = ext.download_gcs_blobs(partition_context("2024-01-01"), download_dir)
+    paths = ext.download_gcs_blobs(partition_context("2024-01-01"), data_dir)
     assert [p.name for p in paths] == ["logs-2024-01-01-aa"]
     assert paths[0].read_bytes() == b"a 1\n"

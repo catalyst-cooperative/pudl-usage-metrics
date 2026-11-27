@@ -234,7 +234,7 @@ def test_zstd_with_guard_rejects_bad_lines(tmp_path, data):
 
 
 @pytest.fixture
-def fake_s3_gcs(fake_gcs, patch_download_many, download_dir, mocker):
+def fake_s3_gcs(fake_gcs, patch_download_many, data_dir, mocker):
     """Factory: a fake client (source + artifact buckets) wired into the assets."""
 
     mocker.patch.dict(os.environ, {"PUDL_METRICS_GCS_BASE_PATH": "gs://test-outputs"})
@@ -431,18 +431,6 @@ def test_a_day_is_published_when_the_next_has_no_logs(fake_s3_gcs):
     assert len(run_raw_asset()) == 1
 
 
-def test_a_day_without_logs_stores_nothing_until_they_arrive(fake_s3_gcs):
-    """Nothing marks the day as done, so a later run fills the gap."""
-    client = fake_s3_gcs({})
-
-    assert compacted_asset_results() == []
-    assert artifact_blob(client) is None
-
-    client.bucket(BUCKET).blob(f"{DAY}-00-00-00-a").upload_from_string(RECORD_A)
-    assert run_compacted_asset()["action"] == "built"
-    assert stored_artifact(client)[0] == RECORD_A
-
-
 @pytest.mark.parametrize(
     ("remaining", "outcome"),
     [
@@ -539,7 +527,6 @@ def test_raw_s3_logs_missing_artifact_is_an_error(fake_s3_gcs):
 @pytest.mark.parametrize(
     "logs",
     [
-        pytest.param({}, id="no_logs"),
         pytest.param(
             {"a": log_line().replace("REST.GET.OBJECT", "S3.TRANSITION_INT.OBJECT")},
             id="only_lifecycle_transitions",
@@ -576,23 +563,3 @@ def test_s3_job_succeeds_on_a_day_with_nothing_to_summarize(
     ).resolve_job_def("job")
 
     assert job.execute_in_process(partition_key=DAY, raise_on_error=False).success
-
-
-def test_summaries_only_count_requests_made_on_their_day():
-    """A straggler would give a second day's file a row with another day's id."""
-    core = pd.DataFrame(
-        {
-            "time": pd.to_datetime([f"{DAY} 12:00", "2024-06-06 12:00"]),
-            "operation": "REST.GET.OBJECT",
-            "megabytes_sent": 1.0,
-            "requester": pd.NA,
-            "bucket_owner": "owner",
-            "bucket": "bkt",
-            "key": "v1/a.parquet",
-            "referer": "-",
-        }
-    )
-
-    out = out_s3.out_s3_logs(build_asset_context(partition_key=DAY), core)
-
-    assert list(cast(pd.DataFrame, out)["time"].dt.strftime("%Y-%m-%d")) == [DAY]

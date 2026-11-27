@@ -1,6 +1,7 @@
 """Tests for the eel hole (PUDL Viewer) log transform assets."""
 
 import json
+import os
 from collections import Counter
 from collections.abc import Iterator
 from typing import Any, cast
@@ -539,9 +540,9 @@ def test_coverage_check_warns_non_fatally_on_unrouted_event():
     assert "EEL-HOLE EVENT COVERAGE" in cast(str, result.metadata["report"].value)
 
 
-def test_coverage_check_unrouted_event_blocks_in_prod(monkeypatch):
+def test_coverage_check_unrouted_event_blocks_in_prod(mocker):
     """The same unrouted-event gap is a blocking ERROR when METRICS_PROD_ENV=prod."""
-    monkeypatch.setenv("METRICS_PROD_ENV", "prod")
+    mocker.patch.dict(os.environ, {"METRICS_PROD_ENV": "prod"})
     rows = [
         _record("s1", event="search", user_id="u"),
         _record("p1", payload={"event": "some_future_event", "timestamp": TS}),
@@ -568,8 +569,8 @@ def test_coverage_check_flags_events_that_differ_from_a_slug_only_by_case(name):
     assert "differs from one only by case" in cast(str, result.metadata["report"].value)
 
 
-def test_coverage_check_case_variant_event_blocks_in_prod(monkeypatch):
-    monkeypatch.setenv("METRICS_PROD_ENV", "prod")
+def test_coverage_check_case_variant_event_blocks_in_prod(mocker):
+    mocker.patch.dict(os.environ, {"METRICS_PROD_ENV": "prod"})
     rows = [_record("c1", payload={"event": "Preview", "timestamp": TS})]
     assert _coverage(rows).severity.value == "ERROR"
 

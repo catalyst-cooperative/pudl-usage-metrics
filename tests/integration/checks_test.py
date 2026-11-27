@@ -16,10 +16,10 @@ from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManag
 
 
 def _toy_job_result(
-    schema, tmp_path, monkeypatch, df: pd.DataFrame, partitioned: bool = True
+    schema, tmp_path, mocker, df: pd.DataFrame, partitioned: bool = True
 ):
     """Materialize a toy asset and run its schema check in one job."""
-    monkeypatch.setitem(usage_metrics_schemas, "toy", schema)
+    mocker.patch.dict(usage_metrics_schemas, {"toy": schema})
     partitions = DailyPartitionsDefinition(start_date="2026-01-01")
 
     @asset(
@@ -51,38 +51,38 @@ def _toy_job_result(
 
 @pytest.mark.parametrize("partitioned", [True, False])
 def test_check_validates_the_table_the_io_manager_wrote(
-    toy_schema, tmp_path, monkeypatch, partitioned
+    toy_schema, tmp_path, mocker, partitioned
 ) -> None:
     """The check loads its table through the asset's IO manager, for its own partition."""
     df = pd.DataFrame({"id": ["a", "b"], "tls": ["-", "TLSv1.2"]})
 
-    result = _toy_job_result(toy_schema, tmp_path, monkeypatch, df, partitioned)
+    result = _toy_job_result(toy_schema, tmp_path, mocker, df, partitioned)
 
     (evaluation,) = result.get_asset_check_evaluations()
     assert evaluation.passed
     assert evaluation.metadata["row_count"].value == 2
 
 
-def test_check_reads_only_its_own_partition(toy_schema, tmp_path, monkeypatch) -> None:
+def test_check_reads_only_its_own_partition(toy_schema, tmp_path, mocker) -> None:
     """Another day's file, which the asset's partitions also map to, isn't validated."""
     other_day = tmp_path / "toy" / "2026-01-01--2026-01-02.parquet"
     other_day.parent.mkdir()
     pd.DataFrame({"id": ["x", "x"], "tls": ["-garbage", "-"]}).to_parquet(other_day)
     df = pd.DataFrame({"id": ["a", "b"], "tls": ["-", "TLSv1.2"]})
 
-    result = _toy_job_result(toy_schema, tmp_path, monkeypatch, df)
+    result = _toy_job_result(toy_schema, tmp_path, mocker, df)
 
     (evaluation,) = result.get_asset_check_evaluations()
     assert evaluation.passed
 
 
 def test_check_fails_the_job_when_the_written_table_breaks_its_schema(
-    toy_schema, tmp_path, monkeypatch
+    toy_schema, tmp_path, mocker
 ) -> None:
     """A table that breaks its schema fails its blocking check, and so the job."""
     df = pd.DataFrame({"id": ["a", "a"], "tls": ["-garbage", "TLSv1.2"]})
 
-    result = _toy_job_result(toy_schema, tmp_path, monkeypatch, df)
+    result = _toy_job_result(toy_schema, tmp_path, mocker, df)
 
     assert not result.success
     (evaluation,) = result.get_asset_check_evaluations()
