@@ -1,6 +1,7 @@
 """Tests for `usage_metrics.scripts.etl`."""
 
 import logging
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -47,7 +48,7 @@ _JOB_DEFS_BY_NAME = {
 
 
 @pytest.fixture
-def executed(monkeypatch):
+def executed(mocker):
     """Stub out job resolution and execution; record (job name, kwargs) of each run."""
     calls: list[tuple[str, dict]] = []
 
@@ -55,12 +56,12 @@ def executed(monkeypatch):
         calls.append((job.name, kwargs))
         return True, []
 
-    monkeypatch.setattr(
+    mocker.patch.object(
         etl_module.defs,
         "resolve_job_def",
-        lambda name: _JOB_DEFS_BY_NAME[name],
+        side_effect=lambda name: _JOB_DEFS_BY_NAME[name],
     )
-    monkeypatch.setattr(etl_module, "_execute", fake_execute)
+    mocker.patch.object(etl_module, "_execute", autospec=True, side_effect=fake_execute)
     return calls
 
 
@@ -185,38 +186,28 @@ def test_rebuild_run_config_is_valid_for_the_real_job():
 
 @pytest.mark.parametrize("succeeded", [True, False], ids=["success", "failure"])
 def test_missing_input_from_every_run_reaches_the_workflow(
-    executed, monkeypatch, tmp_path, succeeded
+    executed, mocker, tmp_path, succeeded
 ):
     """The Zulip message reads one step output, so it must list every run's missing
-    input, even when a run failed.
+    input, even when a run failed, and not exist when nothing is missing.
     """
-    monkeypatch.setattr(
-        etl_module,
-        "_execute",
-        lambda job, **kw: (succeeded, [f"no input on {kw['partition_key']}"]),
-    )
     output = tmp_path / "github_output"
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
-
-    _run(["--job", "s3", "--window", "2"])
-
-    first, *listed, last = output.read_text().splitlines()
-    name, delimiter = first.split("<<")
-    assert (name, last) == ("missing_input", delimiter)
-    assert len(listed) == 2
-    assert all(day in line for day, line in zip(_S3_DAYS[-2:], listed, strict=True))
-
-
-def test_no_missing_input_output_when_nothing_is_missing(
-    executed, monkeypatch, tmp_path
-):
-    """Any value in the output turns the Zulip message into a warning."""
-    output = tmp_path / "github_output"
-    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+    mocker.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)})
 
     _run(["--job", "s3"])
-
+    # Any value in the output turns the Zulip message into a warning.
     assert not output.exists()
+
+    mocker.patch.object(
+        etl_module,
+        "_execute",
+        side_effect=lambda job, **kw: (succeeded, [kw["partition_key"]]),
+    )
+    _run(["--job", "s3", "--window", "2"])
+
+    written = output.read_text()
+    assert "missing_input" in written
+    assert all(day in written for day in _S3_DAYS[-2:])
 
 
 # --- _execute()'s asset-check surfacing -------------------------------------

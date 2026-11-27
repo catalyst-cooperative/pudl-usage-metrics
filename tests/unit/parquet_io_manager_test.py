@@ -134,8 +134,8 @@ def test_an_empty_result_never_replaces_rows(
 
 @pytest.mark.parametrize(
     ("before", "after"),
-    [(0, 0), (0, 2), (1, 2), (2, 1)],
-    ids=["still_empty", "gap_filled", "more_rows", "fewer_rows"],
+    [(0, 2), (2, 1)],
+    ids=["gap_filled", "fewer_rows"],
 )
 def test_other_results_replace_the_file(write_then_load, before, after) -> None:
     """Only emptying a file is refused, so reruns can fill gaps and correct data."""

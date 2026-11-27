@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 from compression import zstd
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from typing import cast
 
@@ -386,25 +387,26 @@ def test_an_empty_artifact_from_an_earlier_version_is_replaced(fake_s3_gcs):
     assert stored_artifact(client)[0] == RECORD_A
 
 
-def test_rebuild_without_raw_logs_keeps_the_artifact_and_uses_it(fake_s3_gcs):
-    client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
-    run_compacted_asset()
-    client.bucket(BUCKET)._blobs.clear()
-
-    assert run_compacted_asset(rebuild=True)["action"] == "kept"
-    assert stored_artifact(client)[0] == RECORD_A
-
-
 @pytest.mark.parametrize(
-    "remaining",
+    ("remaining", "outcome"),
     [
-        pytest.param({f"{DAY}-00-00-00-a": RECORD_A}, id="fewer_raw_logs"),
+        pytest.param({}, nullcontext(), id="no_raw_logs"),
         pytest.param(
-            {f"{DAY}-00-00-00-a": b"", f"{DAY}-00-00-01-b": b""}, id="no_records"
+            {f"{DAY}-00-00-00-a": RECORD_A},
+            pytest.raises(Failure),
+            id="fewer_raw_logs",
+        ),
+        pytest.param(
+            {f"{DAY}-00-00-00-a": b"", f"{DAY}-00-00-01-b": b""},
+            pytest.raises(Failure),
+            id="no_records",
         ),
     ],
 )
-def test_rebuild_never_replaces_the_artifact_with_less(fake_s3_gcs, remaining):
+def test_rebuild_never_replaces_the_artifact_with_less(fake_s3_gcs, remaining, outcome):
+    """With no raw logs left the artifact is still published; with only some, or
+    nothing in them, the run fails.
+    """
     client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A, f"{DAY}-00-00-01-b": RECORD_B})
     run_compacted_asset()
     source = client.bucket(BUCKET)
@@ -412,7 +414,7 @@ def test_rebuild_never_replaces_the_artifact_with_less(fake_s3_gcs, remaining):
     for name, data in remaining.items():
         source.blob(name).upload_from_string(data)
 
-    with pytest.raises(Failure):
+    with outcome:
         run_compacted_asset(rebuild=True)
     assert stored_artifact(client)[0] == RECORD_A + RECORD_B
 
