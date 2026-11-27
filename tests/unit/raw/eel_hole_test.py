@@ -46,7 +46,7 @@ def test_filter_blobs_keeps_only_matching_day(filtered_blob_names):
     ],
 )
 def test_only_complete_days_are_processed(
-    fake_gcs, patch_download_many, download_dir, monkeypatch, day, now, produced
+    fake_gcs, patch_download_many, download_dir, mocker, day, now, produced
 ):
     """Raw files for only part of a day are left alone: processing them could replace
     the day's complete outputs.
@@ -54,10 +54,10 @@ def test_only_complete_days_are_processed(
     name = f"{STDOUT}/{day.replace('-', '/')}/00:00:00_00:59:59_S0.json"
     bucket = EelHoleExtractor().bucket_name
     client = fake_gcs({bucket: {name: b'{"insertId": "a"}\n'}})
-    monkeypatch.setattr(
-        eel_hole, "EelHoleExtractor", lambda: EelHoleExtractor(client=client)
+    mocker.patch.object(
+        eel_hole, "EelHoleExtractor", return_value=EelHoleExtractor(client=client)
     )
-    monkeypatch.setattr(eel_hole, "_utcnow", lambda: now)
+    mocker.patch.object(eel_hole, "_utcnow", autospec=True, return_value=now)
 
     outputs = raw_eel_hole_logs(build_asset_context(partition_key=day))
 

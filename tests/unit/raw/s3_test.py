@@ -1,5 +1,6 @@
 """Tests for the S3 log extractor."""
 
+import os
 from collections.abc import Iterator
 from compression import zstd
 from contextlib import nullcontext
@@ -226,15 +227,15 @@ def test_zstd_with_guard_rejects_bad_lines(tmp_path, data):
 
 
 @pytest.fixture
-def fake_s3_gcs(fake_gcs, patch_download_many, download_dir, monkeypatch):
+def fake_s3_gcs(fake_gcs, patch_download_many, download_dir, mocker):
     """Factory: a fake client (source + artifact buckets) wired into the assets."""
 
-    monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", "gs://test-outputs")
+    mocker.patch.dict(os.environ, {"PUDL_METRICS_GCS_BASE_PATH": "gs://test-outputs"})
 
     def _make(source_blobs: dict[str, bytes]):
         client = fake_gcs({BUCKET: source_blobs, compacted_location(DAY)[0]: {}})
-        monkeypatch.setattr(
-            s3_module, "S3Extractor", lambda *a, **k: S3Extractor(client=client)
+        mocker.patch.object(
+            s3_module, "S3Extractor", side_effect=lambda: S3Extractor(client=client)
         )
         return client
 
@@ -292,13 +293,14 @@ def stored_artifact(client) -> tuple[bytes, dict]:
         ),
     ],
 )
-def test_compacted_location(monkeypatch, environment, base_path, bucket, prefix):
+def test_compacted_location(mocker, environment, base_path, bucket, prefix):
     """Artifacts live under the output location, so overriding it redirects them."""
-    monkeypatch.setenv("METRICS_PROD_ENV", environment)
+    # patch.dict restores the whole environment, including what's changed after it.
+    mocker.patch.dict(os.environ, {"METRICS_PROD_ENV": environment})
     if base_path is None:
-        monkeypatch.delenv("PUDL_METRICS_GCS_BASE_PATH", raising=False)
+        os.environ.pop("PUDL_METRICS_GCS_BASE_PATH", None)
     else:
-        monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", base_path)
+        os.environ["PUDL_METRICS_GCS_BASE_PATH"] = base_path
     path = f"{prefix}raw/pudl_s3_logs/{DAY}.log.zst"
     assert compacted_location(DAY) == (bucket, path)
 
@@ -308,13 +310,14 @@ def test_compacted_location(monkeypatch, environment, base_path, bucket, prefix)
     [None, "gs://metrics.catalyst.coop/scratch"],
     ids=["default", "inside_the_bucket"],
 )
-def test_only_prod_runs_may_use_the_production_bucket(monkeypatch, base_path):
+def test_only_prod_runs_may_use_the_production_bucket(mocker, base_path):
     """A development or test run can't read or replace production artifacts."""
-    monkeypatch.delenv("METRICS_PROD_ENV", raising=False)
+    mocker.patch.dict(os.environ)
+    os.environ.pop("METRICS_PROD_ENV", None)
     if base_path is None:
-        monkeypatch.delenv("PUDL_METRICS_GCS_BASE_PATH", raising=False)
+        os.environ.pop("PUDL_METRICS_GCS_BASE_PATH", None)
     else:
-        monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", base_path)
+        os.environ["PUDL_METRICS_GCS_BASE_PATH"] = base_path
     with pytest.raises(ValueError):
         compacted_location(DAY)
 
@@ -444,10 +447,12 @@ def test_raw_s3_logs_missing_artifact_is_an_error(fake_s3_gcs):
     ],
 )
 def test_s3_job_succeeds_on_a_day_with_nothing_to_summarize(
-    fake_s3_gcs, monkeypatch, tmp_path, logs
+    fake_s3_gcs, mocker, tmp_path, logs
 ):
     """A quiet day mustn't fail forever."""
-    monkeypatch.setattr(helpers, "geocode_ip", lambda ip: {"ip": ip})
+    mocker.patch.object(
+        helpers, "geocode_ip", autospec=True, side_effect=lambda ip: {"ip": ip}
+    )
     fake_s3_gcs(
         {
             f"{DAY}-00-00-00-{name}": line.replace("owner", "a" * 64, 1).encode()
