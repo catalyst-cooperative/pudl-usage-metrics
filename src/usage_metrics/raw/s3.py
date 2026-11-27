@@ -343,15 +343,6 @@ def _source_count(artifact: storage.Blob) -> int:
     return int((artifact.metadata or {}).get("source_object_count", 0))
 
 
-def _is_marked_empty(artifact: storage.Blob) -> bool:
-    """Whether an artifact records a day without logs.
-
-    Earlier versions of ``compacted_s3_logs`` stored these. They hold nothing, so they
-    count as no artifact at all.
-    """
-    return (artifact.metadata or {}).get("source_object_count") == "0"
-
-
 @asset(
     partitions_def=S3_PARTITIONS,
     tags={"source": "s3"},
@@ -383,8 +374,6 @@ def compacted_s3_logs(
     artifacts = ext.gcs_client.bucket(bucket_name)
 
     existing = artifacts.get_blob(path)
-    if existing is not None and _is_marked_empty(existing):
-        existing = None
     if existing is not None and not config.rebuild:
         yield MaterializeResult(metadata={"action": "reused"})
         return

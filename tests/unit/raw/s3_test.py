@@ -376,17 +376,6 @@ def test_a_day_without_logs_stores_nothing_until_they_arrive(fake_s3_gcs):
     assert stored_artifact(client)[0] == RECORD_A
 
 
-def test_an_empty_artifact_from_an_earlier_version_is_replaced(fake_s3_gcs):
-    client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
-    bucket, path = compacted_location(DAY)
-    empty = client.bucket(bucket).blob(path)
-    empty.metadata = {"source_object_count": "0"}
-    empty.upload_from_string(zstd.compress(b""))
-
-    assert run_compacted_asset()["action"] == "built"
-    assert stored_artifact(client)[0] == RECORD_A
-
-
 @pytest.mark.parametrize(
     ("remaining", "outcome"),
     [
