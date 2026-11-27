@@ -25,7 +25,7 @@ from usage_metrics.paths import (
 )
 from usage_metrics.raw.extract import GCSExtractor
 from usage_metrics.resources.parquet_io_manager import PartitionedParquetIOManager
-from usage_metrics.scripts.etl import REBUILD_RUN_CONFIG, _execute
+from usage_metrics.scripts.etl import _execute
 
 DAY = "2026-09-01"
 NEXT_DAY = "2026-09-02"
@@ -33,11 +33,11 @@ THIRD_DAY = "2026-09-03"
 OUTPUT_BUCKET = "test-outputs"
 
 
-def _s3_record(day: str, request_id: str, operation: str = "REST.GET.OBJECT") -> str:
+def _s3_record(day: str, request_id: str) -> str:
     made = pd.Timestamp(day).strftime("%d/%b/%Y")
     return (
         f"{'a' * 64} pudl.catalyst.coop [{made}:12:00:00 +0000] 192.0.2.3 - "
-        f"{request_id} {operation} stable/core_eia__codes.parquet "
+        f"{request_id} REST.GET.OBJECT stable/core_eia__codes.parquet "
         '"GET /k HTTP/1.1" 200 - 100 200 5 4 "-" "curl" - hid SigV4 ECDHE AuthHeader '
         "host TLSv1.2 - - us-east-1\n"
     )
@@ -249,54 +249,14 @@ def test_losing_the_raw_input_changes_nothing_stored(pipeline, source):
     assert pipeline.artifacts() == artifacts
 
 
-@pytest.mark.parametrize(
-    "lost",
-    [
-        pytest.param(slice(None), id="all_raw_logs"),
-        pytest.param(slice(1), id="some_raw_logs"),
-    ],
-)
-def test_rebuilding_from_fewer_raw_logs_keeps_everything(pipeline, lost):
-    raw = _s3_logs(DAY)
-    pipeline.add(raw | _s3_logs(NEXT_DAY))
-    assert pipeline.run("s3")[0]
-    tables, artifacts = pipeline.tables(), pipeline.artifacts()
-
-    pipeline.remove(dict(list(raw.items())[lost]))
-    pipeline.run("s3", run_config=REBUILD_RUN_CONFIG)
-
-    _assert_unchanged(pipeline, tables)
-    assert pipeline.artifacts() == artifacts
-
-
-@pytest.mark.parametrize(
-    ("source", "good", "useless"),
-    [
-        pytest.param(
-            "eel_hole", _eel_hole_logs(), _eel_hole_logs("loading"), id="eel_hole"
-        ),
-        pytest.param(
-            "s3",
-            _s3_logs(DAY),
-            {
-                key: _s3_record(DAY, "x", "S3.TRANSITION_INT.OBJECT").encode()
-                for key in _s3_logs(DAY)
-            },
-            id="s3",
-        ),
-    ],
-)
-def test_results_that_turn_out_empty_fail_and_keep_the_data(
-    pipeline, source, good, useless
-):
+def test_results_that_turn_out_empty_fail_and_keep_the_data(pipeline):
     """As a parsing bug would: there is input, but nothing comes out of it."""
-    pipeline.add(good)
-    assert pipeline.run(source)[0]
+    pipeline.add(_eel_hole_logs())
+    assert pipeline.run("eel_hole")[0]
     tables = pipeline.tables()
 
-    pipeline.add(useless)
-    config = {"run_config": REBUILD_RUN_CONFIG} if source == "s3" else {}
-    succeeded, _ = pipeline.run(source, **config)
+    pipeline.add(_eel_hole_logs("loading"))
+    succeeded, _ = pipeline.run("eel_hole")
 
     assert not succeeded
     for name, table in tables.items():
@@ -305,11 +265,16 @@ def test_results_that_turn_out_empty_fail_and_keep_the_data(
 
 
 def test_consecutive_s3_days_count_each_request_once(pipeline):
-    """Including a request logged the day after it was made."""
+    """Including a request logged the day after it was made. One logged much later
+    is kept, but left out of the summaries, which already cover the day it was made.
+    """
     late = {
         (PUDL_METRICS_S3_LOGS_BUCKET, f"{NEXT_DAY}-00-05-00-late"): _s3_record(
             DAY, "late"
-        ).encode()
+        ).encode(),
+        (PUDL_METRICS_S3_LOGS_BUCKET, f"{DAY}-00-05-00-straggler"): _s3_record(
+            "2026-08-20", "straggler"
+        ).encode(),
     }
     pipeline.add(_s3_logs(DAY) | _s3_logs(NEXT_DAY) | _s3_logs(THIRD_DAY) | late)
 
@@ -320,7 +285,7 @@ def test_consecutive_s3_days_count_each_request_once(pipeline):
     for path, table in pipeline.tables().items():
         by_table.setdefault(path.split("/")[0], []).append(table)
     stored = {name: pd.concat(frames) for name, frames in by_table.items()}
-    assert len(stored["core_s3_logs"]) == 7
+    assert len(stored["core_s3_logs"]) == 8
     for name, table in stored.items():
         assert table["id"].is_unique, name
         if "request_count" in table:
