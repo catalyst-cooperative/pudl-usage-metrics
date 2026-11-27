@@ -197,5 +197,8 @@ jobs:
           to: "pudl-deployments"
           topic: "pudl-usage-metrics"
           content: |
-            ${{ job.status == 'success' && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `load-metrics` (partition `${{ matrix.partition }}`) completed with status `${{ job.status }}`.
+            ${{ job.status == 'success' && !steps.load-data.outputs.missing_input && ':check:' || job.status == 'failure' && ':x:' || ':warning:' }} `load-metrics` (partition `${{ matrix.partition }}`) completed with status `${{ job.status }}`.
             [View workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            ${{ steps.load-data.outputs.missing_input && '**Missing input:**' || '' }}
+            ${{ steps.load-data.outputs.missing_input }}

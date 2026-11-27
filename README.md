@@ -190,6 +190,19 @@ Click "Select All" and then click the "Submit" button.
 This will submit a run for each partition.
 You can follow the runs on the ["Runs" tab](http://localhost:3000/instance/runs).
 
+### Days without input
+
+A source may have no logs for a day. Its first asset (`compacted_s3_logs` for S3,
+otherwise the `raw` asset) then produces nothing, so everything downstream is skipped,
+stored tables and files are left as they are, and the run succeeds. `usage-metrics etl`
+lists the missing input at the end of the run, and the `load-metrics` Zulip message
+shows it with a warning. Running the partition again later fills the gap if the logs
+have turned up.
+
+Eel hole days before 2026-05-28 are skipped without a warning: their raw logs expired
+under an earlier retention rule, so their existing outputs can't be produced again. So is
+a day whose logs aren't all in GCS yet (before 02:00 UTC the next day).
+
 ### Local vs. production development
 
 The choice between local development (written to local storage)
@@ -209,6 +222,11 @@ The `load-metrics` GitHub action is responsible for updating each parquet with f
 **If you configure a run for a previously-existing partition, it will overwrite what is already there.**
 Be sure this is what you want before you kick off the run!
 
+The one exception, in local runs too, is that an empty result never replaces a file
+that has rows: the run fails and keeps the file. If a partition really should become
+empty, delete its Parquet file and run it again. This doesn't protect against a result
+that merely has fewer rows than before.
+
 If a new column is added or data is processed in a new way,
 you'll have to run a complete backfill to overwrite all previous partitions.
 
@@ -221,6 +239,31 @@ To write to a different path or bucket, set `PUDL_METRICS_GCS_BASE_PATH` to a `g
 ```
 export PUDL_METRICS_GCS_BASE_PATH="gs://test.catalyst.coop"
 ```
+
+#### Compacted S3 logs
+
+Each day's S3 logs are combined into one compacted log, which later runs reuse.
+`--rebuild` builds it again from the raw logs, with these protections:
+
+- If there are no raw logs, the existing compacted log is kept, used, and reported.
+- If there are fewer raw logs than it was built from, or they hold no records, the run
+  fails and the compacted log is left alone. Delete it first if it should be replaced.
+
+#### Local S3 runs also write to GCS
+
+`METRICS_PROD_ENV=local` keeps only the processed Parquet outputs on your machine. To
+avoid downloading each of a day's many log files, the S3 assets first combine them
+inside GCS, so building a day's compacted log writes to GCS in two places:
+
+| What                 | Where                                                              | Can you change it?                   |
+| -------------------- | ------------------------------------------------------------------ | ------------------------------------ |
+| The compacted log    | `raw/` under `PUDL_METRICS_GCS_BASE_PATH`                          | Yes, and you must for a local run    |
+| Temporary part files | `_compacted/tmp/` in the raw log bucket, `pudl-s3-logs.catalyst.coop` | No: GCS only combines within a bucket |
+
+Unless `METRICS_PROD_ENV=prod`, set `PUDL_METRICS_GCS_BASE_PATH` to a location outside
+the production bucket, `gs://metrics.catalyst.coop`, before running the S3 assets.
+You need permission to write to both places. The temporary files get new names on
+every run, never replace raw logs, and are deleted after seven days.
 
 ### IP Geocoding with ipinfo
 

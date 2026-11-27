@@ -13,6 +13,7 @@ import pandas as pd
 import pandera.pyarrow as pandera
 import pyarrow.parquet as pq
 import pytest
+from dagster import Failure
 from upath import UPath
 
 from usage_metrics.models import usage_metrics_schemas
@@ -101,6 +102,46 @@ def test_table_is_stored_and_read_back_with_the_types_of_its_schema(
     for column in df.columns.drop("partition_key", errors="ignore"):
         assert loaded[column].isna().tolist() == df[column].isna().tolist(), column
         assert loaded[column].dropna().tolist() == df[column].dropna().tolist(), column
+
+
+def _clones(n_rows: int) -> pd.DataFrame:
+    """``n_rows`` of clone counts, or the bare empty frame assets return for no data."""
+    if n_rows == 0:
+        return pd.DataFrame()
+    return pd.DataFrame(
+        {
+            "metrics_date": pd.date_range("2025-01-01", periods=n_rows),
+            "total_clones": range(n_rows),
+        }
+    )
+
+
+def test_an_empty_result_never_replaces_rows(
+    write_then_load, parquet_manager, output_context
+) -> None:
+    """Missing input or a bug can't erase data we may not be able to produce again."""
+    table_name = "core_github_clones"
+    write_then_load(table_name, _clones(1))
+
+    with output_context(table_name) as context:
+        with pytest.raises(Failure):
+            parquet_manager.handle_output(context, _clones(0))
+
+        stored = pq.read_table(str(parquet_manager._get_path(context)))
+
+    assert stored.num_rows == 1
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [(0, 2), (2, 1)],
+    ids=["gap_filled", "fewer_rows"],
+)
+def test_other_results_replace_the_file(write_then_load, before, after) -> None:
+    """Only emptying a file is refused, so reruns can fill gaps and correct data."""
+    write_then_load("core_github_clones", _clones(before))
+
+    assert len(write_then_load("core_github_clones", _clones(after))) == after
 
 
 def test_base_path_accepts_a_path_and_keeps_a_remote_uri_intact(tmp_path) -> None:

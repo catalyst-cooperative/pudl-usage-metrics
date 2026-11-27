@@ -12,6 +12,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from dagster import (
     ConfigurableIOManager,
+    Failure,
     InputContext,
     OutputContext,
 )
@@ -40,6 +41,18 @@ def _parquet_path(
     return UPath(base_path) / f"{table_name}.parquet"
 
 
+def _stored_row_count(path: str) -> int:
+    """The number of rows in the Parquet file at ``path``, or 0 if there is no file.
+
+    Any other problem reading it raises, so that we never overwrite a file we couldn't
+    check.
+    """
+    try:
+        return pq.read_metadata(path).num_rows
+    except FileNotFoundError:
+        return 0
+
+
 class PartitionedParquetIOManager(ConfigurableIOManager):
     """An IOManager that writes and retrieves data frames from parquet files.
 
@@ -54,7 +67,16 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
     base_path: Annotated[str, BeforeValidator(str)]
 
     def handle_output(self, context: OutputContext, obj: pd.DataFrame):
-        """Save a data frame to a parquet file."""
+        """Save a data frame to a parquet file.
+
+        An empty data frame never replaces a file that has rows: missing input or a bug
+        must not erase data that we may not be able to produce again. If a partition
+        really should become empty, delete its file and run it again.
+
+        Raises:
+            Failure: If ``obj`` is empty and the existing file isn't.
+            ValueError: If ``obj`` has columns that aren't in the table's schema.
+        """
         path = self._get_path(context)
         if "://" not in self.base_path:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -62,6 +84,15 @@ class PartitionedParquetIOManager(ConfigurableIOManager):
         if isinstance(obj, pd.DataFrame):
             row_count = len(obj)
             context.log.debug(f"Row count: {row_count}")
+            if row_count == 0 and (stored := _stored_row_count(str(path))):
+                raise Failure(
+                    description=(
+                        f"Not replacing the {stored:,} rows in {path} with an empty "
+                        "result. If it really should be empty, delete the file and "
+                        "run this partition again."
+                    ),
+                    allow_retries=False,
+                )
             table_name = get_table_name_from_context(context)
             assert (
                 table_name in usage_metrics_schemas

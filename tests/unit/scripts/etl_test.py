@@ -1,6 +1,7 @@
 """Tests for `usage_metrics.scripts.etl`."""
 
 import logging
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -47,20 +48,20 @@ _JOB_DEFS_BY_NAME = {
 
 
 @pytest.fixture
-def executed(monkeypatch):
+def executed(mocker):
     """Stub out job resolution and execution; record (job name, kwargs) of each run."""
     calls: list[tuple[str, dict]] = []
 
     def fake_execute(job, **kwargs):
         calls.append((job.name, kwargs))
-        return True
+        return True, []
 
-    monkeypatch.setattr(
+    mocker.patch.object(
         etl_module.defs,
         "resolve_job_def",
-        lambda name: _JOB_DEFS_BY_NAME[name],
+        side_effect=lambda name: _JOB_DEFS_BY_NAME[name],
     )
-    monkeypatch.setattr(etl_module, "_execute", fake_execute)
+    mocker.patch.object(etl_module, "_execute", autospec=True, side_effect=fake_execute)
     return calls
 
 
@@ -183,6 +184,32 @@ def test_rebuild_run_config_is_valid_for_the_real_job():
     assert config["ops"]["compacted_s3_logs"]["config"] == {"rebuild": True}
 
 
+@pytest.mark.parametrize("succeeded", [True, False], ids=["success", "failure"])
+def test_missing_input_from_every_run_reaches_the_workflow(
+    executed, mocker, tmp_path, succeeded
+):
+    """The Zulip message reads one step output, so it must list every run's missing
+    input, even when a run failed, and not exist when nothing is missing.
+    """
+    output = tmp_path / "github_output"
+    mocker.patch.dict(os.environ, {"GITHUB_OUTPUT": str(output)})
+
+    _run(["--job", "s3"])
+    # Any value in the output turns the Zulip message into a warning.
+    assert not output.exists()
+
+    mocker.patch.object(
+        etl_module,
+        "_execute",
+        side_effect=lambda job, **kw: (succeeded, [kw["partition_key"]]),
+    )
+    _run(["--job", "s3", "--window", "2"])
+
+    written = output.read_text()
+    assert "missing_input" in written
+    assert all(day in written for day in _S3_DAYS[-2:])
+
+
 # --- _execute()'s asset-check surfacing -------------------------------------
 
 
@@ -212,7 +239,7 @@ def test_execute_fails_the_job_when_a_blocking_check_fails(caplog):
     ).resolve_job_def("job")
 
     with caplog.at_level(logging.WARNING, logger="usage_metrics"):
-        succeeded = _execute(job)
+        succeeded, _ = _execute(job)
 
     assert not succeeded
     assert "table failed its schema" in caplog.text

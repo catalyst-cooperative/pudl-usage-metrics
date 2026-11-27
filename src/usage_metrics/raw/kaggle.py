@@ -1,7 +1,7 @@
 """Extract data from Kaggle logs."""
 
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from datetime import date
 from pathlib import Path
 
@@ -9,6 +9,7 @@ import pandas as pd
 from dagster import (
     AssetExecutionContext,
     DailyPartitionsDefinition,
+    Output,
     asset,
 )
 from google.cloud import storage
@@ -74,7 +75,8 @@ class KaggleExtractor(GCSExtractor):
 @asset(
     partitions_def=DailyPartitionsDefinition(start_date="2023-08-16"),
     tags={"source": "kaggle"},
+    output_required=False,
 )
-def raw_kaggle_logs(context: AssetExecutionContext) -> pd.DataFrame:
+def raw_kaggle_logs(context: AssetExecutionContext) -> Iterator[Output[pd.DataFrame]]:
     """Extract Kaggle logs from daily files and return one weekly DataFrame."""
-    return KaggleExtractor().extract(context)
+    yield from KaggleExtractor().extract_partition(context)

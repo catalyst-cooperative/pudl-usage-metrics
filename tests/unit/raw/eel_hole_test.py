@@ -1,7 +1,11 @@
 """Tests for the eel hole (PUDL Viewer) log extractor."""
 
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from typing import cast
+
 import pytest
-from dagster import Failure, build_asset_context
+from dagster import build_asset_context
 
 from usage_metrics.raw import eel_hole
 from usage_metrics.raw.eel_hole import EelHoleExtractor, raw_eel_hole_logs
@@ -27,16 +31,34 @@ def test_filter_blobs_keeps_only_matching_day(filtered_blob_names):
     ]
 
 
-def test_a_partly_expired_day_is_not_processed(
-    fake_gcs, patch_download_many, download_dir, monkeypatch
+@pytest.mark.parametrize(
+    ("day", "now", "produced"),
+    [
+        pytest.param(
+            "2026-05-27", datetime(2026, 6, 1, tzinfo=UTC), False, id="partly_expired"
+        ),
+        pytest.param(
+            "2026-05-28", datetime(2026, 6, 1, tzinfo=UTC), True, id="first_complete"
+        ),
+        pytest.param(
+            "2026-09-01", datetime(2026, 9, 2, 1, tzinfo=UTC), False, id="not_yet_due"
+        ),
+    ],
+)
+def test_only_complete_days_are_processed(
+    fake_gcs, patch_download_many, download_dir, mocker, day, now, produced
 ):
-    """What's left of its logs could replace the day's complete outputs."""
-    name = f"{STDOUT}/2026/05/27/00:00:00_00:59:59_S0.json"
+    """Raw files for only part of a day are left alone: processing them could replace
+    the day's complete outputs.
+    """
+    name = f"{STDOUT}/{day.replace('-', '/')}/00:00:00_00:59:59_S0.json"
     bucket = EelHoleExtractor().bucket_name
     client = fake_gcs({bucket: {name: b'{"insertId": "a"}\n'}})
-    monkeypatch.setattr(
-        eel_hole, "EelHoleExtractor", lambda: EelHoleExtractor(client=client)
+    mocker.patch.object(
+        eel_hole, "EelHoleExtractor", return_value=EelHoleExtractor(client=client)
     )
+    mocker.patch.object(eel_hole, "_utcnow", autospec=True, return_value=now)
 
-    with pytest.raises(Failure):
-        raw_eel_hole_logs(build_asset_context(partition_key="2026-05-27"))
+    outputs = raw_eel_hole_logs(build_asset_context(partition_key=day))
+
+    assert bool(list(cast(Iterator, outputs))) is produced

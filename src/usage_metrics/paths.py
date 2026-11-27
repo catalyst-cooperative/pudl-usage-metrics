@@ -79,10 +79,27 @@ def get_gcs_raw_path() -> str:
     """Get the GCS location of raw-layer artifacts, mirroring ``get_raw_dir()``.
 
     Like the processed outputs, it is under ``get_gcs_base_path()``, so pointing
-    ``PUDL_METRICS_GCS_BASE_PATH`` at another bucket redirects everything we write
-    to GCS.
+    ``PUDL_METRICS_GCS_BASE_PATH`` at another bucket redirects these too.
+
+    Unlike processed outputs, which are local unless ``METRICS_PROD_ENV`` is "prod",
+    these artifacts are always in GCS. So that a development or test run can't change
+    production data, any other run must set a location outside the production bucket.
+
+    Raises:
+        ValueError: If ``METRICS_PROD_ENV`` isn't "prod" and the location is in the
+            production bucket.
     """
-    return f"{get_gcs_base_path().rstrip('/')}/raw"
+    base_path = get_gcs_base_path().rstrip("/")
+    production_bucket = split_gcs_uri(PUDL_METRICS_GCS_BASE_PATH)[0]
+    if (
+        os.environ.get("METRICS_PROD_ENV", "local") != "prod"
+        and split_gcs_uri(base_path)[0] == production_bucket
+    ):
+        raise ValueError(
+            f"Only runs with METRICS_PROD_ENV=prod may use gs://{production_bucket}. "
+            "Set PUDL_METRICS_GCS_BASE_PATH to a non-production gs:// location."
+        )
+    return f"{base_path}/raw"
 
 
 def split_gcs_uri(uri: str) -> tuple[str, str]:

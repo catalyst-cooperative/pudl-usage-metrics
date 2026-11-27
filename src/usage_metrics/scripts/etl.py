@@ -11,11 +11,13 @@ import logging
 import os
 import sys
 from datetime import date, timedelta
+from pathlib import Path
 
 import click
 import coloredlogs
 
 from usage_metrics.defs import defs
+from usage_metrics.raw.extract import MISSING_INPUT_METADATA_KEY
 from usage_metrics.raw.s3 import compacted_s3_logs
 from usage_metrics.scripts import CONTEXT_SETTINGS
 from usage_metrics.scripts.partitions import compute_partitions
@@ -33,8 +35,12 @@ JOB_ALIASES: dict[str, str] = {
 """Short names for the per-source jobs, as accepted by ``--job``."""
 
 
-def _execute(job, **execute_kwargs) -> bool:
-    """Run a job to completion without raising; log and return whether it succeeded."""
+def _execute(job, **execute_kwargs) -> tuple[bool, list[str]]:
+    """Run a job to completion without raising.
+
+    Returns:
+        Whether it succeeded, and a description of each asset that had no input.
+    """
     logger.info(f"Starting {job.name}.")
     result = job.execute_in_process(raise_on_error=False, **execute_kwargs)
     # Surface non-passing asset checks at the end of the run so a reviewer sees
@@ -62,8 +68,30 @@ def _execute(job, **execute_kwargs) -> bool:
             if "report" in check.metadata:
                 message += f"\n{check.metadata['report'].value}"
             logger.log(level, message)
+    missing_input = []
+    for event in result.get_asset_observation_events():
+        observation = event.asset_observation_data.asset_observation
+        if reason := observation.metadata.get(MISSING_INPUT_METADATA_KEY):
+            missing_input.append(
+                f"`{observation.asset_key.to_user_string()}`: {reason.value}"
+            )
     logger.info(f"{job.name} {'succeeded' if result.success else 'FAILED'}.")
-    return result.success
+    return result.success, missing_input
+
+
+def _report_missing_input(missing_input: list[str]) -> None:
+    """List the missing input at the end of the run, for the log and for Zulip.
+
+    In GitHub Actions the list also becomes the step's ``missing_input`` output, which
+    the ``load-metrics`` workflow puts in its Zulip message.
+    """
+    if not missing_input:
+        return
+    summary = "\n".join(f"- {line}" for line in missing_input)
+    logger.warning(f"Missing input:\n{summary}")
+    if output_path := os.getenv("GITHUB_OUTPUT"):
+        with Path(output_path).open("a") as output:
+            output.write(f"missing_input<<END_OF_LIST\n{summary}\nEND_OF_LIST\n")
 
 
 REBUILD_RUN_CONFIG = {"ops": {compacted_s3_logs.op.name: {"config": {"rebuild": True}}}}
@@ -200,6 +228,7 @@ def etl(
         )
 
     results: dict[str, bool] = {}
+    missing_input: list[str] = []
     execute_kwargs = {"run_config": REBUILD_RUN_CONFIG} if rebuild else {}
 
     for job in partitioned_jobs:
@@ -218,13 +247,16 @@ def etl(
                     f"(range: {partition_keys[0]}..{partition_keys[-1]})."
                 )
             logger.info(f"Processing partitioned data for {job.name} / {resolved}.")
-            results[f"{job.name}:{resolved}"] = _execute(
+            results[f"{job.name}:{resolved}"], missing = _execute(
                 job, partition_key=resolved, **execute_kwargs
             )
+            missing_input += missing
 
     for job in nonpartitioned_jobs:
-        results[job.name] = _execute(job)
+        results[job.name], missing = _execute(job)
+        missing_input += missing
 
+    _report_missing_input(missing_input)
     failed = [name for name, succeeded in results.items() if not succeeded]
     if failed:
         logger.error(f"Failed job(s): {', '.join(failed)}")

@@ -171,6 +171,8 @@ def geocode_ips(df: pd.DataFrame) -> pd.DataFrame:
     # column names.
     geocoded_ips = geocoded_ips.reindex(columns=list(_IPINFO_FIELD_MAP.keys()))
     geocoded_ips = geocoded_ips.rename(columns=_IPINFO_FIELD_MAP)
+    # With no ips to look up, the empty key column would have the wrong type to merge.
+    geocoded_ips = geocoded_ips.astype({"remote_ip": df["remote_ip"].dtype})
 
     # Add the component fields back to the logs
     # TODO: Could create a separate db table for ip information.

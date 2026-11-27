@@ -5,12 +5,19 @@ from pathlib import Path
 import pandas as pd
 import polars as pl
 import pytest
-from dagster import Failure, build_asset_context
+from dagster import (
+    DailyPartitionsDefinition,
+    Definitions,
+    asset,
+    build_asset_context,
+    define_asset_job,
+)
 
 from usage_metrics.raw.eel_hole import EelHoleExtractor
 from usage_metrics.raw.extract import GCSExtractor
 from usage_metrics.raw.github_partitioned import GithubExtractor
 from usage_metrics.raw.s3 import S3Extractor
+from usage_metrics.scripts.etl import _execute
 
 
 class LineExtractor(GCSExtractor):
@@ -85,23 +92,31 @@ def test_extract_no_files_returns_empty(partition_context, run_extract, download
     assert df.empty
 
 
-def test_extract_no_files_fails_when_files_are_required(
-    partition_context, run_extract, download_dir
+def test_no_input_succeeds_with_a_warning_and_runs_nothing_downstream(
+    fake_gcs, download_dir
 ):
-    """No retries, and no empty frame to write over the partition's existing output."""
+    """A day without logs mustn't fail forever, pass unnoticed, or overwrite data."""
+    client = fake_gcs({LineExtractor.bucket_name: {}})
+    days = DailyPartitionsDefinition(start_date="2024-01-01")
+    ran_downstream = []
 
-    class RequiredExtractor(LineExtractor):
-        require_files = True
+    @asset(partitions_def=days, output_required=False)
+    def raw(context):
+        yield from LineExtractor(client=client).extract_partition(context)
 
-    with pytest.raises(Failure) as caught:
-        run_extract(RequiredExtractor(), partition_context("2024-01-01"), [])
-    assert caught.value.allow_retries is False
+    @asset(partitions_def=days)
+    def core(raw):
+        ran_downstream.append(raw)
 
+    job = Definitions(
+        assets=[raw, core], jobs=[define_asset_job("job")]
+    ).resolve_job_def("job")
 
-def test_only_sources_with_expiring_files_require_them():
-    assert EelHoleExtractor.require_files is True
-    assert GCSExtractor.require_files is False
-    assert S3Extractor.require_files is False
+    succeeded, warnings = _execute(job, partition_key="2024-01-01")
+
+    assert succeeded
+    assert len(warnings) == 1
+    assert ran_downstream == []
 
 
 @pytest.mark.parametrize("n_files", [1, 2])

@@ -2,7 +2,7 @@
 
 import os
 from abc import ABC, abstractmethod
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import pandas as pd
@@ -10,9 +10,10 @@ import polars as pl
 import requests
 from dagster import (
     AssetExecutionContext,
+    AssetObservation,
     Backoff,
-    Failure,
     Jitter,
+    Output,
     RetryPolicy,
 )
 from google.cloud import storage
@@ -44,6 +45,22 @@ by local resources. Override with ``compose_workers`` or ``GCS_COMPOSE_WORKERS``
 """
 
 
+MISSING_INPUT_METADATA_KEY = "missing_input"
+"""Marks the asset observation recorded for a partition that has no input."""
+
+
+def report_missing_input(context: AssetExecutionContext, reason: str) -> None:
+    """Warn that a partition has no input, in a way ``usage-metrics etl`` can report."""
+    context.log.warning(reason)
+    context.log_event(
+        AssetObservation(
+            asset_key=context.asset_key,
+            partition=context.partition_key,
+            metadata={MISSING_INPUT_METADATA_KEY: reason},
+        )
+    )
+
+
 class GCSExtractor(ABC):
     """Generic extractor base class for Google Cloud Storage logs."""
 
@@ -61,12 +78,6 @@ class GCSExtractor(ABC):
     where combining the day's files and parsing once avoids >100k per-file parser
     invocations. False for whole-document JSON, where files must be parsed
     individually."""
-
-    require_files: bool = False
-    """Whether a partition with no source files is an error, not an empty result.
-
-    Set it for sources whose raw files expire. An empty result would be written over
-    the partition's existing output, so a backfill of expired dates would erase it."""
 
     def __init__(
         self,
@@ -241,15 +252,6 @@ class GCSExtractor(ABC):
         file_paths = self.download_gcs_blobs(context, download_dir)
 
         if not file_paths:
-            if self.require_files:
-                raise Failure(
-                    description=(
-                        f"No files found for {label} in {self.bucket_name}. Not "
-                        "writing an empty partition, which would replace any existing "
-                        "output: the raw files may have expired."
-                    ),
-                    allow_retries=False,
-                )
             context.log.warning(f"No files found for {label}.")
             return pd.DataFrame()
 
@@ -275,3 +277,23 @@ class GCSExtractor(ABC):
             context.log.warning(f"No data found for {label}.")
             return pd.DataFrame()
         return frames[0] if len(frames) == 1 else pd.concat(frames)
+
+    def extract_partition(
+        self, context: AssetExecutionContext
+    ) -> Iterator[Output[pd.DataFrame]]:
+        """Yield a partition's raw data, or nothing at all if it has none.
+
+        An asset using this must set ``output_required=False``. When nothing is yielded,
+        Dagster skips everything downstream, so no stored table is touched, and the run
+        still succeeds: a day without logs is possible and mustn't fail forever. The
+        missing input is reported, and a later run fills the gap if it turns up.
+        """
+        frame = self.extract(context)
+        if frame.empty:
+            report_missing_input(
+                context,
+                f"No data in {self.bucket_name} for {context.partition_key}; nothing "
+                "was written.",
+            )
+            return
+        yield Output(frame)
