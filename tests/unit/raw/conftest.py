@@ -111,8 +111,9 @@ class FakeClient:
 def fake_download_many(blob_file_pairs, *, raise_exception: bool = False, **_kwargs):
     """In-process stand-in for ``transfer_manager.download_many``.
 
-    Which keyword arguments we pass (thread pool, string filenames, skip_if_exists)
-    is checked separately by spying on the call.
+    Like the real function, it returns a result for each blob, holding any exception
+    instead of raising it unless ``raise_exception`` is set. Other keyword arguments
+    are ignored.
     """
     results = []
     for blob, path in blob_file_pairs:

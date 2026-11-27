@@ -25,7 +25,8 @@ BUCKET = "pudl-s3-logs.catalyst.coop"
 DAY = "2024-06-15"
 
 N_COLUMNS_V1 = 27
-"""Columns before February 2026: 26 fields, one more since the timestamp splits in two."""
+"""Columns parsed from logs written before February 2026: one for each of their 26
+fields, plus one because the timestamp contains a space and is split in two."""
 N_COLUMNS_V2 = 28
 """Columns since ``aws_region`` was added."""
 
@@ -44,7 +45,8 @@ def log_line(
     )
 
 
-# The bucket owner is also the requester in the first of these.
+# In the first of these, the bucket owner appears a second time, as the account that
+# made the request.
 RECORD_A = log_line(requester="owner").encode()
 RECORD_B = log_line(ip="198.51.100.2").encode()
 
