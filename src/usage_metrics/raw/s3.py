@@ -19,6 +19,7 @@ from dagster import (
     asset,
     get_dagster_logger,
 )
+from google.api_core.exceptions import PreconditionFailed
 from google.cloud import storage
 
 from usage_metrics.core.s3 import name_s3_log_columns
@@ -345,6 +346,11 @@ def _ensure_compacted(
 ) -> dict[str, str | int | float] | None:
     """Make sure a day's compacted log is in GCS, building it if need be.
 
+    Runs for neighbouring days can build the same day's compacted log at once, so it's
+    only stored if what's in GCS hasn't changed since it was looked up. Otherwise the
+    log that another run stored first is reused, if it was built from as many raw log
+    objects.
+
     Args:
         day: The ISO date of the logs.
         rebuild: Replace an existing artifact instead of reusing it.
@@ -355,7 +361,8 @@ def _ensure_compacted(
 
     Raises:
         Failure: If a rebuild finds fewer raw log objects than the existing artifact
-            was built from, or the objects hold no records. Nothing is replaced.
+            was built from, or the objects hold no records, or if another run stored
+            a log built from a different number of them. Nothing is replaced.
     """
     bucket_name, path = compacted_location(day)
     artifacts = ext.gcs_client.bucket(bucket_name)
@@ -389,7 +396,28 @@ def _ensure_compacted(
         "source_object_count": str(count),
         "built_at": _utcnow().isoformat(),
     }
-    blob.upload_from_filename(str(local), content_type="application/zstd")
+    try:
+        blob.upload_from_filename(
+            str(local),
+            content_type="application/zstd",
+            # A generation of 0 means there must be nothing there yet.
+            if_generation_match=0 if existing is None else existing.generation,
+        )
+    except PreconditionFailed as e:
+        other = artifacts.get_blob(path)
+        other_count = 0 if other is None else _source_count(other)
+        if other_count != count:
+            raise Failure(
+                description=(
+                    f"Found {count:,} raw log objects for {day}, but another run "
+                    f"stored gs://{bucket_name}/{path} while this one was building "
+                    f"it, from {other_count:,}. Check the raw logs, then run again "
+                    "with --rebuild."
+                ),
+                allow_retries=False,
+            ) from e
+        context.log.info(f"Another run stored the compacted log for {day} first.")
+        return {"action": "reused"}
     return {
         "action": "built",
         "source_object_count": count,

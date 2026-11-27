@@ -1,7 +1,7 @@
 """Fakes and fixtures for testing GCS extractors without touching GCS.
 
-The fakes only store, list, and concatenate bytes. They don't enforce GCS's limits or
-preconditions.
+The fakes only store, list, and concatenate bytes. They don't enforce GCS's limits, and
+the only precondition they check is ``if_generation_match`` on uploads.
 
 The fake classes are plain importable names (``from .conftest import FakeBlob``) for
 tests that need to build blobs directly."""
@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from dagster import build_asset_context
+from google.api_core.exceptions import PreconditionFailed
 
 from usage_metrics.raw import extract
 
@@ -33,6 +34,7 @@ class FakeBlob:
         self.bucket = bucket
         self.time_created = time_created
         self.metadata: dict[str, str] | None = None
+        self.generation = 1
 
     @property
     def size(self) -> int:
@@ -47,20 +49,27 @@ class FakeBlob:
         """Write the blob contents to a local path."""
         Path(filename).write_bytes(self._data)
 
-    def upload_from_string(self, data: bytes) -> None:
+    def upload_from_string(self, data: bytes, if_generation_match=None) -> None:
         """Set the contents and store a snapshot of the blob in its bucket.
 
         As in GCS, changing ``metadata`` after an upload doesn't change what's stored.
         """
         assert self.bucket is not None
+        previous = self.bucket.get_blob(self.name)
+        generation = previous.generation if previous else 0
+        if if_generation_match not in (None, generation):
+            raise PreconditionFailed(f"{self.name} is at generation {generation}.")
         self._data = data
         stored = copy.copy(self)
+        stored.generation = generation + 1
         stored.metadata = copy.copy(self.metadata)
         self.bucket._blobs[self.name] = stored
 
-    def upload_from_filename(self, filename, content_type=None) -> None:
+    def upload_from_filename(
+        self, filename, content_type=None, if_generation_match=None
+    ) -> None:
         """Upload the contents of a local file."""
-        self.upload_from_string(Path(filename).read_bytes())
+        self.upload_from_string(Path(filename).read_bytes(), if_generation_match)
 
     def compose(self, sources, if_generation_match=None) -> None:
         """Store the concatenation of ``sources`` in this blob."""

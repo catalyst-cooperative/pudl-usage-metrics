@@ -486,6 +486,46 @@ def test_rebuild_never_replaces_the_artifact_with_less(fake_s3_gcs, remaining, o
     assert stored_artifact(client)[0] == RECORD_A + RECORD_B
 
 
+@pytest.mark.parametrize(
+    ("rebuild", "other_count", "outcome"),
+    [
+        pytest.param(False, 1, nullcontext(), id="build"),
+        pytest.param(True, 1, nullcontext(), id="rebuild"),
+        pytest.param(False, 2, pytest.raises(Failure), id="different_count"),
+    ],
+)
+def test_a_log_stored_by_another_run_is_not_overwritten(
+    fake_s3_gcs, mocker, rebuild, other_count, outcome
+):
+    """Runs for neighbouring days can build the same compacted log at once. That's
+    only a problem if they found different numbers of raw logs.
+    """
+    client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
+    if rebuild:
+        run_compacted_asset()
+    bucket, path = compacted_location(DAY)
+    build = s3_module._build_artifact
+
+    def build_while_another_run_stores(context, ext, day):
+        built = build(context, ext, day)
+        if day == DAY:
+            other = client.bucket(bucket).blob(path)
+            other.metadata = {"source_object_count": str(other_count)}
+            other.upload_from_string(zstd.compress(RECORD_B))
+        return built
+
+    mocker.patch.object(
+        s3_module,
+        "_build_artifact",
+        autospec=True,
+        side_effect=build_while_another_run_stores,
+    )
+
+    with outcome:
+        assert run_compacted_asset(rebuild=rebuild)["action"] == "reused"
+    assert stored_artifact(client)[0] == RECORD_B
+
+
 def test_compacted_falls_back_when_records_are_fused(fake_s3_gcs):
     """A source object missing its newline fuses records under compose; the
     build detects that and redoes the day with newline padding."""
