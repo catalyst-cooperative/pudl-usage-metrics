@@ -70,9 +70,10 @@ def test_load_file_popular_paths_adds_metrics_date(tmp_path):
 
 
 @pytest.fixture
-def run_raw_views(fake_gcs, patch_download_many, download_dir, monkeypatch):
+def run_raw_views(fake_gcs, patch_download_many, download_dir, mocker):
     """Run ``raw_github_views`` for ``DAY`` on archives given as
-    ``{date saved: {day listed: count}}``. Returns its outputs and warnings.
+    ``{date saved: {day listed: count}}``. Returns its outputs and the number of
+    warnings.
     """
 
     def _run(archives: dict[str, dict[str, int]], now=datetime(2024, 8, 1, tzinfo=UTC)):
@@ -88,21 +89,20 @@ def run_raw_views(fake_gcs, patch_download_many, download_dir, monkeypatch):
             for saved, counts in archives.items()
         }
         client = fake_gcs({GithubExtractor(metric="views").bucket_name: blobs})
-        monkeypatch.setattr(
+        mocker.patch.object(
             github_partitioned,
             "GithubExtractor",
-            lambda metric: GithubExtractor(metric=metric, client=client),
+            side_effect=lambda metric: GithubExtractor(metric=metric, client=client),
         )
-        monkeypatch.setattr(github_partitioned, "_utcnow", lambda: now)
-        warnings: list[str] = []
-        monkeypatch.setattr(
-            github_partitioned,
-            "report_warning",
-            lambda context, message: warnings.append(message),
+        mocker.patch.object(
+            github_partitioned, "_utcnow", autospec=True, return_value=now
+        )
+        report = mocker.patch.object(
+            github_partitioned, "report_warning", autospec=True
         )
         raw_views = daily_metrics_extraction_factory("views")
         outputs = raw_views(build_asset_context(partition_key=DAY))
-        return list(cast(Iterator[Output], outputs)), warnings
+        return list(cast(Iterator[Output], outputs)), report.call_count
 
     return _run
 
@@ -144,7 +144,7 @@ def test_a_days_views_are_the_largest_listed_two_to_fifteen_days_later(run_raw_v
 def test_a_day_without_views_only_warns_if_its_archives_are_missing(
     run_raw_views, archives, now, n_warnings
 ):
-    outputs, warnings = run_raw_views(archives, now)
+    outputs, warning_count = run_raw_views(archives, now)
 
     assert outputs == []
-    assert len(warnings) == n_warnings
+    assert warning_count == n_warnings

@@ -75,9 +75,11 @@ def test_cli_rejects_end_before_start():
         ),
     ],
 )
-def test_cli_recent(monkeypatch, args, expected):
+def test_cli_recent(mocker, args, expected):
     """The scheduled workflow passes blank dates, and today isn't complete."""
-    monkeypatch.setattr(partitions_module, "_today", lambda: date(2026, 3, 2))
+    mocker.patch.object(
+        partitions_module, "_today", autospec=True, return_value=date(2026, 3, 2)
+    )
 
     result = CliRunner().invoke(cli, ["partitions", *args, "--recent", "3"])
 

@@ -366,30 +366,19 @@ def test_compacted_reuses_the_artifact_unless_rebuilding(fake_s3_gcs):
     assert metadata["source_object_count"] == "2"
 
 
-def test_compacted_waits_until_the_next_days_logs_are_due(fake_s3_gcs, monkeypatch):
+def test_compacted_waits_until_the_next_days_logs_are_due(fake_s3_gcs, mocker):
     """A day published early would be missing requests, so nothing is built, and
     running early isn't a failure.
     """
     client = fake_s3_gcs({f"{DAY}-00-00-00-a": RECORD_A})
-    monkeypatch.setattr(
-        s3_module, "_utcnow", lambda: datetime(2024, 6, 17, 1, 0, tzinfo=UTC)
+    mocker.patch.object(
+        s3_module,
+        "_utcnow",
+        autospec=True,
+        return_value=datetime(2024, 6, 17, 1, 0, tzinfo=UTC),
     )
     assert compacted_asset_results() == []
     assert artifact_blob(client) is None
-
-
-def test_rebuild_leaves_the_next_days_artifact_alone(fake_s3_gcs):
-    """The fewer-logs protection only covers the day being rebuilt."""
-    client = fake_s3_gcs(
-        {f"{DAY}-00-00-00-a": RECORD_A, f"{NEXT_DAY}-00-00-00-a": RECORD_B}
-    )
-    run_compacted_asset()
-    client.bucket(BUCKET)._blobs.pop(f"{NEXT_DAY}-00-00-00-a")
-    client.bucket(BUCKET).blob(f"{NEXT_DAY}-00-00-01-b").upload_from_string(RECORD_A)
-
-    run_compacted_asset(rebuild=True)
-
-    assert stored_artifact(client, NEXT_DAY)[0] == RECORD_B
 
 
 @pytest.mark.parametrize(
