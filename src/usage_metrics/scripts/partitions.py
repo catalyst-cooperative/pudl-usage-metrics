@@ -5,11 +5,21 @@ Expands a start/end partition range into the JSON list of dates that
 """
 
 import json
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import click
 
 from usage_metrics.scripts import CONTEXT_SETTINGS
+
+
+def _today() -> date:
+    return datetime.now(UTC).date()
+
+
+def recent_partitions(days: int) -> list[str]:
+    """The ISO dates of the last ``days`` complete UTC days, oldest first."""
+    today = _today()
+    return [(today - timedelta(days=n)).isoformat() for n in range(days, 0, -1)]
 
 
 def compute_partitions(start: str | None, end: str | None) -> list[str]:
@@ -48,15 +58,23 @@ def compute_partitions(start: str | None, end: str | None) -> list[str]:
 @click.command("partitions", context_settings=CONTEXT_SETTINGS)
 @click.option("--start", type=str, default=None, help="First partition date.")
 @click.option("--end", type=str, default=None, help="Last partition date.")
-def partitions(start: str | None, end: str | None) -> None:
+@click.option(
+    "--recent",
+    type=click.IntRange(min=1),
+    default=None,
+    help="Without --start or --end, list the last N complete days.",
+)
+def partitions(start: str | None, end: str | None, recent: int | None) -> None:
     """Print the JSON list of partitions between --start and --end (inclusive).
 
-    Used by load-metrics.yml to build a backfill matrix. With neither option,
-    prints ``[""]`` (meaning "latest"); with only one, prints that single
-    partition as a one-item list.
+    Used by load-metrics.yml to build its matrix. With only one of --start and --end,
+    prints that single partition as a one-item list. With neither, prints the last
+    --recent complete days, or ``[""]`` (meaning "latest") without --recent.
     """
     try:
         result = compute_partitions(start, end)
     except ValueError as e:
         raise click.BadParameter(str(e)) from e
+    if recent and result == [""]:
+        result = recent_partitions(recent)
     click.echo(json.dumps(result))

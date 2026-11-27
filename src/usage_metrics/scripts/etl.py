@@ -1,7 +1,8 @@
 """The ``usage-metrics etl`` subcommand.
 
-Runs the most recent partition for every job in the usage_metrics Dagster
-repository. Run daily by the load-metrics GitHub Action.
+Runs partitions of the jobs in the usage_metrics Dagster repository, by default the
+most recent one of every job. The load-metrics GitHub Action runs it daily, once for
+each of the last few days.
 
 Note: Eventually this should be deprecated in favor of a long running Dagster
 instance handling schedules and job launching.

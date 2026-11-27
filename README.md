@@ -181,6 +181,19 @@ usage-metrics save {github,kaggle,zenodo}                   # snapshot metrics f
 
 `usage-metrics etl` is what the `load-metrics` GitHub Action runs; the `save` commands run daily in `save_daily_metrics`.
 
+### Schedule
+
+| Workflow             | Runs at (UTC) | What it does                                             |
+| -------------------- | ------------- | -------------------------------------------------------- |
+| `save-daily-metrics` | 08:17         | Archives the GitHub, Kaggle and Zenodo snapshots         |
+| `load-metrics`       | 10:17         | Processes each of the last three days, as parallel jobs  |
+
+Running three days each time picks up late data and retries days that failed. Days
+whose data isn't due yet are skipped: in the morning run, S3 and GitHub views and clones
+reach two days ago, and everything else reaches yesterday. Starting `load-metrics` by
+hand without dates does the same; with dates, it processes exactly those. GitHub Actions
+allows at most 256 jobs in one run, so split longer backfills into several.
+
 ### Backfills
 
 To run a a complete backfill from the Dagster UI go to the job's partitions tab.
