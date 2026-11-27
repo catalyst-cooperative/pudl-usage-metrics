@@ -29,8 +29,11 @@ on:
         required: false
         type: boolean
         default: false
-  schedule:
-    - cron: "14 7 * * *" # Every day at 7:14 AM UTC
+  # Disabled until the stack of PRs that fixes the ETL is merged: a scheduled run
+  # can't succeed before then. Run this workflow with workflow_dispatch from a branch
+  # instead. Restore the daily run afterwards:
+  # schedule:
+  #   - cron: "14 7 * * *" # Every day at 7:14 AM UTC
 
 env:
   METRICS_PROD_ENV: "prod"
