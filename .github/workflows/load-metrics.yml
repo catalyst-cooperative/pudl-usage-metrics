@@ -29,13 +29,10 @@ on:
         required: false
         type: boolean
         default: false
-  # Disabled until the stack of PRs that fixes the ETL is merged: a scheduled run
-  # can't succeed before then. Run this workflow with workflow_dispatch from a branch
-  # instead. Restore the daily run afterwards:
-  # schedule:
-  #   # Every day at 10:17 AM UTC (early morning US Eastern), two hours after
-  #   # save-daily-metrics archives the day's snapshots.
-  #   - cron: "17 10 * * *"
+  schedule:
+    # Every day at 10:17 AM UTC (early morning US Eastern), two hours after
+    # save-daily-metrics archives the day's snapshots.
+    - cron: "17 10 * * *"
 
 env:
   METRICS_PROD_ENV: "prod"
