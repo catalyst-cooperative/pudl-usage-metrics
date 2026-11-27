@@ -52,6 +52,9 @@ jobs:
           IPINFO_TOKEN: ${{ secrets.IPINFO_TOKEN }}
           KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
           KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          # Run the tests that need real GCS, except on pull requests from forks, which
+          # can't sign in. A failed sign-in anywhere else should fail those tests.
+          PUDL_METRICS_LIVE_TESTS: ${{ github.event.pull_request.head.repo.fork && '0' || '1' }}
         run: |
           pixi run pytest-ci
 
