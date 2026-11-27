@@ -36,6 +36,13 @@ transient outage.
 DEFAULT_DOWNLOAD_WORKERS = 32
 """Default number of threads used to download blobs from GCS concurrently."""
 
+DEFAULT_COMPOSE_WORKERS = 128
+"""Default number of threads issuing server-side ``compose()`` calls concurrently.
+
+Separate from the download setting because these calls are latency-bound, not limited
+by local resources. Override with ``compose_workers`` or ``GCS_COMPOSE_WORKERS``.
+"""
+
 
 class GCSExtractor(ABC):
     """Generic extractor base class for Google Cloud Storage logs."""
@@ -66,6 +73,7 @@ class GCSExtractor(ABC):
         *args,
         client: storage.Client | None = None,
         download_workers: int | None = None,
+        compose_workers: int | None = None,
         **kwargs,
     ):
         """Create new extractor object and load metadata.
@@ -77,6 +85,9 @@ class GCSExtractor(ABC):
             download_workers: Number of concurrent blob-download threads. Defaults
                 to the ``GCS_DOWNLOAD_WORKERS`` env var, then
                 ``DEFAULT_DOWNLOAD_WORKERS``.
+            compose_workers: Number of concurrent server-side ``compose()``
+                threads. Defaults to the ``GCS_COMPOSE_WORKERS`` env var, then
+                ``DEFAULT_COMPOSE_WORKERS``.
         """
         if not self.dataset_name:
             raise NotImplementedError("self.dataset_name must be set.")
@@ -86,6 +97,9 @@ class GCSExtractor(ABC):
         self.download_workers = download_workers or int(
             os.environ.get("GCS_DOWNLOAD_WORKERS", DEFAULT_DOWNLOAD_WORKERS)
         )
+        self.compose_workers = compose_workers or int(
+            os.environ.get("GCS_COMPOSE_WORKERS", DEFAULT_COMPOSE_WORKERS)
+        )
         # Set in extract(); lets load_file() apply partition-specific handling.
         self.partition_key: str | None = None
 
@@ -93,15 +107,16 @@ class GCSExtractor(ABC):
     def gcs_client(self) -> storage.Client:
         """The GCS client, created on first use if one wasn't injected.
 
-        The HTTP connection pool is sized to ``download_workers`` so the
-        concurrent download threads don't contend on the default 10-connection
-        pool.
+        The HTTP connection pool is sized to the larger of ``download_workers``
+        and ``compose_workers`` so the concurrent threads don't contend on the
+        default 10-connection pool.
         """
         if self._client is None:
             client = storage.Client()
+            pool_size = max(self.download_workers, self.compose_workers)
             adapter = requests.adapters.HTTPAdapter(
-                pool_connections=self.download_workers,
-                pool_maxsize=self.download_workers,
+                pool_connections=pool_size,
+                pool_maxsize=pool_size,
             )
             client._http.mount("https://", adapter)
             self._client = client
@@ -142,6 +157,8 @@ class GCSExtractor(ABC):
         for blob in blobs:
             assert blob.name is not None, f"Blob {blob} has no name."
             file_paths.append(Path(download_dir, blob.name.replace("/", "-")))
+        # Targets must be strings: given Path objects, skip_if_exists is silently
+        # ignored.
         transfer_manager.download_many(
             [(blob, str(path)) for blob, path in zip(blobs, file_paths, strict=True)],
             skip_if_exists=True,

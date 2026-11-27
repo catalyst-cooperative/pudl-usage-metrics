@@ -24,7 +24,11 @@ on:
           - github_nonpartitioned
           - zenodo
           - eel_hole
-
+      rebuild:
+        description: "Only with job 's3'. Rebuild the compacted S3 log artifact for every day in the range, replacing any that exists. Default: reuse existing artifacts."
+        required: false
+        type: boolean
+        default: false
   # Disabled until the stack of PRs that fixes the ETL is merged: a scheduled run
   # can't succeed before then. Run this workflow with workflow_dispatch from a branch
   # instead. Restore the daily run afterwards:
@@ -35,6 +39,8 @@ env:
   METRICS_PROD_ENV: "prod"
   # Concurrent GCS blob download threads for latency-bound S3 log downloads
   GCS_DOWNLOAD_WORKERS: "32"
+  # Concurrent server-side GCS compose() calls when compacting S3 logs
+  GCS_COMPOSE_WORKERS: "128"
 
 jobs:
   compute-partitions:
@@ -47,6 +53,15 @@ jobs:
       # (see the comment on that step for why).
       multiple: ${{ steps.compute.outputs.multiple }}
     steps:
+      # Fail once, up front, rather than once per matrix job.
+      - name: Reject rebuild for anything but the s3 job
+        if: ${{ github.event.inputs.rebuild == 'true' && github.event.inputs.job != 's3' }}
+        env:
+          JOB: ${{ github.event.inputs.job }}
+        run: |
+          echo "::error::The 'rebuild' input only applies to the 's3' job, but job is '${JOB:-all}'."
+          exit 1
+
       - uses: actions/checkout@v7
 
       - name: Install usage metrics environment using pixi
@@ -86,16 +101,14 @@ jobs:
           to: "pudl-deployments"
           topic: "pudl-usage-metrics"
           content: |
-            # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})): job `${{ github.event.inputs.job || 'all' }}`, partitions `${{ steps.compute.outputs.partitions }}`
+            # :rocket: Launching `load-metrics` workflow ([view run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})): job `${{ github.event.inputs.job || 'all' }}`, partitions `${{ steps.compute.outputs.partitions }}`${{ github.event.inputs.rebuild == 'true' && ' -- **rebuilding the compacted S3 log artifacts**' || '' }}
 
   load-metrics:
     needs: compute-partitions
-    # Larger third-party runner lets us parallelize the S3 log extraction
-    runs-on: blacksmith-8vcpu-ubuntu-2404
-    # A healthy run finishes in well under an hour. This applies per matrix job (i.e.
-    # per partition), not to the matrix as a whole -- each partition gets its own fresh
-    # 60-minute budget and doesn't burn a whole 6-hour timeout.
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    # A healthy run finishes in minutes: a fresh heavy S3 partition takes 5-7. This
+    # applies per matrix job (i.e. per partition), not to the matrix as a whole.
+    timeout-minutes: 30
     permissions:
       contents: read
       id-token: write
@@ -144,6 +157,8 @@ jobs:
           # exclusive with this flag, and the CLI itself rejects a
           # non-partitioned job paired with a real date range.
           SKIP_NONPARTITIONED: ${{ needs.compute-partitions.outputs.multiple }}
+          # Empty on scheduled runs; compute-partitions rejects it for non-s3 jobs.
+          REBUILD: ${{ github.event.inputs.rebuild }}
         shell: bash -l {0}
         run: |
           args=()
@@ -168,6 +183,7 @@ jobs:
                 ;;
             esac
           fi
+          [[ "$REBUILD" == "true" ]] && args+=(--rebuild)
           pixi run usage-metrics etl "${args[@]}"
 
       - name: Notify Zulip
