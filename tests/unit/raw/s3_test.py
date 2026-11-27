@@ -186,10 +186,7 @@ def test_zstd_with_guard_round_trips(tmp_path, records):
 @pytest.mark.parametrize(
     "data",
     [
-        pytest.param(
-            RECORD_A + RECORD_B.rstrip(b"\n") + RECORD_A,
-            id="fused_records",
-        ),
+        pytest.param(RECORD_A.rstrip(b"\n") + RECORD_B, id="fused_records"),
         pytest.param(b"\n", id="malformed_first_line"),
         pytest.param(
             RECORD_A + b"fragment" + RECORD_B,
