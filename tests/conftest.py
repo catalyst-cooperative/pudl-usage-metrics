@@ -7,6 +7,7 @@ Tests get them through the fixtures below.
 
 import copy
 import logging
+import os
 from pathlib import Path
 
 import pandera.pyarrow as pandera
@@ -21,6 +22,13 @@ from usage_metrics.raw import extract
 # INFO. pytest shows those live (log_cli_level = "INFO" in pyproject.toml), which
 # drowns out the test output.
 logging.getLogger("alembic").setLevel(logging.WARNING)
+
+
+@pytest.fixture
+def data_dir(tmp_path, mocker) -> Path:
+    """Keep everything stored locally, e.g. downloads, in a temporary directory."""
+    mocker.patch.dict(os.environ, {"PUDL_METRICS_LOCAL_DATA_DIR": str(tmp_path)})
+    return tmp_path
 
 
 @pytest.fixture

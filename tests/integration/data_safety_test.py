@@ -7,6 +7,7 @@ provides them.
 """
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -194,7 +195,7 @@ class Pipeline:
 
 
 @pytest.fixture
-def pipeline(monkeypatch, tmp_path, fake_gcs, patch_download_many) -> Pipeline:
+def pipeline(data_dir, mocker, fake_gcs, patch_download_many) -> Pipeline:
     buckets = [
         PUDL_METRICS_ARCHIVES_BUCKET,
         PUDL_METRICS_EEL_HOLE_LOGS_BUCKET,
@@ -202,12 +203,18 @@ def pipeline(monkeypatch, tmp_path, fake_gcs, patch_download_many) -> Pipeline:
         OUTPUT_BUCKET,
     ]
     gcs = fake_gcs({bucket: {} for bucket in buckets})
-    monkeypatch.setenv("PUDL_METRICS_LOCAL_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("PUDL_METRICS_GCS_BASE_PATH", f"gs://{OUTPUT_BUCKET}")
-    monkeypatch.delenv("METRICS_PROD_ENV", raising=False)
-    monkeypatch.setattr(GCSExtractor, "gcs_client", property(lambda self: gcs))
-    monkeypatch.setattr(helpers, "geocode_ip", lambda ip: {"ip": ip})
-    return Pipeline(gcs, tmp_path / "parquet")
+    # patch.dict restores the whole environment, including what's removed after it.
+    mocker.patch.dict(
+        os.environ, {"PUDL_METRICS_GCS_BASE_PATH": f"gs://{OUTPUT_BUCKET}"}
+    )
+    os.environ.pop("METRICS_PROD_ENV", None)
+    mocker.patch.object(
+        GCSExtractor, "gcs_client", new_callable=mocker.PropertyMock, return_value=gcs
+    )
+    mocker.patch.object(
+        helpers, "geocode_ip", autospec=True, side_effect=lambda ip: {"ip": ip}
+    )
+    return Pipeline(gcs, data_dir / "outputs")
 
 
 def _assert_unchanged(pipeline: Pipeline, before: dict[str, pd.DataFrame]) -> None:

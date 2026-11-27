@@ -68,7 +68,7 @@ def test_load_file_popular_paths_adds_metrics_date(tmp_path):
 
 
 @pytest.fixture
-def run_raw_views(fake_gcs, patch_download_many, download_dir, mocker):
+def run_raw_views(fake_gcs, patch_download_many, data_dir, mocker):
     """Run ``raw_github_views`` for ``DAY`` on archives given as
     ``{date saved: {day listed: count}}``. Returns its outputs and the number of
     warnings.

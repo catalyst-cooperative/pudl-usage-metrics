@@ -1,7 +1,5 @@
 """Test where the ETL stores data on the local machine."""
 
-from pathlib import Path
-
 import pandas as pd
 import pytest
 
@@ -48,9 +46,8 @@ def test_local_data_dir_default_is_user_cache(tmp_path, monkeypatch, value):
     assert list(cwd.iterdir()) == []
 
 
-def test_extractor_download_dir(tmp_path, monkeypatch):
+def test_extractor_download_dir(data_dir):
     """Extractors download into <raw dir>/<dataset_name>, created on demand."""
-    monkeypatch.setenv("PUDL_METRICS_LOCAL_DATA_DIR", str(tmp_path))
 
     class _Extractor(GCSExtractor):
         dataset_name = "some_logs"
@@ -63,27 +60,9 @@ def test_extractor_download_dir(tmp_path, monkeypatch):
             return pd.DataFrame()
 
     download_dir = _Extractor().get_download_dir()
-    assert download_dir == tmp_path.resolve() / "raw" / "some_logs"
+    assert download_dir == data_dir.resolve() / "raw" / "some_logs"
     assert download_dir.is_dir()
     assert _Extractor().get_download_dir() == download_dir  # idempotent
-
-
-def test_geocode_ip_cache_follows_env(tmp_path, monkeypatch):
-    """The IPInfo cache is created under the current data dir, and is hit on reuse."""
-    from usage_metrics import helpers
-
-    calls = []
-
-    def fake_api_call(ip_address):
-        calls.append(ip_address)
-        return {"ip": ip_address}
-
-    monkeypatch.setattr(helpers, "_geocode_ip", fake_api_call)
-    monkeypatch.setenv("PUDL_METRICS_LOCAL_DATA_DIR", str(tmp_path))
-    assert helpers.geocode_ip("1.2.3.4") == {"ip": "1.2.3.4"}
-    assert helpers.geocode_ip("1.2.3.4") == {"ip": "1.2.3.4"}
-    assert calls == ["1.2.3.4"]
-    assert any(Path(tmp_path, "ipinfo").rglob("*"))
 
 
 def test_gcs_base_path(monkeypatch):

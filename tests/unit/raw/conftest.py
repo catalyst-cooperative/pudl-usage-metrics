@@ -12,27 +12,20 @@ DATA_DIR = Path(__file__).parents[2] / "data"
 
 
 @pytest.fixture
-def download_dir(tmp_path, monkeypatch):
-    """Point extractors at a temp download directory via ``PUDL_METRICS_LOCAL_DATA_DIR``."""
-    monkeypatch.setenv("PUDL_METRICS_LOCAL_DATA_DIR", str(tmp_path))
-    return tmp_path
-
-
-@pytest.fixture
 def partition_context():
     """Return a factory for a Dagster asset context with a partition key."""
     return lambda partition_key: build_asset_context(partition_key=partition_key)
 
 
 @pytest.fixture
-def run_extract(monkeypatch):
-    """Run ``extractor.extract`` with the download step stubbed to ``paths``."""
+def extractor_with(fake_gcs, patch_download_many, data_dir):
+    """Return a factory for an extractor whose bucket, in a fake GCS, holds ``blobs``."""
 
-    def _run(extractor, context, paths):
-        monkeypatch.setattr(extractor, "download_gcs_blobs", lambda *a, **k: paths)
-        return extractor.extract(context)
+    def _make(extractor_cls, blobs: dict[str, bytes], **kwargs):
+        bucket_name = extractor_cls(**kwargs).bucket_name
+        return extractor_cls(client=fake_gcs({bucket_name: blobs}), **kwargs)
 
-    return _run
+    return _make
 
 
 @pytest.fixture

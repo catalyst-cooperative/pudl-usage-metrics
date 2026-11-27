@@ -55,22 +55,21 @@ def test_retry_request_gives_up(sleeps):
     assert isinstance(excinfo.value.__cause__, requests.exceptions.Timeout)
 
 
-def test_geocode_ip_retries_5xx(tmp_path, monkeypatch, sleeps):
+def test_geocode_ip_retries_5xx(data_dir, mocker, sleeps):
     """A 503 from ipinfo is retried and the eventual success is cached."""
-    monkeypatch.setenv("PUDL_METRICS_LOCAL_DATA_DIR", str(tmp_path))
     func, calls = _flaky(ipinfo.error.APIError(503, {"error": "timeout"}))
-    monkeypatch.setattr(helpers, "_geocode_ip", lambda ip: func() and {"ip": ip})
+    mocker.patch.object(helpers, "_geocode_ip", new=lambda ip: func() and {"ip": ip})
     assert helpers.geocode_ip("1.2.3.4") == {"ip": "1.2.3.4"}
     assert helpers.geocode_ip("1.2.3.4") == {"ip": "1.2.3.4"}
     assert len(calls) == 2  # One failure, one success; the second lookup was cached.
     assert sleeps == [1]
+    assert any((data_dir / "ipinfo").rglob("*"))
 
 
-def test_geocode_ip_does_not_retry_client_errors(tmp_path, monkeypatch, sleeps):
+def test_geocode_ip_does_not_retry_client_errors(data_dir, mocker, sleeps):
     """A 4xx (e.g. a bad token) fails immediately and isn't cached."""
-    monkeypatch.setenv("PUDL_METRICS_LOCAL_DATA_DIR", str(tmp_path))
     func, calls = _flaky(*[ipinfo.error.APIError(403, {"error": "bad token"})] * 2)
-    monkeypatch.setattr(helpers, "_geocode_ip", lambda ip: func() and {"ip": ip})
+    mocker.patch.object(helpers, "_geocode_ip", new=lambda ip: func() and {"ip": ip})
     with pytest.raises(ipinfo.error.APIError):
         helpers.geocode_ip("1.2.3.4")
     assert len(calls) == 1

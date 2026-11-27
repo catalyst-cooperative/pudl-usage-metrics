@@ -46,7 +46,7 @@ def test_filter_blobs_keeps_only_matching_day(filtered_blob_names):
     ],
 )
 def test_only_complete_days_are_processed(
-    fake_gcs, patch_download_many, download_dir, mocker, day, now, produced
+    fake_gcs, patch_download_many, data_dir, mocker, day, now, produced
 ):
     """Raw files for only part of a day are left alone: processing them could replace
     the day's complete outputs.

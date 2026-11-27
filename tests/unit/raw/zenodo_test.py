@@ -35,17 +35,15 @@ def test_load_file_dates_rows_from_filename(tmp_path):
     assert set(df["source_record_id"]) == {222}
 
 
-def test_extract_keeps_per_file_metrics_date(
-    download_dir, run_extract, partition_context
-):
-    """Each file's rows keep that file's date (files are not concatenated)."""
-    assert ZenodoExtractor.concatenable_files is False
-    a = download_dir / "zenodo-2024-01-01-111.json"
-    a.write_bytes(_hits(111))
-    b = download_dir / "zenodo-2024-01-03-222.json"
-    b.write_bytes(_hits(222))
-    df = run_extract(ZenodoExtractor(), partition_context("2024-01-01"), [a, b])
-    assert dict(zip(df["id"], df["metrics_date"], strict=True)) == {
-        111: "2024-01-01",
-        222: "2024-01-03",
-    }
+def test_extract_keeps_what_each_file_name_says(extractor_with, partition_context):
+    """Each file's rows keep that file's record id (files are not concatenated)."""
+    ext = extractor_with(
+        ZenodoExtractor,
+        {
+            "zenodo/2024-01-01-111.json": _hits(1),
+            "zenodo/2024-01-01-222.json": _hits(2),
+        },
+    )
+    df = ext.extract(partition_context("2024-01-01"))
+    assert dict(zip(df["id"], df["source_record_id"], strict=True)) == {1: 111, 2: 222}
+    assert set(df["metrics_date"]) == {"2024-01-01"}

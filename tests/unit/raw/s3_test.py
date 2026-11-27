@@ -234,7 +234,7 @@ def test_zstd_with_guard_rejects_bad_lines(tmp_path, data):
 
 
 @pytest.fixture
-def fake_s3_gcs(fake_gcs, patch_download_many, download_dir, mocker):
+def fake_s3_gcs(fake_gcs, patch_download_many, data_dir, mocker):
     """Factory: a fake client (source + artifact buckets) wired into the assets."""
 
     mocker.patch.dict(os.environ, {"PUDL_METRICS_GCS_BASE_PATH": "gs://test-outputs"})
