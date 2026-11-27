@@ -164,9 +164,14 @@ def fake_download_many(blob_file_pairs, *, raise_exception: bool = False, **_kwa
 
 
 @pytest.fixture
-def patch_download_many(monkeypatch):
+def patch_download_many(mocker):
     """Replace the parallel downloader with a synchronous in-process copy."""
-    monkeypatch.setattr(extract.transfer_manager, "download_many", fake_download_many)
+    mocker.patch.object(
+        extract.transfer_manager,
+        "download_many",
+        autospec=True,
+        side_effect=fake_download_many,
+    )
 
 
 @pytest.fixture

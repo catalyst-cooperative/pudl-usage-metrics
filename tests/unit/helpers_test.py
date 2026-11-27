@@ -9,10 +9,10 @@ from usage_metrics import helpers
 
 
 @pytest.fixture(autouse=True)
-def sleeps(monkeypatch):
+def sleeps(mocker):
     """Record backoff sleeps instead of waiting."""
     recorded = []
-    monkeypatch.setattr(helpers.time, "sleep", recorded.append)
+    mocker.patch.object(helpers.time, "sleep", side_effect=recorded.append)
     return recorded
 
 
