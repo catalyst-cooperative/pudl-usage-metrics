@@ -5,12 +5,19 @@ from pathlib import Path
 import pandas as pd
 import polars as pl
 import pytest
-from dagster import build_asset_context
+from dagster import (
+    DailyPartitionsDefinition,
+    Definitions,
+    asset,
+    build_asset_context,
+    define_asset_job,
+)
 
 from usage_metrics.raw.eel_hole import EelHoleExtractor
 from usage_metrics.raw.extract import GCSExtractor
 from usage_metrics.raw.github_partitioned import GithubExtractor
 from usage_metrics.raw.s3 import S3Extractor
+from usage_metrics.scripts.etl import _execute
 
 
 class LineExtractor(GCSExtractor):
@@ -83,6 +90,33 @@ def test_extract_no_files_returns_empty(partition_context, run_extract, download
     df = run_extract(LineExtractor(), partition_context("2024-01-01"), [])
     assert isinstance(df, pd.DataFrame)
     assert df.empty
+
+
+def test_no_input_succeeds_with_a_warning_and_runs_nothing_downstream(
+    fake_gcs, download_dir
+):
+    """A day without logs mustn't fail forever, pass unnoticed, or overwrite data."""
+    client = fake_gcs({LineExtractor.bucket_name: {}})
+    days = DailyPartitionsDefinition(start_date="2024-01-01")
+    ran_downstream = []
+
+    @asset(partitions_def=days, output_required=False)
+    def raw(context):
+        yield from LineExtractor(client=client).extract_partition(context)
+
+    @asset(partitions_def=days)
+    def core(raw):
+        ran_downstream.append(raw)
+
+    job = Definitions(
+        assets=[raw, core], jobs=[define_asset_job("job")]
+    ).resolve_job_def("job")
+
+    succeeded, warnings = _execute(job, partition_key="2024-01-01")
+
+    assert succeeded
+    assert len(warnings) == 1
+    assert ran_downstream == []
 
 
 @pytest.mark.parametrize("n_files", [1, 2])
